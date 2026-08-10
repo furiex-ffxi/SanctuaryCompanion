@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- D2SSharp is source-pinned; the publish script verifies D2SSharp.lock.json. -->
+    <D2SSharpProjectPath Condition="'$(D2SSharpProjectPath)' == ''">$(MSBuildThisFileDirectory)..\..\D2SSharp\src\D2SSharp\D2SSharp.csproj</D2SSharpProjectPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(D2SSharpProjectPath)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\runes.txt" />
+    <EmbeddedResource Include="Data\setitems.txt" />
+    <EmbeddedResource Include="Data\uniqueitems.txt" />
+    <EmbeddedResource Include="Data\gems.txt" />
+  </ItemGroup>
+
+  <Target Name="RequirePinnedD2SSharp" BeforeTargets="Restore">
+    <Error Condition="!Exists('$(D2SSharpProjectPath)')"
+           Text="Pinned D2SSharp checkout not found at $(D2SSharpProjectPath). Clone the revision in D2SSharp.lock.json as a sibling of SanctuaryCompanion, or set D2SSharpProjectPath." />
+  </Target>
+
+</Project>
