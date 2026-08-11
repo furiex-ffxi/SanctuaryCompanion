@@ -68,15 +68,7 @@ function MainContent() {
     storageItems,
     STORAGE_META,
     vaultItems,
-    vaultTotal,
-    vaultNextCursor,
-    vaultFacets,
-    vaultLoading,
-    vaultError,
-    queryVault,
-    refreshVault,
-    loadMoreVault,
-    removeItemFromVault,
+    setVaultItems,
     depositItemToVault,
     withdrawItemFromVault,
     withdrawItemToSharedStash,
@@ -153,7 +145,7 @@ function MainContent() {
               className={`main-nav-btn ${mainTab === 'stash' ? 'active' : ''}`}
               onClick={() => handleNavClick('stash')}
             >
-              📦 Infinite Stash ({vaultTotal})
+              📦 Infinite Stash ({vaultItems.length})
             </button>
             <button
               className={`main-nav-btn ${mainTab === 'tools' ? 'active' : ''}`}
@@ -220,15 +212,7 @@ function MainContent() {
       {mainTab === 'stash' ? (
         <InfiniteStashPanel
           vaultItems={vaultItems}
-          vaultTotal={vaultTotal}
-          vaultNextCursor={vaultNextCursor}
-          vaultFacets={vaultFacets}
-          vaultLoading={vaultLoading}
-          vaultError={vaultError}
-          onQuery={queryVault}
-          onRefresh={refreshVault}
-          onLoadMore={loadMoreVault}
-          onRemove={removeItemFromVault}
+          setVaultItems={setVaultItems}
           onBackupTrigger={triggerSaveBackup}
           isGameRunning={isGameRunning}
           onWithdraw={withdrawItemFromVault}
