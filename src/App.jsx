@@ -6,7 +6,6 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { StorageGrid } from './components/StorageGrid';
 import { InfiniteStashPanel } from './components/InfiniteStashPanel';
 import { SharedStashPanel } from './components/SharedStashPanel';
-import { BackupScanPanel } from './components/BackupScanPanel';
 
 
 import './App.css';
@@ -155,12 +154,6 @@ function MainContent() {
             >
               📦 Infinite Stash ({vaultTotal})
             </button>
-            <button
-              className={`main-nav-btn ${mainTab === 'tools' ? 'active' : ''}`}
-              onClick={() => handleNavClick('tools')}
-            >
-              🛠️ Tools
-            </button>
           </nav>
         </div>
 
@@ -244,8 +237,6 @@ function MainContent() {
           setSharedStash={setSharedStash}
           isGameRunning={isGameRunning}
         />
-      ) : mainTab === 'tools' ? (
-        <BackupScanPanel />
       ) : (
         <div className="dashboard-grid">
           {/* Left Panel: Stats */}
