@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "replay:vault": "node scripts/replay-vault-backup.mjs",
     "lint": "oxlint",
+    "test:vault": "node --test tests/vault/*.test.js",
     "preview": "vite preview",
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

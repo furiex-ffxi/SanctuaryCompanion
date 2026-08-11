@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import fallbackData from '../fallbackData.json';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
 import { calculateCharacterStats } from '../domain/entities/Character';
 import { STORAGE_META } from '../domain/entities/Item';
 
-import { getVaultItems, addVaultItem, removeVaultItem, fetchVaultFromDisk } from '../domain/entities/InfiniteStash';
+import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
 
 export function useCharacterCompanion() {
@@ -17,19 +17,64 @@ export function useCharacterCompanion() {
   const [activeFile, setActiveFile] = useState(null);
   const [syncedAt, setSyncedAt]     = useState(null);
   const [syncing, setSyncing]       = useState(false);
-  const [vaultItems, setVaultItems] = useState(() => getVaultItems());
+  const [vaultItems, setVaultItems] = useState([]);
+  const [vaultTotal, setVaultTotal] = useState(0);
+  const [vaultNextCursor, setVaultNextCursor] = useState(null);
+  const [vaultFacets, setVaultFacets] = useState({ slots: [], sets: [], categories: [] });
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultError, setVaultError] = useState(null);
+  const vaultFiltersRef = useRef({});
   const [sharedStash, setSharedStash] = useState(null);
   const [sharedStashTab, setSharedStashTab] = useState(0);
   const [sharedStashLoading, setSharedStashLoading] = useState(false);
   const [sharedStashError, setSharedStashError] = useState(null);
   const [isGameRunning, setIsGameRunning] = useState(false);
 
-  // Sync vault items from disk on app mount
-  useEffect(() => {
-    fetchVaultFromDisk().then((items) => {
-      if (items) setVaultItems(items);
-    });
+  const queryVault = useCallback(async (filters = {}, { append = false, cursor = null } = {}) => {
+    vaultFiltersRef.current = filters;
+    setVaultLoading(true);
+    setVaultError(null);
+    try {
+      const result = await InfiniteStashAdapter.list(filters, { cursor, limit: 100 });
+      setVaultItems((current) => append ? [...current, ...result.items] : result.items);
+      setVaultTotal(result.total);
+      setVaultNextCursor(result.nextCursor);
+      return result;
+    } catch (err) {
+      setVaultError(err.message);
+      throw err;
+    } finally {
+      setVaultLoading(false);
+    }
   }, []);
+
+  const refreshVaultFacets = useCallback(async () => {
+    const facets = await InfiniteStashAdapter.facets();
+    setVaultFacets(facets);
+    return facets;
+  }, []);
+
+  const refreshVault = useCallback(async () => {
+    const result = await queryVault(vaultFiltersRef.current);
+    await refreshVaultFacets();
+    return result;
+  }, [queryVault, refreshVaultFacets]);
+
+  const loadMoreVault = useCallback(() => {
+    if (!vaultNextCursor || vaultLoading) return Promise.resolve();
+    return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor });
+  }, [queryVault, vaultNextCursor, vaultLoading]);
+
+  const removeItemFromVault = useCallback(async (vaultId, reason = 'delete') => {
+    await InfiniteStashAdapter.remove(vaultId, reason);
+    await refreshVault();
+  }, [refreshVault]);
+
+  useEffect(() => {
+    Promise.all([queryVault(), refreshVaultFacets()]).catch((err) => {
+      console.error('Failed to load Infinite Stash:', err);
+    });
+  }, [queryVault, refreshVaultFacets]);
 
   // Poll server for D2R process status
   useEffect(() => {
@@ -91,8 +136,29 @@ export function useCharacterCompanion() {
         return;
       }
       // 1. Perform automated backup first
-      await triggerSaveBackup();
+      const backup = await triggerSaveBackup();
+      if (!backup?.success) {
+        emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
+        return;
+      }
 
+      // Persist and journal the item before changing its source save. A failure can duplicate, never lose, the item.
+      const label = sourceName === '__shared_stash__'
+        ? `Shared Stash (${item._selectedFile || 'ModernSharedStashSoftCoreV2.d2i'})`
+        : (sourceName || activeFile || charData?.header?.name || 'Uploaded Character');
+      const entry = {
+        vaultId: `stash_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        stashedAt: new Date().toISOString(),
+        sourceSave: label,
+        itemData: item,
+      };
+      try {
+        await InfiniteStashAdapter.add(entry);
+      } catch (err) {
+        console.error('Failed to persist Infinite Stash item:', err);
+        emitToast(`Vault persistence failed: ${err.message}. The source save was not changed.`, 'error');
+        return;
+      }
       let updatedChar = null;
       // 2. Remove item from .d2s save file on disk if depositing from active character file
       // Skip if item is coming from the shared stash (sourceName === '__shared_stash__')
@@ -103,8 +169,11 @@ export function useCharacterCompanion() {
             updatedChar = res.char;
             setCharData(res.char);
           }
+          else throw new Error(res.error || 'D2SSharp did not confirm item removal');
         } catch (err) {
           console.error('Failed to update save file on disk:', err);
+          emitToast(`Source save was not changed; the item remains safely recorded in the vault. ${err.message}`, 'error');
+          return;
         }
       }
 
@@ -128,6 +197,11 @@ export function useCharacterCompanion() {
           if (d2iRes.itemBytesHex) {
             item.rawBytesHex = d2iRes.itemBytesHex;
           }
+          try {
+            await InfiniteStashAdapter.update(entry);
+          } catch (updateError) {
+            emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
+          }
         } catch (err) {
           emitToast('❌ Failed to update Shared Stash file: ' + err.message, 'error');
           return;
@@ -143,15 +217,10 @@ export function useCharacterCompanion() {
         });
       }
 
-      // 5. Add item entry to Infinite Stash Vault
-      const label = sourceName === '__shared_stash__'
-        ? `Shared Stash (${item._selectedFile || 'ModernSharedStashSoftCoreV2.d2i'})`
-        : (sourceName || activeFile || charData?.header?.name || 'Uploaded Character');
-      const updatedVault = addVaultItem(item, label);
-      setVaultItems(updatedVault);
+      await refreshVault();
       emitToast(`📦 Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
     },
-    [activeFile, charData, sharedStash, triggerSaveBackup, isGameRunning]
+    [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault]
   );
 
   // Withdraw item from Infinite Stash Vault back into active character's in-game Stash (.d2s)
@@ -162,28 +231,37 @@ export function useCharacterCompanion() {
         return;
       }
 
-      await triggerSaveBackup();
+      const backup = await triggerSaveBackup();
+      if (!backup?.success) {
+        emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
+        return;
+      }
 
-      let updatedChar = null;
-      if (activeFile) {
-        try {
-          const res = await D2SParserAdapter.addItemToSave(activeFile, itemData);
-          if (res.success && res.char) {
-            updatedChar = res.char;
-            setCharData(res.char);
-          }
-        } catch (err) {
-          console.error('Failed to add item to save file:', err);
-        }
+      if (!activeFile) {
+        emitToast('Select a character save before withdrawing an item.', 'error');
+        return;
+      }
+      try {
+        const res = await D2SParserAdapter.addItemToSave(activeFile, itemData);
+        if (!res.success || !res.char) throw new Error(res.error || 'D2SSharp did not confirm item placement');
+        setCharData(res.char);
+      } catch (err) {
+        console.error('Failed to add item to save file:', err);
+        emitToast(`Withdrawal failed; the item remains in the vault. ${err.message}`, 'error');
+        return;
       }
 
       // Remove from Vault
-      const updatedVault = removeVaultItem(vaultId);
-      setVaultItems(updatedVault);
+      try {
+        await removeItemFromVault(vaultId, 'withdraw');
+      } catch (err) {
+        emitToast(`Item was written to the save, but vault history update failed: ${err.message}`, 'error');
+        return;
+      }
 
       emitToast(`↩️ "${itemData.type_name || itemData.type}" → Personal Stash`, 'success');
     },
-    [activeFile, triggerSaveBackup, isGameRunning]
+    [activeFile, triggerSaveBackup, isGameRunning, removeItemFromVault]
   );
 
   // Withdraw item from Infinite Stash Vault into Shared Stash (.d2i)
@@ -194,7 +272,11 @@ export function useCharacterCompanion() {
         return;
       }
 
-      await triggerSaveBackup();
+      const backup = await triggerSaveBackup();
+      if (!backup?.success) {
+        emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
+        return;
+      }
 
       let targetTabIdx = 0;
       try {
@@ -212,12 +294,16 @@ export function useCharacterCompanion() {
       }
 
       // Remove from Vault
-      const updatedVault = removeVaultItem(vaultId);
-      setVaultItems(updatedVault);
+      try {
+        await removeItemFromVault(vaultId, 'withdraw');
+      } catch (err) {
+        emitToast(`Item was written to Shared Stash, but vault history update failed: ${err.message}`, 'error');
+        return;
+      }
 
       emitToast(`🪙 "${itemData.type_name || itemData.type}" → Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
     },
-    [triggerSaveBackup, isGameRunning]
+    [triggerSaveBackup, isGameRunning, removeItemFromVault]
   );
 
   // Fetch list of files
@@ -314,7 +400,15 @@ export function useCharacterCompanion() {
     storageItems,
     STORAGE_META,
     vaultItems,
-    setVaultItems,
+    vaultTotal,
+    vaultNextCursor,
+    vaultFacets,
+    vaultLoading,
+    vaultError,
+    queryVault,
+    refreshVault,
+    loadMoreVault,
+    removeItemFromVault,
     depositItemToVault,
     withdrawItemFromVault,
     withdrawItemToSharedStash,

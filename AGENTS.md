@@ -13,3 +13,12 @@
 
 ## 3. Process Lock Protections
 - Ensure production process checks (`tasklist /FI "IMAGENAME eq D2R.exe"`) remain active in the dev-server status endpoint (`/__d2r_status`) and all save-mutating endpoints to prevent corruption while Diablo II Resurrected is running.
+
+## 4. Infinite Stash Persistence
+- **SQLite Authority**: `infinite_stash_vault.sqlite3` is the authoritative Infinite Stash store. Do not reintroduce whole-vault JSON or `localStorage` persistence. JSON remains an import/export and legacy-migration format only.
+- **Checkpoint and Journal**: The first vault mutation in each server session must create one SQLite checkpoint under `backups/vault/<epoch>/`. Later mutations append checksummed intent/commit records to that epoch's `transactions.jsonl`; do not copy the database for every operation.
+- **Safe Ordering**: Deposit intent and item data must be durable before D2SSharp removes an item from its source. A withdrawal must remain active in SQLite until D2SSharp confirms placement. Ambiguous failures must favor a recoverable duplicate over item loss.
+- **Replay Safety**: Recovery must replay into a new database, validate SQLite integrity plus journal sequence/checksums, apply operations idempotently, and preserve incomplete operations as `recovery_needed`. Never overwrite a live database automatically.
+- **Legacy Migration**: Import `infinite_stash_vault.json` transactionally and idempotently. Preserve the original file and create a migration report; malformed input must abort without partial imports.
+- **Bounded UI/API Work**: Keep vault listing, search, and filters server-side and paginated. Do not load, transfer, or render the complete vault during routine navigation or single-item mutations.
+- **Required Validation**: Run `npm run test:vault`, `npm run build`, and `scripts/test-d2r-worker.ps1` after persistence or transfer-flow changes. Vault tests must use isolated temporary directories and must never point at the live save directory.

@@ -4,6 +4,7 @@ import { createRequire } from 'module'
 import chokidar from 'chokidar'
 import fs from 'fs'
 import path from 'path'
+import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 
 import { constants } from './src/domain/entities/static_constant_data.js'
 
@@ -35,6 +36,7 @@ function d2sWatcherPlugin() {
     configureServer(server) {
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
+      registerVaultRoutes(server, { savesDir: SAVES_DIR })
 
       // Endpoint to check if Diablo II Resurrected process is currently running
       server.middlewares.use('/__d2r_status', (_req, res) => {
@@ -472,44 +474,6 @@ function d2sWatcherPlugin() {
           } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: false, error: err.message }))
-          }
-        })
-      })
-
-      // Endpoint to read Infinite Stash Vault from disk (infinite_stash_vault.json in SAVES_DIR)
-      server.middlewares.use('/__vault_read', async (_req, res) => {
-        try {
-          const vaultPath = path.join(SAVES_DIR, 'infinite_stash_vault.json')
-          if (!fs.existsSync(vaultPath)) {
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify([]))
-            return
-          }
-          const content = fs.readFileSync(vaultPath, 'utf-8')
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(content)
-        } catch (err) {
-          res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: err.message }))
-        }
-      })
-
-      // Endpoint to write Infinite Stash Vault to disk (infinite_stash_vault.json in SAVES_DIR)
-      server.middlewares.use('/__vault_write', async (req, res) => {
-        if (req.method !== 'POST') {
-          res.writeHead(405); res.end('Method Not Allowed'); return
-        }
-        let body = ''
-        req.on('data', chunk => { body += chunk })
-        req.on('end', async () => {
-          try {
-            const vaultPath = path.join(SAVES_DIR, 'infinite_stash_vault.json')
-            fs.writeFileSync(vaultPath, body, 'utf-8')
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true, count: JSON.parse(body).length }))
-          } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: err.message }))
           }
         })
       })
