@@ -1,4 +1,4 @@
-import { getItemSlotCategory } from '../../src/domain/entities/VaultCatalog.js'
+import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
 
 function normalizeText(value) {
   return typeof value === 'string' ? value.trim() : ''
@@ -37,6 +37,7 @@ export function getVaultCategory(item, slot = getVaultItemSlot(item)) {
 export function projectVaultEntry(entry) {
   const item = entry.itemData || {}
   const slot = getVaultItemSlot(item)
+  const typeName = resolveVaultBaseType(item)
   const displayName = normalizeText(
     item.given_runeword_name
       || item.runeword_name
@@ -44,7 +45,7 @@ export function projectVaultEntry(entry) {
       || item.unique_name
       || [item.rare_name, item.rare_name2].filter(Boolean).join(' ')
       || item.personalized_name
-      || item.type_name
+      || typeName
       || item.type
       || 'Unknown Item',
   )
@@ -52,6 +53,9 @@ export function projectVaultEntry(entry) {
     displayName,
     item.type,
     item.type_name,
+    typeName,
+    slot,
+    getVaultCategory(item, slot),
     item.set_name,
     item.unique_name,
     item.rare_name,
@@ -66,7 +70,7 @@ export function projectVaultEntry(entry) {
   return {
     displayName,
     typeCode: normalizeText(item.type),
-    typeName: normalizeText(item.type_name),
+    typeName: normalizeText(typeName),
     slot,
     category: getVaultCategory(item, slot),
     quality: Number.isFinite(Number(item.quality)) ? Number(item.quality) : null,

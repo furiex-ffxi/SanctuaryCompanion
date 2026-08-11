@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
 
@@ -99,8 +99,43 @@ export class VaultRepository {
       CREATE INDEX IF NOT EXISTS vault_items_quality ON vault_items(status, quality);
       CREATE INDEX IF NOT EXISTS vault_items_set_name ON vault_items(status, set_name);
     `)
-    this.db.prepare('INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)')
-      .run(SCHEMA_VERSION, this.now().toISOString())
+    const currentVersion = this.db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get().version
+    if (currentVersion === 0) {
+      this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
+        .run(SCHEMA_VERSION, this.now().toISOString())
+    } else if (currentVersion < SCHEMA_VERSION) {
+      this.#createCheckpointSync()
+      const rows = this.db.prepare('SELECT vault_id, item_json FROM vault_items').all()
+      const update = this.db.prepare(`
+        UPDATE vault_items SET display_name = @displayName, type_code = @typeCode,
+          type_name = @typeName, slot = @slot, category = @category, quality = @quality,
+          set_name = @setName, search_text = @searchText WHERE vault_id = @vaultId
+      `)
+      this.db.transaction(() => {
+        for (const row of rows) update.run({ ...projectVaultEntry({ itemData: JSON.parse(row.item_json) }), vaultId: row.vault_id })
+        this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
+          .run(SCHEMA_VERSION, this.now().toISOString())
+      })()
+    }
+  }
+
+  #createCheckpointSync() {
+    if (this.epoch) return this.epoch
+    const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
+    const directory = path.join(this.backupsRoot, epochId)
+    fs.mkdirSync(directory, { recursive: true })
+    const checkpointPath = path.join(directory, 'checkpoint.sqlite3')
+    this.db.prepare('VACUUM INTO ?').run(checkpointPath)
+    const journalPath = path.join(directory, 'transactions.jsonl')
+    fs.closeSync(fs.openSync(journalPath, 'a'))
+    const manifest = {
+      formatVersion: 1, epochId, createdAt: this.now().toISOString(),
+      databaseSchemaVersion: SCHEMA_VERSION - 1,
+      checkpointFile: 'checkpoint.sqlite3', journalFile: 'transactions.jsonl', startingSequence: 1,
+    }
+    fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
+    this.epoch = { epochId, directory, checkpointPath, journalPath, sequence: 0, previousHash: null }
+    return this.epoch
   }
 
   close() {

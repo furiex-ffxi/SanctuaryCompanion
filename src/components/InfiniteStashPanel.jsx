@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { getItemColorClass } from '../domain/entities/Item';
-import { getItemSlotCategory } from '../domain/entities/VaultCatalog';
+import { getItemSlotCategory, resolveVaultBaseType } from '../domain/entities/VaultCatalog';
 import { ItemTooltip } from './ItemTooltip';
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 
@@ -179,7 +179,7 @@ export function InfiniteStashPanel({
                 <div key={entry.vaultId} className="stash-item-row" onMouseEnter={() => setActiveHoverItem(item)} onMouseLeave={() => setActiveHoverItem(null)} onMouseMove={handleMouseMove}>
                   <div className="col-icon icon-cell"><ItemSprite item={item} showTooltip={false} /></div>
                   <div className="col-name name-cell"><span className={`item-name-text ${colorClass}`}>{getItemDisplayName(item)}</span></div>
-                  <div className="col-type type-cell"><span className="badge-type">{item.type_name || item.type?.toUpperCase()}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
+                  <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
                   <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6 }}>

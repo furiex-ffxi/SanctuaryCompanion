@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { VaultRepository } from '../../server/vault/VaultRepository.js'
+import { projectVaultEntry } from '../../server/vault/vaultProjection.js'
+import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
 import { readVaultJournal, replayVaultEpoch } from '../../server/vault/VaultRecovery.js'
 
 const temporaryDirectories = new Set()
@@ -174,5 +176,58 @@ test('migrates and pages a five-thousand-item vault', () => {
     assert.ok(page.nextCursor)
   } finally {
     repository.close()
+  }
+})
+test('resolves catalog type names, equipment slots, and category fallbacks', () => {
+  const bill = { type: '9vo', type_name: '9vo' }
+  assert.equal(resolveVaultBaseType(bill), 'Bill')
+  assert.equal(getItemSlotCategory(bill), 'Weapon')
+  assert.deepEqual(
+    (({ typeName, slot, category }) => ({ typeName, slot, category }))(projectVaultEntry({ itemData: bill })),
+    { typeName: 'Bill', slot: 'Weapon', category: 'Weapons' },
+  )
+
+  assert.equal(getItemSlotCategory({ type: 'cap', type_name: 'cap' }), 'Head')
+  assert.equal(getItemSlotCategory({ type: 'rin', type_name: 'rin' }), 'Ring')
+  assert.equal(getItemSlotCategory({ type: 'r01', type_name: 'r01' }), 'Rune')
+  assert.equal(getItemSlotCategory({ type: 'gcv', type_name: 'gcv' }), 'Gem')
+  assert.equal(resolveVaultBaseType({ type: 'zzz', type_name: 'zzz' }), 'zzz')
+  assert.equal(getItemSlotCategory({ type: 'zzz', type_name: 'zzz' }), 'Misc')
+})
+
+test('checkpoints and reprojects existing schema-v1 rows exactly once', async () => {
+  const savesDir = temporarySavesDirectory()
+  const databasePath = path.join(savesDir, 'infinite_stash_vault.sqlite3')
+  const original = entry(777, { itemData: { type: '9vo', type_name: '9vo', quality: 2, rawBytesHex: '4a4dbeef' } })
+  const initial = new VaultRepository({ savesDir, databasePath })
+  await initial.add(original)
+  initial.db.prepare("DELETE FROM schema_migrations WHERE version = 2").run()
+  initial.db.prepare("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)").run(new Date().toISOString())
+  initial.db.prepare("UPDATE vault_items SET type_name = '9vo', slot = '9vo', category = 'Other / Misc', search_text = '9vo'").run()
+  initial.close()
+
+  const backupsBefore = fs.readdirSync(path.join(savesDir, 'backups', 'vault')).length
+  const migrated = new VaultRepository({ savesDir, databasePath })
+  try {
+    assert.equal(migrated.db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 2)
+    assert.equal(migrated.list({ slot: 'Weapon' }).total, 1)
+    assert.equal(migrated.list({ category: 'Weapons' }).total, 1)
+    assert.equal(migrated.list({ q: 'bill weapon weapons' }).total, 1)
+    assert.deepEqual(migrated.facets(), { slots: ['Weapon'], sets: [], categories: ['Weapons'] })
+    assert.equal(migrated.get(original.vaultId).itemData.type, '9vo')
+    assert.equal(migrated.get(original.vaultId).itemData.type_name, '9vo')
+    assert.equal(migrated.get(original.vaultId).itemData.rawBytesHex, '4a4dbeef')
+    assert.equal(fs.existsSync(migrated.epoch.checkpointPath), true)
+    assert.equal(fs.readdirSync(path.join(savesDir, 'backups', 'vault')).length, backupsBefore + 1)
+  } finally {
+    migrated.close()
+  }
+
+  const reopened = new VaultRepository({ savesDir, databasePath })
+  try {
+    assert.equal(reopened.epoch, null)
+    assert.equal(fs.readdirSync(path.join(savesDir, 'backups', 'vault')).length, backupsBefore + 1)
+  } finally {
+    reopened.close()
   }
 })

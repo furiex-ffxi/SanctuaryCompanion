@@ -1,8 +1,22 @@
 import { constants as constants99 } from './static_constant_data.js';
 
+function normalizedType(item) {
+  return typeof item?.type === 'string' ? item.type.toLowerCase().trim() : '';
+}
+
+export function resolveVaultBaseType(item) {
+  const type = normalizedType(item);
+  const suppliedName = typeof item?.type_name === 'string' ? item.type_name.trim() : '';
+  if (suppliedName && suppliedName.toLowerCase() !== type) return suppliedName;
+
+  const catalogItem = constants99.weapon_items[type]
+    || constants99.armor_items[type]
+    || constants99.other_items[type];
+  return catalogItem?.n || suppliedName || (type ? type.toUpperCase() : 'Unknown Item');
+}
 export function getItemSlotCategory(item) {
   if (!item) return 'Misc';
-  const type = (item.type || '').toLowerCase().trim();
+  const type = normalizedType(item);
 
   if (type === 'rin') return 'Ring';
   if (type === 'amu') return 'Amulet';
@@ -20,13 +34,13 @@ export function getItemSlotCategory(item) {
   if (['lbl','vbl','mbl','tbl','hbl','zlb','zvb','zmb','ztb','zhb','ulc','ulv','ulm','ult','ulh'].includes(type)) return 'Belt';
   if (['buc','sml','lrg','kit','tsh','gts','bsh','spk','bld','pa1','pa2','pa3','pa4','pa5','ne1','ne2','ne3','ne4','ne5','xuc','xml','xrg','xit','xsh','xts','xpk','xld','xp1','xp2','xp3','xp4','xp5','xn1','xn2','xn3','xn4','xn5','uuc','uml','urg','uit','ush','uts','upk','uld','up1','up2','up3','up4','up5','un1','un2','un3','un4','un5'].includes(type)) return 'Shield';
 
-  if (constants99.weapons && (constants99.weapons[item.type] || constants99.weapons[type])) return 'Weapon';
-  if (constants99.armor && (constants99.armor[item.type] || constants99.armor[type])) return 'Armor';
+  if (constants99.weapon_items[type]) return 'Weapon';
+  if (constants99.armor_items[type]) return 'Armor';
 
   if (item.given_runeword_name || item.runeword_name) {
     if (item.type_name && (item.type_name.includes('Armor') || item.type_name.includes('Shield') || item.type_name.includes('Helm'))) return 'Armor';
     return 'Weapon';
   }
 
-  return item.type_name || 'Misc';
+  return 'Misc';
 }
