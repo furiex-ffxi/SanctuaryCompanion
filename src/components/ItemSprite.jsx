@@ -73,9 +73,12 @@ export const getItemDisplayName = (item) => {
     : null;
   const baseType = typeName || getBaseTypeName(item.type) || 'Item';
 
-  if (item.quality === 5 && item.set_name) {
-    return item.set_name.includes(baseType) ? item.set_name : `${item.set_name} ${baseType}`.trim();
-  }
+  // D2R set items carry both the individual piece name (unique_name) and the
+  // set/family name (set_name). The piece name is what the game shows as the
+  // item's primary name; combining the family with an internal type code made
+  // labels such as "Trang-Oul's Avatar uh9".
+  if (item.quality === 5 && item.unique_name) return item.unique_name;
+  if (item.quality === 5 && item.set_name) return item.set_name;
   if (item.quality === 7 && item.unique_name) return item.unique_name;
   if (item.unique_name) return item.unique_name;
   if (item.set_name) return item.set_name;

@@ -1,10 +1,15 @@
 import React from 'react';
-import { getItemDisplayName } from './ItemSprite';
+import { getBaseTypeName, getItemDisplayName } from './ItemSprite';
 import { getItemColorClass, getItemDimensions } from '../domain/entities/Item';
 
 export const ItemTooltip = ({ item }) => {
   if (!item) return null;
   const name = getItemDisplayName(item);
+  const baseTypeName = getBaseTypeName(item.type);
+  const typeName = item.type_name
+    && item.type_name.trim().toLowerCase() !== (item.type || '').trim().toLowerCase()
+    ? item.type_name.trim()
+    : baseTypeName;
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
 
@@ -28,7 +33,7 @@ export const ItemTooltip = ({ item }) => {
         </div>
       )}
       <div className="tooltip-type">
-        {item.type_name || item.type?.toUpperCase()} ({w}×{h})
+        {typeName || 'Item'} ({w}×{h})
       </div>
       <div className="tooltip-stats">
         {item.socketed === 1 && (
