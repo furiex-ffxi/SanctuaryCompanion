@@ -5,6 +5,7 @@ import chokidar from 'chokidar'
 import fs from 'fs'
 import path from 'path'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
+import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 
 import { constants } from './src/domain/entities/static_constant_data.js'
 
@@ -36,7 +37,8 @@ function d2sWatcherPlugin() {
     configureServer(server) {
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
-      registerVaultRoutes(server, { savesDir: SAVES_DIR })
+      const vaultRepository = registerVaultRoutes(server, { savesDir: SAVES_DIR })
+      registerItemSearchRoute(server, { savesDir: SAVES_DIR, repository: vaultRepository, parseD2S, parseD2I })
 
       // Endpoint to check if Diablo II Resurrected process is currently running
       server.middlewares.use('/__d2r_status', (_req, res) => {

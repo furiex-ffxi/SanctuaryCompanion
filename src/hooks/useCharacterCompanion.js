@@ -326,6 +326,7 @@ export function useCharacterCompanion() {
       setCharData(data);
       setSyncedAt(new Date());
       refreshSharedStash();
+      return data;
     } catch (err) {
       console.error('Refresh error:', err);
       alert('Could not refresh: ' + err.message);

@@ -6,6 +6,8 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { StorageGrid } from './components/StorageGrid';
 import { InfiniteStashPanel } from './components/InfiniteStashPanel';
 import { SharedStashPanel } from './components/SharedStashPanel';
+import { GlobalItemSearch } from './components/GlobalItemSearch';
+import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
 
 
 import './App.css';
@@ -90,7 +92,8 @@ function MainContent() {
     isGameRunning,
   } = useCharacterCompanion();
 
-  const { toasts, dismissToast } = useToasts();
+  const { toasts, addToast, dismissToast } = useToasts();
+  const [searchHighlight, setSearchHighlight] = React.useState(null);
 
   // Sync tab selection with URL hash (#character, #inventory, #char-stash, #stash, #cube, #skills, #shared-stash, #infinite-stash)
   React.useEffect(() => {
@@ -128,6 +131,31 @@ function MainContent() {
     }
   };
 
+  const handleSearchSelect = async (result) => {
+    const plan = planItemSearchNavigation(result);
+    setSearchHighlight(plan.highlight);
+    window.setTimeout(() => setSearchHighlight((current) => current === result.identity ? null : current), 3500);
+    if (result.sourceKind === 'character') {
+      const refreshed = await refreshFromServer(plan.filename);
+      setActiveFile(plan.filename);
+      setMainTab('character');
+      setActiveTab(plan.subTab);
+      if (plan.useAlternateWeapons) setIsSwapped(true);
+      window.history.pushState(null, '', `#${result.navigation.subTab === 'stash' ? 'char-stash' : result.navigation.subTab || 'inventory'}`);
+      if (!containsCanonicalItem(refreshed, result.identity)) addToast('That search result is stale; the item is no longer in the save.', 'error');
+    } else if (result.sourceKind === 'sharedStash') {
+      setMainTab('shared_stash');
+      window.history.pushState(null, '', '#shared-stash');
+      addToast(`Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, 'info');
+    } else {
+      setMainTab('stash');
+      window.history.pushState(null, '', '#infinite-stash');
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+      const focused = await queryVault({ q: result.preview.displayName });
+      if (!focused.items.some(entry => entry.vaultId === result.vaultId)) addToast('That search result is stale; the vault item is no longer active.', 'error');
+    }
+  };
+
   return (
     <div className="app-container">
       <header>
@@ -158,6 +186,7 @@ function MainContent() {
         </div>
 
         <div className="controls-row">
+          <GlobalItemSearch onSelect={handleSearchSelect} />
           {saveFiles.length > 0 && (
             <select
               className="header-control save-picker"
@@ -226,6 +255,7 @@ function MainContent() {
           isGameRunning={isGameRunning}
           onWithdraw={withdrawItemFromVault}
           onWithdrawShared={withdrawItemToSharedStash}
+          highlightIdentity={searchHighlight}
         />
       ) : mainTab === 'shared_stash' ? (
         <SharedStashPanel
@@ -294,6 +324,7 @@ function MainContent() {
                 </div>
               ) : (
                 <StorageGrid
+                  highlightIdentity={searchHighlight}
                   meta={{
                     ...(STORAGE_META[activeTab] || STORAGE_META.inventory),
                     onDeposit: depositItemToVault,
