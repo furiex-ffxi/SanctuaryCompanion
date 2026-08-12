@@ -49,6 +49,8 @@ test('migrates legacy JSON once and preserves the original in backups', () => {
     assert.equal(result.migrated, true)
     assert.equal(result.count, 2)
     assert.equal(repository.list().total, 2)
+    assert.equal(repository.get(entry(1).vaultId).itemData.image_key, 'invrin1')
+    assert.equal(repository.get(entry(2).vaultId).itemData.image_key, 'invrzod')
     assert.equal(fs.existsSync(path.join(result.archiveDir, 'infinite_stash_vault.json')), true)
     assert.equal(repository.migrateLegacyJson().reason, 'already-migrated')
   } finally {

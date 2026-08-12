@@ -11,6 +11,24 @@ $worker = Join-Path $repoRoot 'server\bin\D2RStashWorker.exe'
 $fixtures = Join-Path $repoRoot '..\D2SSharp\src\D2SSharp.Tests\Resources\105'
 $testRoot = Join-Path $SavesRoot (Join-Path 'backups' ('E2E_BACKUP_TEST_TEMP_' + [guid]::NewGuid().ToString('N')))
 
+function Assert-ImageKeys($value, [string]$sourceName) {
+    if ($null -eq $value) { return }
+    if ($value -is [System.Array]) {
+        foreach ($entry in $value) { Assert-ImageKeys $entry $sourceName }
+        return
+    }
+    if ($value.PSObject.Properties['image_key'] -and $value.image_key) {
+        $asset = Join-Path $repoRoot (Join-Path 'public/items' ($value.image_key + '.png'))
+        if (-not (Test-Path -LiteralPath $asset)) {
+            throw "Missing item image asset '$($value.image_key)' for $sourceName."
+        }
+    }
+    foreach ($property in $value.PSObject.Properties) {
+        if ($property.Name -notin @('rawBytesHex', 'magic_attributes', 'runeword_attributes', 'set_attributes', 'displayed_combined_magic_attributes')) {
+            Assert-ImageKeys $property.Value $sourceName
+        }
+    }
+}
 function Invoke-Worker([string[]]$Arguments) {
     $output = & $worker @Arguments 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Worker failed ($($Arguments[0])): $($output -join [Environment]::NewLine)" }
@@ -35,6 +53,7 @@ try {
                 throw "Invalid D2S output for $($fixture.Name)."
             }
             $parsedSave = Invoke-Worker @('parse_save', $roundTrip) | ConvertFrom-Json
+            Assert-ImageKeys $parsedSave $fixture.Name
             $requiredParseFields = @('contained_items', 'merc_items', 'corpse_items', 'iron_golem_item')
             foreach ($field in $requiredParseFields) {
                 if ($parsedSave.PSObject.Properties.Name -notcontains $field) {
@@ -42,7 +61,8 @@ try {
                 }
             }
         } else {
-            Invoke-Worker @('parse_stash', $roundTrip) | ConvertFrom-Json | Out-Null
+            $parsedStash = Invoke-Worker @('parse_stash', $roundTrip) | ConvertFrom-Json
+            Assert-ImageKeys $parsedStash $fixture.Name
         }
     }
 

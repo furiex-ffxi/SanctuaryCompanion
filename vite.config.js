@@ -544,27 +544,6 @@ function d2sWatcherPlugin() {
         }
       })
 
-      // Dynamic On-Demand Item Image Route: GET /__d2s_image/<inv_file>.png
-      // Serves cached PNG item images from public/items/
-      server.middlewares.use('/__d2s_image', (req, res) => {
-        const fileParam = req.url.replace(/^\//, '').replace(/\.png$/, '')
-        if (!fileParam) {
-          res.writeHead(400); res.end('Missing image file name'); return
-        }
-
-        const publicItemsDir = path.join(process.cwd(), 'public', 'items')
-        const cachedPngPath = path.join(publicItemsDir, `${fileParam}.png`)
-
-        if (fs.existsSync(cachedPngPath)) {
-          res.writeHead(200, { 'Content-Type': 'image/png' })
-          res.end(fs.readFileSync(cachedPngPath))
-          return
-        }
-
-        res.writeHead(404); res.end('Image not cached')
-      })
-
-
       // NOTE: File watcher disabled to avoid holding file handles/locks on .d2s files
       // while Diablo II Resurrected is running and saving character state.
       // Server updates can still be manually triggered via the Refresh button.

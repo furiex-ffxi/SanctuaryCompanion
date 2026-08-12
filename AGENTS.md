@@ -22,3 +22,7 @@
 - **Legacy Migration**: Import `infinite_stash_vault.json` transactionally and idempotently. Preserve the original file and create a migration report; malformed input must abort without partial imports.
 - **Bounded UI/API Work**: Keep vault listing, search, and filters server-side and paginated. Do not load, transfer, or render the complete vault during routine navigation or single-item mutations.
 - **Required Validation**: Run `npm run test:vault`, `npm run build`, and `scripts/test-d2r-worker.ps1` after persistence or transfer-flow changes. Vault tests must use isolated temporary directories and must never point at the live save directory.
+
+
+## 5. Editing Workflow
+- Direct edits in the shared workspace are permitted for implementation work; patches are optional and should not be required when the environment cannot apply them.
