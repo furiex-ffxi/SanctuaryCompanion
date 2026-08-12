@@ -305,6 +305,33 @@ namespace D2RStashWorker
                 description = $"{stat.Id}: {stat.Value}"
             }).ToArray();
 
+        private static string? GetInventoryFile(Item item)
+        {
+            var type = item.ItemCodeString.Trim().ToLowerInvariant();
+            var gfx = Math.Clamp((int)(item.VariableGfxId ?? 0) + 1, 1, 5);
+
+            if (type == "rin") return $"invrin{gfx}";
+            if (type == "amu") return $"invamu{Math.Clamp(gfx, 1, 3)}";
+            if (type == "jew") return gfx == 1 ? "invjw1" : "invjw5";
+            if (type.StartsWith("r") && int.TryParse(type[1..], out var rune) && rune is >= 1 and <= 33)
+            {
+                var runeNames = new[] { "El", "Eld", "Tir", "Nef", "Eth", "Ith", "Tal", "Ral", "Ort", "Thul", "Amn", "Sol", "Shael", "Dol", "Hel", "Io", "Lum", "Ko", "Fal", "Lem", "Pul", "Um", "Mal", "Ist", "Gul", "Vex", "Ohm", "Lo", "Sur", "Ber", "Jah", "Cham", "Zod" };
+                return $"invr{runeNames[rune - 1]}";
+            }
+
+            return type switch
+            {
+                "cm1" => "invch4", "cm2" => "invch8", "cm3" => "invch3",
+                "gpy" => "invgsye", "glr" => "invgsrd", "gpw" => "invgswe", "7yw" => "invywn",
+                "rvs" => "invvps", "rvl" => "invvpl", "ibk" => "invrbk", "tbk" => "invbbk",
+                "hp5" => "invhp5", "key" => "invkey", "box" => "invbox", "kit" => "invkitu",
+                "vgl" => "invvgl", "xvb" => "invvbt", "bsh" => "invbshu", "crs" => "invcrs",
+                "hbt" => "invhbt", "zhb" => "invhbl", "uml" => "invsmlu", "zmb" => "invmbl",
+                "ltp" => "invltp", "9wn" => "invwnd", "tow" => "invtowu", "xlb" or "ulb" => "invlbt",
+                "ulg" => "invlgl", "uui" => "invqlt", "hlm" => "invhlm", "stu" => "invstu",
+                "bwn" => "invbwn", "oba" => "invob5", "xml" => "invxmlu", _ => null
+            };
+        }
         private static object SerializeItem(Item i, uint version, int altPositionId, string parentCode = "")
         {
             byte[] itemBytes = new byte[2048];
@@ -363,6 +390,8 @@ namespace D2RStashWorker
                 id = i.ItemSeed,
                 type = i.ItemCodeString,
                 type_name = i.ItemCodeString,
+                inv_file = GetInventoryFile(i),
+                image_key = GetInventoryFile(i),
                 location_id = (int)i.Position.Mode,
                 equipped_id = (int)i.Position.BodyLocation,
                 position_x = (int)i.Position.InvX,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // Rune names & Nordic/D2 glyph representations
 const RUNE_GLYPHS = {
@@ -105,11 +105,15 @@ export const getItemDisplayName = (item) => {
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
+  const invFile = item?.image_key || item?.inv_file;
+
+  useEffect(() => {
+    setImgError(false);
+  }, [invFile]);
 
   if (!item) return null;
 
   const type = (item.type || '').toLowerCase();
-  const invFile = item.inv_file;
   const isRune = /^r\d+$/.test(type);
   const runeInfo = isRune ? RUNE_GLYPHS[type] : null;
 
@@ -130,7 +134,7 @@ export default function ItemSprite({ item }) {
       <div className="item-sprite-wrapper" style={{ borderColor: qualityColor }}>
         <div className="item-sprite-container">
           <img
-            src={`/__d2s_image/${invFile}.png`}
+            src={`/items/${encodeURIComponent(invFile)}.png`}
             alt={name}
             className="item-sprite-img"
             onError={() => setImgError(true)}
