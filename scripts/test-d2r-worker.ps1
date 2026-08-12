@@ -34,7 +34,13 @@ try {
             if (-not $verification.validChecksum -or $verification.declaredFileSize -ne $verification.actualFileSize) {
                 throw "Invalid D2S output for $($fixture.Name)."
             }
-            Invoke-Worker @('parse_save', $roundTrip) | ConvertFrom-Json | Out-Null
+            $parsedSave = Invoke-Worker @('parse_save', $roundTrip) | ConvertFrom-Json
+            $requiredParseFields = @('contained_items', 'merc_items', 'corpse_items', 'iron_golem_item')
+            foreach ($field in $requiredParseFields) {
+                if ($parsedSave.PSObject.Properties.Name -notcontains $field) {
+                    throw "parse_save output for $($fixture.Name) is missing $field."
+                }
+            }
         } else {
             Invoke-Worker @('parse_stash', $roundTrip) | ConvertFrom-Json | Out-Null
         }
@@ -60,7 +66,8 @@ try {
     Invoke-Worker @('parse_stash', $stashRestored) | ConvertFrom-Json | Out-Null
 
     for ($i = 0; $i -lt $StressIterations; $i++) {
-        Invoke-Worker @('parse_save', $saveCopy) | ConvertFrom-Json | Out-Null
+        $repeatSave = Invoke-Worker @('parse_save', $saveCopy) | ConvertFrom-Json
+        if ($repeatSave.PSObject.Properties.Name -notcontains 'merc_items') { throw 'Repeated parse omitted extended item fields.' }
         Invoke-Worker @('parse_stash', $stashCopy) | ConvertFrom-Json | Out-Null
     }
 

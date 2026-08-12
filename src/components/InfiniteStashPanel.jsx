@@ -20,8 +20,8 @@ export function InfiniteStashPanel({
   isGameRunning,
   onWithdraw,
   onWithdrawShared,
+  highlightIdentity,
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSlot, setSelectedSlot] = useState('All');
   const [selectedSet, setSelectedSet] = useState('All');
@@ -34,7 +34,6 @@ export function InfiniteStashPanel({
   useEffect(() => {
     const timeout = setTimeout(() => {
       onQuery({
-        q: searchTerm,
         category: selectedCategory,
         slot: selectedSlot,
         setName: selectedSet,
@@ -42,7 +41,7 @@ export function InfiniteStashPanel({
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [searchTerm, selectedCategory, selectedSlot, selectedSet, selectedQuality, onQuery]);
+  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, onQuery]);
 
   const handleRemove = async (vaultId) => {
     if (isGameRunning) {
@@ -88,7 +87,6 @@ export function InfiniteStashPanel({
   };
 
   const resetFilters = () => {
-    setSearchTerm('');
     setSelectedCategory('All');
     setSelectedSlot('All');
     setSelectedSet('All');
@@ -122,10 +120,6 @@ export function InfiniteStashPanel({
       {vaultError && <div className="game-running-warning-banner">Vault error: {vaultError}</div>}
 
       <div className="stash-toolbar">
-        <div className="search-box">
-          <input className="d2r-input" placeholder="🔍 Search items, stats, or set names..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
-          {searchTerm && <button className="search-clear-btn" onClick={() => setSearchTerm('')}>✕</button>}
-        </div>
         <div className="filter-selects">
           <div className="filter-group">
             <label>Category:</label>
@@ -176,7 +170,7 @@ export function InfiniteStashPanel({
               const item = entry.itemData;
               const colorClass = getItemColorClass(item);
               return (
-                <div key={entry.vaultId} className="stash-item-row" onMouseEnter={() => setActiveHoverItem(item)} onMouseLeave={() => setActiveHoverItem(null)} onMouseMove={handleMouseMove}>
+                <div key={entry.vaultId} className={`stash-item-row ${highlightIdentity?.vaultId === entry.vaultId ? 'item-search-highlight' : ''}`} onMouseEnter={() => setActiveHoverItem(item)} onMouseLeave={() => setActiveHoverItem(null)} onMouseMove={handleMouseMove}>
                   <div className="col-icon icon-cell"><ItemSprite item={item} showTooltip={false} /></div>
                   <div className="col-name name-cell"><span className={`item-name-text ${colorClass}`}>{getItemDisplayName(item)}</span></div>
                   <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>

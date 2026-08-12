@@ -174,7 +174,13 @@ namespace D2RStashWorker
         }
 
         public static string? GetUniqueName(int id) => _uniques.TryGetValue(id, out var val) ? val : null;
-        public static (string ItemName, string SetName)? GetSetItem(int id) => _sets.TryGetValue(id, out var val) ? val : null;
+        public static (string ItemName, string SetName)? GetSetItem(int id)
+        {
+            if (!_sets.TryGetValue(id, out var val)) return null;
+            // setitems.txt retains this legacy internal name; D2R displays Guardianship.
+            if (val.ItemName == "Tal Rasha's Howling Wind") val.ItemName = "Tal Rasha's Guardianship";
+            return val;
+        }
         public static string? GetRunewordName(int id) => _runewords.TryGetValue(id, out var val) ? val : null;
 
         private static uint GetItemCode(string code)
@@ -473,13 +479,17 @@ namespace D2RStashWorker
                             gold = save.Stats.GetStat(StatId.Gold),
                             stashed_gold = save.Stats.GetStat(StatId.StashGold)
                         },
-                        items = serializedItems.ToArray()
+                        items = serializedItems.ToArray(),
+                        contained_items = cubeItems.Select(i => SerializeItem(i, save.Version, 0, boxItem?.ItemCodeString ?? string.Empty)).ToArray(),
+                        merc_items = (save.MercItems?.Items ?? []).Select(i => SerializeItem(i, save.Version, 0)).ToArray(),
+                        corpse_items = save.Corpses.SelectMany(c => c.Items).Select(i => SerializeItem(i, save.Version, 0)).ToArray(),
+                        iron_golem_item = save.IronGolem?.GolemItem == null ? null : SerializeItem(save.IronGolem.GolemItem, save.Version, 0)
                     };
 
                     var jsonOptions = new JsonSerializerOptions
                     {
                         WriteIndented = false,
-                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                        DefaultIgnoreCondition = JsonIgnoreCondition.Never
                     };
                     string jsonOutput = JsonSerializer.Serialize(parsed, jsonOptions);
                     Console.WriteLine(jsonOutput);

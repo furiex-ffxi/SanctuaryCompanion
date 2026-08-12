@@ -9,6 +9,7 @@
     "replay:vault": "node scripts/replay-vault-backup.mjs",
     "lint": "oxlint",
     "test:vault": "node --test tests/vault/*.test.js",
+    "test:search": "node --test tests/search/*.test.js",
     "preview": "vite preview",
     "postinstall": "patch-package"
   },

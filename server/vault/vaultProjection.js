@@ -1,22 +1,25 @@
 import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
 
 function normalizeText(value) {
-  return typeof value === 'string' ? value.trim() : ''
+  const text = typeof value === 'string' ? value.trim() : ''
+  return text === "Tal Rasha's Howling Wind" ? "Tal Rasha's Guardianship" : text
 }
 
-function magicAttributeText(item) {
-  const attributes = item.displayed_combined_magic_attributes
-    || item.displayed_magic_attributes
-    || item.combined_magic_attributes
-    || item.magic_attributes
-    || []
+export function getSearchableItemAttributes(item) {
+  // Combined/displayed attributes may contain bonuses contributed by socketed
+  // children. Global search intentionally indexes only the owning item's stats.
+  const attributes = [
+    ...(item.magic_attributes || []),
+    ...(item.runeword_attributes || []),
+    ...(item.set_attributes || []).flat(),
+  ]
 
   return attributes.map((attribute) => {
     if (attribute?.description) return attribute.description
     const name = normalizeText(attribute?.name).replace(/_/g, ' ')
     const values = Array.isArray(attribute?.values) ? attribute.values.join(', ') : ''
     return `${name} ${values}`.trim()
-  }).join(' ')
+  }).filter(Boolean)
 }
 
 export function getVaultItemSlot(item = {}) {
@@ -41,8 +44,8 @@ export function projectVaultEntry(entry) {
   const displayName = normalizeText(
     item.given_runeword_name
       || item.runeword_name
-      || item.set_name
       || item.unique_name
+      || item.set_name
       || [item.rare_name, item.rare_name2].filter(Boolean).join(' ')
       || item.personalized_name
       || typeName
@@ -64,7 +67,7 @@ export function projectVaultEntry(entry) {
     item.magic_suffix_name,
     item.given_runeword_name,
     item.runeword_name,
-    magicAttributeText(item),
+    getSearchableItemAttributes(item).join(' '),
   ].filter(Boolean).join(' ').toLowerCase()
 
   return {

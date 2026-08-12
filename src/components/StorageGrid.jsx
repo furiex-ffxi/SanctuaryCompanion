@@ -3,7 +3,7 @@ import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { ItemTooltip } from './ItemTooltip';
 import { getItemDimensions, getItemColorClass } from '../domain/entities/Item';
 
-export function StorageGrid({ meta, items }) {
+export function StorageGrid({ meta, items, highlightIdentity }) {
   const { cols, rows } = meta;
   
   const gridMap = Array.from({ length: rows }, () => Array(cols).fill(null));
@@ -34,7 +34,7 @@ export function StorageGrid({ meta, items }) {
         cells.push(
           <div
             key={`item-${r}-${c}`}
-            className={`inv-item-card ${colorClass}`}
+            className={`inv-item-card ${colorClass} ${highlightIdentity?.itemSeed != null && String(highlightIdentity.itemSeed) === String(item.id) ? 'item-search-highlight' : ''}`}
             style={{
               gridColumn: `${c + 1} / span ${w}`,
               gridRow: `${r + 1} / span ${h}`,
