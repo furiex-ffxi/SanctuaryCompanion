@@ -1,0 +1,693 @@
+code	inv_file	unique_inv_file	set_inv_file
+0sc	invrsc		
+2ax	inv2ax		
+2hs	inv2hs	inv2hsu	inv2hsu
+6bs	invbst		
+6cb	invcbw	invcbwu	invcbwu
+6cs	invcst	invcstu	invcstu
+6hb	invhbw		
+6hx	invhxb	invhxbu	invhxbu
+6l7	invlbb		
+6lb	invlbw		
+6ls	invlst		
+6lw	invlwb		
+6lx	invlxb	invlxbu	invlxbu
+6mx	invmxb	invmxbu	invmxbu
+6rx	invrxb	invrxbu	invrxbu
+6s7	invsbb	invsbbu	invsbbu
+6sb	invsbw		
+6ss	invsst		
+6sw	invswb	invswbu	invswbu
+6ws	invwst		
+72a	inv2ax		
+72h	inv2hs	inv2hsu	inv2hsu
+7ar	invktr		
+7ax	invaxe	invaxeu	invaxeu
+7b7	invbsw	invbswu	invbswu
+7b8	invbal		
+7ba	invbrx		
+7bk	invbkf	invtk3	
+7bl	invbld		
+7br	invbrn		
+7bs	invbsd		
+7bt	invbtx	invbtxu	invbtxu
+7bw	invbwn	invbwnu	invbwnu
+7cl	invclb	invclbu	invclbu
+7cm	invclm		
+7cr	invcrs	invcrsu	invcrsu
+7cs	invaxf	invaxfu	invaxfu
+7dg	invdgr		
+7di	invdir		
+7fb	invflb		
+7fc	invflc		
+7fl	invfla		
+7ga	invgax	invgaxu	invgaxu
+7gd	invgsd	invgsdu	invgsdu
+7gi	invgix		
+7gl	invglv		
+7gm	invgma		
+7gs	invgis	invgisu	invgisu
+7gw	invgwn		
+7h7	invhal		
+7ha	invhax	invhaxu	invhaxu
+7ja	invjav		
+7kr	invkrs	invkrsu	invkrsu
+7la	invlax		
+7ls	invlsd	invlsdu	invlsdu
+7lw	invclw		
+7m7	invmau		
+7ma	invmac		inv7mas
+7mp	invmpi	invmpiu	invmpiu
+7mt	invmst	invmstu	invmstu
+7o7	invbar		
+7p7	invpik		
+7pa	invpax		
+7pi	invpil		
+7qr	invskr	invskru	invskru
+7qs	invgsc		
+7s7	invssp		
+7s8	invscy	invscyu	invscyu
+7sb	invsbr	invsbru	invsbru
+7sc	invscp		
+7sm	invscm	invscmu	invscmu
+7sp	invspc	invspcu	invspcu
+7sr	invspr		
+7ss	invssd		
+7st	invspt		
+7ta	invtax		
+7tk	invtkn		
+7tr	invtri	invtriu	invtriu
+7ts	invtsp		
+7tw	invclw		
+7vo	invvou		
+7wa	invwax		
+7wb	invktr		
+7wc	invwsc		
+7wd	invwsd		
+7wh	invwhm		
+7wn	invwnd		
+7ws	invwsp		
+7xf	invaxf	invaxfu	invaxfu
+7yw	invywn		
+8bs	invbst		
+8cb	invcbw	invcbwu	invcbwu
+8cs	invcst	invcstu	invcstu
+8hb	invhbw		
+8hx	invhxb	invhxbu	invhxbu
+8l8	invlbb		
+8lb	invlbw	inv8lbu	inv8lbu
+8ls	invlst		
+8lw	invlwb		
+8lx	invlxb	inv8lxu	inv8lxu
+8mx	invmxb	inv8mxu	inv8mxu
+8rx	invrxb	invrxbu	invrxbu
+8s8	invsbb	inv8s8u	inv8s8u
+8sb	invsbw		
+8ss	invsst		
+8sw	invswb	invswbu	invswbu
+8ws	invwst	inv8wsu	inv8wsu
+92a	inv2ax		
+92h	inv2hs	inv2hsu	inv2hsu
+9ar	invktr		
+9ax	invaxe	invaxeu	invaxeu
+9b7	invbar		
+9b8	invbal		
+9b9	invbsw	invbswu	invbswu
+9ba	invbrx		
+9bk	invbkf		
+9bl	invbld	inv9blu	inv9blu
+9br	invbrn	inv9bru	inv9bru
+9bs	invbsd		
+9bt	invbtx	inv9btu	inv9btu
+9bw	invbwn	invbwnu	invbwnu
+9cl	invclb	invclbu	invclbu
+9cm	invclm		
+9cr	invcrs	inv9cru	inv9cru
+9cs	invaxf	invaxfu	invaxfu
+9dg	invdgr		
+9di	invdir		
+9fb	invflb	inv9fbu	inv9fbu
+9fc	invflc		
+9fl	invfla		
+9ga	invgax	invgaxu	invgaxu
+9gd	invgsd	invgsdu	invgsdu
+9gi	invgix	inv9giu	inv9giu
+9gl	invglv		
+9gm	invgma	inv9gmu	inv9gmu
+9gs	invgis	invgisu	invgisu
+9gw	invgwn	inv9gwu	inv9gwu
+9h9	invhal		
+9ha	invhax	invhaxu	invhaxu
+9ja	invjav		
+9kr	invkrs	invkrsu	invkrsu
+9la	invlax		
+9ls	invlsd	inv9lsu	inv9lsu
+9lw	invclw		
+9m9	invmau		
+9ma	invmac		
+9mp	invmpi	invmpiu	invmpiu
+9mt	invmst	invmstu	invmstu
+9p9	invpik		
+9pa	invpax		
+9pi	invpil		
+9qr	invskr	invskru	invskru
+9qs	invgsc		
+9s8	invscy	inv9s8u	inv9s8u
+9s9	invssp		
+9sb	invsbr	invsbru	invsbru
+9sc	invscp		
+9sm	invscm	invscmu	invscmu
+9sp	invspc	invspcu	invspcu
+9sr	invspr		
+9ss	invssd		
+9st	invspt		
+9ta	invtax		
+9tk	invtkn		
+9tr	invtri	invtriu	invtriu
+9ts	invtsp		
+9tw	invclw		
+9vo	invvou		
+9wa	invwax		
+9wb	invktr		
+9wc	invwsc		
+9wd	invwsd		
+9wh	invwhm		
+9wn	invwnd		
+9ws	invwsp		
+9xf	invaxf	invaxfu	invaxfu
+9yw	invywn		
+aar	invaar	invaaru	invaaru
+am1	invam1	invswbu	invswbu
+am2	invam2		
+am3	invam3		
+am4	invam4		
+am5	invam5		
+am6	invam1	invswbu	invswbu
+am7	invam2		
+am8	invam3		
+am9	invam4		
+ama	invam5		
+amb	invam1	invswbu	invswbu
+amc	invam2		
+amd	invam3		
+ame	invam4		
+amf	invam5		
+amu	invamu		
+aqv	invqvr		
+ass	invsbk		
+axe	invaxe	invaxeu	invaxeu
+axf	invaxf	invaxfu	invaxfu
+ba1	invba1		
+ba2	invba2		
+ba3	invba3		
+ba4	invba4		
+ba5	invba5		
+ba6	invba1		
+ba7	invba2		
+ba8	invba3		
+ba9	invba4		
+baa	invba5		
+bab	invba1		
+bac	invba2		
+bad	invba3		
+bae	invba4		
+baf	invba5		
+bal	invbal		
+bar	invbar		
+bax	invbrx		
+bbb	invbbb		
+bet	invbet		
+bey	inveye		
+bhm	invbhm	invbhmu	invbhmu
+bkd	invscb		
+bkf	invbkf		
+bks	invscb		
+bld	invbld		
+box	invbox		
+bpl	invbpl		
+bps	invbps		
+brn	invbrn		
+brs	invbrs		
+brz	invbrnz		
+bsd	invbsd	invbsdu	invbsdu
+bsh	invbsh	invbshu	invbshu
+bst	invbst		
+bsw	invbsw	invbswu	invbswu
+btl	invclw		
+btx	invbtx	invbtxu	invbtxu
+buc	invbuc	invbucu	invbucu
+bwn	invbwn	invbwnu	invbwnu
+cap	invcap	invcapu	invcapu
+cbw	invcbw	invcbwu	invcbwu
+ceh	invceh		
+ces	invaxf	invaxfu	invaxfu
+chn	invchn		
+ci0	invci0		
+ci1	invci1		
+ci2	invci2		
+ci3	invci3		
+cjw	invgswe		
+clb	invclb	invclbu	invclbu
+clm	invclm		
+clw	invclw		
+cm1	invchm		
+cm2	invwnd		
+cm3	invsst		
+cqv	invcqv		
+crn	invcrn		
+crs	invcrs	invcrsu	invcrsu
+cs2	invsst		
+cst	invcst	invcstu	invcstu
+d33	invd33		
+dgr	invdgr		
+dhn	invfang		
+dir	invdir		
+dr1	invdr1		
+dr2	invdr2		
+dr3	invdr3		
+dr4	invdr4		
+dr5	invdr5		
+dr6	invdr1		
+dr7	invdr2		
+dr8	invdr3		
+dr9	invdr4		
+dra	invdr5		
+drb	invdr1		
+drc	invdr2		
+drd	invdr3		
+dre	invdr4		
+drf	invdr5		
+ear	invear		
+elx	invpot		
+eyz	inveye		
+fed	invfed		
+fhl	invfhl	invfhlu	invfhlu
+fla	invfla		
+flb	invflb		
+flc	invflc	invflcu	invflcu
+fld	invfld		
+flg	invflag		
+fng	invfang		
+ful	invful	invfulu	invfulu
+g33	invg33		
+g34	invgbi		
+gax	invgax	invgaxu	invgaxu
+gcb	invgsba		
+gcg	invgsga		
+gcr	invgsra		
+gcv	invgsva		
+gcw	invgswa		
+gcy	invgsya		
+gfb	invgsbb		
+gfg	invgsgb		
+gfr	invgsrb		
+gfv	invgsvb		
+gfw	invgswb		
+gfy	invgsyb		
+ghm	invghm		
+gis	invgis	invgisu	invgisu
+gix	invgix		
+glb	invgsbd		
+gld	invgld		
+glg	invgsgd		
+glr	invgsrd		
+glv	invglv		
+glw	invgswd		
+gly	invgsyd		
+gma	invgma	invgma	invgma
+gpb	invgsbe		
+gpg	invgsge		
+gpl	invgps		
+gpm	invgpm		
+gpr	invgsre		
+gps	invgpl		
+gpv	invgsve		
+gpw	invgswe		
+gpy	invgsye		
+gsb	invgsbc		
+gsc	invgsc		
+gsd	invgsd	invgsdu	invgsdu
+gsg	invgsgc		
+gsr	invgsrc		
+gsv	invgsvc		
+gsw	invgswc		
+gsy	invgsyc		
+gth	invgth		
+gts	invgts	invgtsu	invgtsu
+gwn	invgwn		
+gzv	invgsvd		
+hal	invhal		
+hax	invhax	invhaxu	invhaxu
+hbl	invhbl		
+hbt	invhbt		
+hbw	invhbw		
+hdm	invhmr		
+hfh	invhfh		
+hgl	invhgl		
+hla	invhla		
+hlm	invhlm	invhlmu	invhlmu
+hp1	invhp1		
+hp2	invhp2		
+hp3	invhp3		
+hp4	invhp4		
+hp5	invhp5		
+hpf	invrpl		
+hpo	invrps		
+hrb	invhrb		
+hrn	invhorn		
+hrt	invhrt		
+hst	invhst		
+hxb	invhxb	invhxbu	invhxbu
+ibk	invrbk		
+ice	invxyz		
+isc	invrsc		
+j34	invjbi		
+jav	invjav		
+jaw	invjaw		
+jew	invgswe		
+key	invkey		
+kit	invkit	invkitu	invkitu
+kri	invkrs	invkrsu	invkrsu
+ktr	invktr		
+lax	invlax		
+lbb	invlbb		
+lbl	invlbl		
+lbt	invlbt		
+lbw	invlbw		
+lea	invlea		
+leg	invleg		
+lgl	invlgl		
+lrg	invlrg	invlrgu	invlrgu
+lsd	invlsd	invlsdu	invlsdu
+lst	invlst		
+ltp	invltp		
+luv	invmph		
+lwb	invlwb		
+lxb	invlxb	invlxbu	invlxbu
+mac	invmac		
+mau	invmau	invmauu	invmauu
+mbl	invmbl		
+mbr	invbrnz		
+mbt	invmbt		
+mgl	invmgl		
+mp1	invmp1		
+mp2	invmp2		
+mp3	invmp3		
+mp4	invmp4		
+mp5	invmp5		
+mpf	invbpl		
+mpi	invmpi	invmpiu	invmpiu
+mpo	invbps		
+msf	invmsf		
+msk	invmsk		
+mss	invmss		
+mst	invmst	invmstu	invmstu
+mxb	invmxb	invmxbu	invmxbu
+ne1	invne1		
+ne2	invne2		
+ne3	invne3		
+ne4	invne4		
+ne5	invne5		
+ne6	invne1		
+ne7	invne2		
+ne8	invne3		
+ne9	invne4		
+nea	invne5		
+neb	invne1		
+ned	invne3		
+nee	invne4		
+nef	invne5		
+neg	invne2		
+ob1	invob1		
+ob2	invob2		
+ob3	invob3		
+ob4	invob4		
+ob5	invob5		
+ob6	invob1		
+ob7	invob2		
+ob8	invob3		
+ob9	invob4		
+oba	invob5		
+obb	invob1		
+obc	invob2		
+obd	invob3		
+obe	invob4		
+obf	invob5		
+opl	invops		
+opm	invopm		
+ops	invopl		
+pa1	invpa1		
+pa2	invpa2		
+pa3	invpa3		
+pa4	invpa4		
+pa5	invpa5		
+pa6	invpa1		
+pa7	invpa2		
+pa8	invpa3		
+pa9	invpa4		
+paa	invpa5		
+pab	invpa1		
+pac	invpa2		
+pad	invpa3		
+pae	invpa4		
+paf	invpa5		
+pax	invpax		
+pik	invpik		
+pil	invpil		
+pk1	invmph		
+pk2	invmph		
+pk3	invmph		
+plt	invplt		
+qbr	invbrnz		
+qey	inveye		
+qf1	invqf1		
+qf2	invqf2		
+qhr	invhrt		
+qll	invquil		
+qui	invqlt		
+r01	invrel		
+r02	invreld		
+r03	invrtir		
+r04	invrnef		
+r05	invreth		
+r06	invrith		
+r07	invrtal		
+r08	invrral		
+r09	invrort		
+r10	invrthul		
+r11	invramn		
+r12	invrsol		
+r13	invrshae		
+r14	invrdol		
+r15	invrhel		
+r16	invrio		
+r17	invrlum		
+r18	invrko		
+r19	invrfal		
+r20	invrlem		
+r21	invrpul		
+r22	invrum		
+r23	invrmal		
+r24	invrist		
+r25	invrgul		
+r26	invrvex		
+r27	invrohm		
+r28	invrlo		
+r29	invrsur		
+r30	invrber		
+r31	invrjo		
+r32	invrcham		
+r33	invrzod		
+rin	invrin		
+rng	invrng		
+rpl	invrpl		
+rps	invrps		
+rvl	invvpl		
+rvs	invvps		
+rxb	invrxb	invrxbu	invrxbu
+sbb	invsbb	invsbbu	invsbbu
+sbr	invsbr	inv9sbu	inv9sbu
+sbw	invsbw		
+scl	invscl		
+scm	invscm	invscmu	invscmu
+scp	invscp		
+scy	invscy	invscyu	invscyu
+scz	invscp		
+skc	invskc		
+skf	invskf		
+skl	invskl		
+skp	invskp		
+skr	invskr	invskru	invskru
+sku	invsku		
+skz	invskz		
+sml	invsml	invsmlu	invsmlu
+sol	invsple		
+spc	invspc	invspcu	invspcu
+spe	invsple		
+spk	invspk	invspku	invspku
+spl	invspl		
+spr	invspr		
+spt	invspt		
+ssd	invssd		
+ssp	invssp		
+sst	invsst		
+std	invflag		
+stu	invstu		
+swb	invswb	invswbu	invswbu
+tal	invtail		
+tax	invtax		
+tbk	invbbk		
+tbl	invtbl		
+tbt	invtbt		
+tch	invtrch		
+tes	invtes		
+tgl	invtgl		
+tkf	invtkn		
+toa	invtoa		
+tow	invtow	invtowu	invtowu
+tr1	invhscr		
+tr2	invscb		
+tri	invtri	invtriu	invtriu
+tsc	invbsc		
+tsp	invtsp		
+ua1	invjbi		
+ua2	invjbi		
+ua3	invjbi		
+ua4	invjbi		
+ua5	invjbi		
+uap	invcap		
+uar	invaar	invaaru	invaaru
+ucl	invscl		
+uea	invlea		
+uh9	invbhm	invbhmu	invbhmu
+uhb	invhbt		
+uhc	invhbl		
+uhg	invhgl		
+uhl	invfhl	invfhlu	invfhlu
+uhm	invghm		invuhms
+uhn	invchn		
+uit	invkit	invkitu	invkitu
+ukp	invskp		
+ula	invhla		
+ulb	invlbt		
+ulc	invlbl		
+uld	invfld		
+ulg	invlgl		
+ulm	invhlm	invhlmu	invhlmu
+ult	invplt		
+um1	invflag		
+um2	invflag		
+um3	invflag		
+um4	invflag		
+um5	invflag		
+um6	invflag		
+umb	invmbt		
+umc	invmbl		
+umg	invmgl		
+uml	invsml	invsmlu	invsmlu
+ung	invrng		
+uow	invtow	invtowu	invtowu
+upk	invspk	invspku	invspku
+upl	invspl		
+urg	invlrg	invlrgu	invlrgu
+urn	invcrn		
+urs	invbrs		
+ush	invbsh	invbshu	invbshu
+usk	invmsk		
+utb	invtbt		
+utc	invtbl		
+utg	invtgl		
+uth	invgth		
+utp	invltp		
+uts	invgts	invgtsu	invutss
+utu	invstu		
+uuc	invbuc	invbucu	invbucu
+uui	invqlt		
+uul	invful		
+uvb	invvbt		
+uvc	invvbl		
+uvg	invvgl		
+vbl	invvbl		
+vbt	invvbt		
+vgl	invvgl		
+vip	invvip	invvip	
+vou	invvou		
+vps	invwps		
+wa1	invbbb		
+wa2	invbbb		
+wa3	invbbb		
+wa4	invbbb		
+wa5	invbbb		
+wa6	invbbb		
+wa7	invbbb		
+wa8	invbbb		
+wa9	invbbb		
+waa	invbbb		
+wab	invbbb		
+wac	invbbb		
+wad	invbbb		
+wae	invbbb		
+waf	invbbb		
+wax	invwax		
+whm	invwhm		
+wms	invyps		
+wnd	invwnd	invwndu	invwndu
+wrb	invktr		
+wsc	invwsc		
+wsd	invwsd		
+wsp	invwsp		
+wst	invwst		
+xa1	invtoa		
+xa2	invtoa		
+xa3	invtoa		
+xa4	invtoa		
+xa5	invtoa		
+xap	invcap		
+xar	invaar	invxaru	invxaru
+xcl	invscl		
+xea	invlea		
+xh9	invbhm	invbhmu	invbhmu
+xhb	invhbt		
+xhg	invhgl		
+xhl	invfhl	invfhlu	invfhlu
+xhm	invghm		
+xhn	invchn		
+xit	invkit	invkitu	invkitu
+xkp	invskp	invxkpu	invxkpu
+xla	invhla		
+xlb	invlbt		
+xld	invfld		
+xlg	invlgl		
+xlm	invhlm	invhlmu	invhlmu
+xlt	invplt		
+xmb	invmbt		
+xmg	invmgl		
+xml	invsml	invxmlu	invxmlu
+xng	invrng		
+xow	invtow	invtowu	invtowu
+xpk	invspk	invxpku	invxpku
+xpl	invspl		
+xrg	invlrg	invxrgu	invxrgu
+xrn	invcrn	invxrnu	invxrnu
+xrs	invbrs		invxrss
+xsh	invbsh	invxshu	invxshu
+xsk	invmsk		
+xtb	invtbt		
+xtg	invtgl		
+xth	invgth		
+xtp	invltp		
+xts	invgts	invgtsu	invgtsu
+xtu	invstu	invxtuu	invxtuu
+xuc	invbuc	invbucu	invbucu
+xui	invqlt		
+xul	invful		
+xvb	invvbt		
+xvg	invvgl		
+xyz	invxyz		
+yps	invnps		
+ywn	invywn		
+zhb	invhbl		
+zlb	invlbl		
+zmb	invmbl		
+ztb	invtbl		
+zvb	invvbl		

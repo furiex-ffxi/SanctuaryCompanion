@@ -28,6 +28,8 @@ namespace D2RStashWorker
         private static Dictionary<int, string> _uniques = new();
         private static Dictionary<int, (string ItemName, string SetName)> _sets = new();
         private static Dictionary<string, GemEntry> _gems = new();
+        private static Dictionary<string, (string Normal, string Unique, string Set)> _itemImages = new();
+        private static Dictionary<string, string[]> _itemGfx = new();
 
         private static readonly HashSet<string> _shieldCodes = new()
         {
@@ -82,10 +84,41 @@ namespace D2RStashWorker
             { 203, "Cure" }, { 204, "Bulwark" }
         };
 
+        private static void LoadItemImageData()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using (var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.item_images.tsv"))
+            using (var reader = stream == null ? null : new StreamReader(stream))
+            {
+                if (reader != null) {
+                    reader.ReadLine();
+                    while (!reader.EndOfStream)
+                    {
+                        var parts = reader.ReadLine()?.Split('\t') ?? [];
+                        if (parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
+                            _itemImages[parts[0].Trim()] = (parts[1].Trim(), parts.ElementAtOrDefault(2)?.Trim() ?? "", parts.ElementAtOrDefault(3)?.Trim() ?? "");
+                    }
+                }
+            }
+            using (var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.item_gfx.tsv"))
+            using (var reader = stream == null ? null : new StreamReader(stream))
+            {
+                if (reader != null) {
+                    reader.ReadLine();
+                    while (!reader.EndOfStream)
+                    {
+                        var parts = reader.ReadLine()?.Split('\t') ?? [];
+                        if (parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[0]))
+                            _itemGfx[parts[0].Trim()] = parts.Skip(1).Select(p => p.Trim()).Where(p => p.Length > 0).ToArray();
+                    }
+                }
+            }
+        }
         static D2Data()
         {
             try
             {
+                LoadItemImageData();
                 var assembly = Assembly.GetExecutingAssembly();
                 using (var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.uniqueitems.txt"))
                 {
@@ -182,6 +215,29 @@ namespace D2RStashWorker
             return val;
         }
         public static string? GetRunewordName(int id) => _runewords.TryGetValue(id, out var val) ? val : null;
+
+        public static string? GetInventoryFile(Item item)
+        {
+            var type = item.ItemCodeString.Trim().ToLowerInvariant();
+            var gfxType = type switch
+            {
+                "rin" => "ring", "amu" => "amul", "jew" => "jewl",
+                "cm1" => "scha", "cm2" => "mcha", "cm3" => "lcha", _ => ""
+            };
+            if (gfxType.Length > 0 && _itemGfx.TryGetValue(gfxType, out var gfxFiles) && gfxFiles.Length > 0)
+            {
+                var gfxIndex = Math.Clamp((int)(item.VariableGfxId ?? 0), 0, gfxFiles.Length - 1);
+                return gfxFiles[gfxIndex];
+            }
+            if (type == "box") return "invbox";
+            if (_itemImages.TryGetValue(type, out var image))
+            {
+                if (item.Quality == ItemQuality.Unique && image.Unique.Length > 0) return image.Unique;
+                if (item.Quality == ItemQuality.Set && image.Set.Length > 0) return image.Set;
+                return image.Normal;
+            }
+            return null;
+        }
 
         private static uint GetItemCode(string code)
         {
@@ -305,33 +361,6 @@ namespace D2RStashWorker
                 description = $"{stat.Id}: {stat.Value}"
             }).ToArray();
 
-        private static string? GetInventoryFile(Item item)
-        {
-            var type = item.ItemCodeString.Trim().ToLowerInvariant();
-            var gfx = Math.Clamp((int)(item.VariableGfxId ?? 0) + 1, 1, 5);
-
-            if (type == "rin") return $"invrin{gfx}";
-            if (type == "amu") return $"invamu{Math.Clamp(gfx, 1, 3)}";
-            if (type == "jew") return gfx == 1 ? "invjw1" : "invjw5";
-            if (type.StartsWith("r") && int.TryParse(type[1..], out var rune) && rune is >= 1 and <= 33)
-            {
-                var runeNames = new[] { "El", "Eld", "Tir", "Nef", "Eth", "Ith", "Tal", "Ral", "Ort", "Thul", "Amn", "Sol", "Shael", "Dol", "Hel", "Io", "Lum", "Ko", "Fal", "Lem", "Pul", "Um", "Mal", "Ist", "Gul", "Vex", "Ohm", "Lo", "Sur", "Ber", "Jah", "Cham", "Zod" };
-                return $"invr{runeNames[rune - 1]}";
-            }
-
-            return type switch
-            {
-                "cm1" => "invch4", "cm2" => "invch8", "cm3" => "invch3",
-                "gpy" => "invgsye", "glr" => "invgsrd", "gpw" => "invgswe", "7yw" => "invywn",
-                "rvs" => "invvps", "rvl" => "invvpl", "ibk" => "invrbk", "tbk" => "invbbk",
-                "hp5" => "invhp5", "key" => "invkey", "box" => "invbox", "kit" => "invkitu",
-                "vgl" => "invvgl", "xvb" => "invvbt", "bsh" => "invbshu", "crs" => "invcrs",
-                "hbt" => "invhbt", "zhb" => "invhbl", "uml" => "invsmlu", "zmb" => "invmbl",
-                "ltp" => "invltp", "9wn" => "invwnd", "tow" => "invtowu", "xlb" or "ulb" => "invlbt",
-                "ulg" => "invlgl", "uui" => "invqlt", "hlm" => "invhlm", "stu" => "invstu",
-                "bwn" => "invbwn", "oba" => "invob5", "xml" => "invxmlu", _ => null
-            };
-        }
         private static object SerializeItem(Item i, uint version, int altPositionId, string parentCode = "")
         {
             byte[] itemBytes = new byte[2048];
@@ -385,13 +414,14 @@ namespace D2RStashWorker
                 }
             }
 
+            var imageKey = D2Data.GetInventoryFile(i);
             return new
             {
                 id = i.ItemSeed,
                 type = i.ItemCodeString,
                 type_name = i.ItemCodeString,
-                inv_file = GetInventoryFile(i),
-                image_key = GetInventoryFile(i),
+                inv_file = imageKey,
+                image_key = imageKey,
                 location_id = (int)i.Position.Mode,
                 equipped_id = (int)i.Position.BodyLocation,
                 position_x = (int)i.Position.InvX,

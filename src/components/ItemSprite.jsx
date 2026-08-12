@@ -105,7 +105,7 @@ export const getItemDisplayName = (item) => {
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
-  const invFile = item?.image_key || item?.inv_file;
+  const invFile = (item?.image_key || item?.inv_file)?.toLowerCase();
 
   useEffect(() => {
     setImgError(false);
