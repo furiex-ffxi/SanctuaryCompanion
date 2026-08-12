@@ -103,9 +103,14 @@ export const getItemDisplayName = (item) => {
 };
 
 
+import { getDiabloColorFilter } from './itemColorTransforms.js';
+
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
-  const invFile = (item?.image_key || item?.inv_file)?.toLowerCase();
+  const type = (item?.type || '').toLowerCase();
+  const isSunderCharm = type === 'cs2' || (item?.magic_attributes || []).some((attribute) => [187, 189, 190, 191, 192, 193].includes(Number(attribute?.id)));
+  const invFile = isSunderCharm ? 'invch3' : (item?.image_key || item?.inv_file)?.toLowerCase();
+  const transformFilter = getDiabloColorFilter(item?.transform_color);
 
   useEffect(() => {
     setImgError(false);
@@ -113,7 +118,6 @@ export default function ItemSprite({ item }) {
 
   if (!item) return null;
 
-  const type = (item.type || '').toLowerCase();
   const isRune = /^r\d+$/.test(type);
   const runeInfo = isRune ? RUNE_GLYPHS[type] : null;
 
@@ -137,6 +141,7 @@ export default function ItemSprite({ item }) {
             src={`/items/${encodeURIComponent(invFile)}.png`}
             alt={name}
             className="item-sprite-img"
+            style={transformFilter ? { filter: transformFilter } : undefined}
             onError={() => setImgError(true)}
           />
           {item.socketed_items?.length > 0 && (

@@ -23,10 +23,20 @@ namespace D2RStashWorker
         public List<GemMod> ShieldMods { get; set; } = new();
     }
 
+    public class ItemTransform
+    {
+        public string InvTransform { get; set; } = "";
+        public string ChrTransform { get; set; } = "";
+        public string TransformColor { get; set; } = "";
+    }
+
     public static class D2Data
     {
         private static Dictionary<int, string> _uniques = new();
         private static Dictionary<int, (string ItemName, string SetName)> _sets = new();
+        private static Dictionary<string, ItemTransform> _uniqueTransforms = new();
+        private static Dictionary<string, ItemTransform> _setTransforms = new();
+        private static Dictionary<int, ItemTransform> _setTransformsById = new();
         private static Dictionary<string, GemEntry> _gems = new();
         private static Dictionary<string, (string Normal, string Unique, string Set)> _itemImages = new();
         private static Dictionary<string, string[]> _itemGfx = new();
@@ -114,6 +124,18 @@ namespace D2RStashWorker
                 }
             }
         }
+        private static ItemTransform ReadTransform(string[] headers, string[] parts)
+        {
+            string Value(string column)
+            {
+                var index = System.Array.IndexOf(headers, column);
+                return index >= 0 && index < parts.Length ? parts[index].Trim() : "";
+            }
+            var inv = Value("invtransform");
+            var chr = Value("chrtransform");
+            return new ItemTransform { InvTransform = inv, ChrTransform = chr, TransformColor = inv.Length > 0 ? inv : chr };
+        }
+
         static D2Data()
         {
             try
@@ -125,7 +147,7 @@ namespace D2RStashWorker
                     if (stream != null)
                     {
                         using var reader = new StreamReader(stream);
-                        reader.ReadLine();
+                        var headers = (reader.ReadLine() ?? "").Split('	');
                         while (!reader.EndOfStream)
                         {
                             var line = reader.ReadLine();
@@ -134,6 +156,7 @@ namespace D2RStashWorker
                             if (parts.Length > 1 && int.TryParse(parts[1], out int id))
                             {
                                 _uniques[id] = parts[0];
+                                _uniqueTransforms[parts[0]] = ReadTransform(headers, parts);
                             }
                         }
                     }
@@ -143,7 +166,7 @@ namespace D2RStashWorker
                     if (stream != null)
                     {
                         using var reader = new StreamReader(stream);
-                        reader.ReadLine();
+                        var headers = (reader.ReadLine() ?? "").Split('	');
                         while (!reader.EndOfStream)
                         {
                             var line = reader.ReadLine();
@@ -152,6 +175,8 @@ namespace D2RStashWorker
                             if (parts.Length > 2 && int.TryParse(parts[1], out int id))
                             {
                                 _sets[id] = (parts[0], parts[2]);
+                                _setTransforms[parts[0]] = ReadTransform(headers, parts);
+                                _setTransformsById[id] = _setTransforms[parts[0]];
                             }
                         }
                     }
@@ -207,6 +232,9 @@ namespace D2RStashWorker
         }
 
         public static string? GetUniqueName(int id) => _uniques.TryGetValue(id, out var val) ? val : null;
+        public static ItemTransform? GetUniqueTransform(string? name) => name != null && _uniqueTransforms.TryGetValue(name, out var val) ? val : null;
+        public static ItemTransform? GetSetTransform(string? name) => name != null && _setTransforms.TryGetValue(name, out var val) ? val : null;
+        public static ItemTransform? GetSetTransform(int id) => _setTransformsById.TryGetValue(id, out var val) ? val : null;
         public static (string ItemName, string SetName)? GetSetItem(int id)
         {
             if (!_sets.TryGetValue(id, out var val)) return null;
@@ -371,9 +399,11 @@ namespace D2RStashWorker
 
             string? uniqueName = null;
             string? setName = null;
+            ItemTransform? transform = null;
             if (i.Quality == ItemQuality.Unique && i.QualityData is SetUniqueQualityData uniqData)
             {
                 uniqueName = D2Data.GetUniqueName(uniqData.SetUniqueFileIndex);
+                transform = D2Data.GetUniqueTransform(uniqueName);
             }
             else if (i.Quality == ItemQuality.Set && i.QualityData is SetUniqueQualityData setData)
             {
@@ -382,6 +412,7 @@ namespace D2RStashWorker
                 {
                     uniqueName = setInfo.Value.ItemName;
                     setName = setInfo.Value.SetName;
+                    transform = D2Data.GetSetTransform(setData.SetUniqueFileIndex);
                 }
             }
 
@@ -422,6 +453,9 @@ namespace D2RStashWorker
                 type_name = i.ItemCodeString,
                 inv_file = imageKey,
                 image_key = imageKey,
+                inv_transform = transform?.InvTransform,
+                chr_transform = transform?.ChrTransform,
+                transform_color = transform?.TransformColor,
                 location_id = (int)i.Position.Mode,
                 equipped_id = (int)i.Position.BodyLocation,
                 position_x = (int)i.Position.InvX,
@@ -456,6 +490,11 @@ namespace D2RStashWorker
                 id = serialized.id,
                 type = serialized.type,
                 type_name = serialized.type_name,
+                inv_file = serialized.inv_file,
+                image_key = serialized.image_key,
+                inv_transform = serialized.inv_transform,
+                chr_transform = serialized.chr_transform,
+                transform_color = serialized.transform_color,
                 location_id = serialized.location_id,
                 equipped_id = serialized.equipped_id,
                 position_x = serialized.position_x,
