@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
+import { normalizeVaultItem } from './itemImageResolver.js'
 
 const SCHEMA_VERSION = 2
 const DEFAULT_PAGE_SIZE = 100
@@ -36,7 +37,7 @@ function hydrateRow(row) {
     vaultId: row.vault_id,
     stashedAt: row.stashed_at,
     sourceSave: row.source_save,
-    itemData: JSON.parse(row.item_json),
+    itemData: normalizeVaultItem(JSON.parse(row.item_json)),
     status: row.status,
   }
 }
@@ -254,7 +255,7 @@ export class VaultRepository {
       vaultId: entry.vaultId,
       stashedAt: entry.stashedAt,
       sourceSave: entry.sourceSave,
-      itemJson: JSON.stringify(entry.itemData),
+      itemJson: JSON.stringify(normalizeVaultItem(entry.itemData)),
       status,
       updatedAt,
     })

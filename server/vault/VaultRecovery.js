@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
+import { normalizeVaultItem } from './itemImageResolver.js'
 
 function checksumFor(record) {
   const { checksum: _checksum, ...content } = record
@@ -76,7 +77,7 @@ function insertEntry(db, entry, status, updatedAt) {
       item_json = excluded.item_json,
       status = excluded.status,
       updated_at = excluded.updated_at
-  `).run({ ...projection, vaultId: entry.vaultId, stashedAt: entry.stashedAt, sourceSave: entry.sourceSave, itemJson: JSON.stringify(entry.itemData), status, updatedAt })
+  `).run({ ...projection, vaultId: entry.vaultId, stashedAt: entry.stashedAt, sourceSave: entry.sourceSave, itemJson: JSON.stringify(normalizeVaultItem(entry.itemData)), status, updatedAt })
 }
 
 function applyIntent(db, intent, status = null) {
