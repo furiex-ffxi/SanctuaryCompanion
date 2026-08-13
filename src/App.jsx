@@ -95,6 +95,7 @@ function MainContent() {
 
   const { toasts, addToast, dismissToast } = useToasts();
   const [searchHighlight, setSearchHighlight] = React.useState(null);
+  const [vaultSearchQuery, setVaultSearchQuery] = React.useState('');
 
   // Sync tab selection with URL hash (#character, #inventory, #char-stash, #stash, #cube, #skills, #shared-stash, #infinite-stash)
   React.useEffect(() => {
@@ -149,11 +150,9 @@ function MainContent() {
       window.history.pushState(null, '', '#shared-stash');
       addToast(`Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, 'info');
     } else {
+      setVaultSearchQuery(result.preview.displayName);
       setMainTab('stash');
       window.history.pushState(null, '', '#infinite-stash');
-      await new Promise(resolve => window.setTimeout(resolve, 0));
-      const focused = await queryVault({ q: result.preview.displayName });
-      if (!focused.items.some(entry => entry.vaultId === result.vaultId)) addToast('That search result is stale; the vault item is no longer active.', 'error');
     }
   };
 

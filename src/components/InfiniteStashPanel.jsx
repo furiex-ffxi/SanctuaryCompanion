@@ -21,6 +21,8 @@ export function InfiniteStashPanel({
   onWithdraw,
   onWithdrawShared,
   highlightIdentity,
+  searchQuery = '',
+  onSearchQueryChange = () => {},
 }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSlot, setSelectedSlot] = useState('All');
@@ -38,10 +40,11 @@ export function InfiniteStashPanel({
         slot: selectedSlot,
         setName: selectedSet,
         quality: selectedQuality,
+        q: searchQuery,
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, onQuery]);
+  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, onQuery]);
 
   const handleRemove = async (vaultId) => {
     if (isGameRunning) {
@@ -91,6 +94,7 @@ export function InfiniteStashPanel({
     setSelectedSlot('All');
     setSelectedSet('All');
     setSelectedQuality('All');
+    onSearchQueryChange('');
   };
 
   const handleMouseMove = (event) => {
@@ -121,6 +125,20 @@ export function InfiniteStashPanel({
 
       <div className="stash-toolbar">
         <div className="filter-selects">
+          <div className="filter-group vault-search-filter">
+            <label htmlFor="infinite-vault-search">Search vault:</label>
+            <div className="search-box">
+              <input
+                id="infinite-vault-search"
+                className="d2r-input vault-search-input"
+                type="search"
+                placeholder="Item name..."
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+              />
+              {searchQuery && <button className="search-clear-btn" type="button" onClick={() => onSearchQueryChange('')} aria-label="Clear vault search">×</button>}
+            </div>
+          </div>
           <div className="filter-group">
             <label>Category:</label>
             <select className="d2r-select" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
