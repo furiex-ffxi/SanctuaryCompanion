@@ -2,39 +2,39 @@ import React, { useEffect, useState } from 'react';
 
 // Rune names & Nordic/D2 glyph representations
 const RUNE_GLYPHS = {
-  r01: { name: 'El', glyph: 'á›–' },
-  r02: { name: 'Eld', glyph: 'á›š' },
-  r03: { name: 'Tir', glyph: 'á›' },
-  r04: { name: 'Nef', glyph: 'áš¾' },
-  r05: { name: 'Eth', glyph: 'á›–' },
-  r06: { name: 'Ith', glyph: 'á›' },
-  r07: { name: 'Tal', glyph: 'á›' },
-  r08: { name: 'Ral', glyph: 'áš±' },
-  r09: { name: 'Ort', glyph: 'á›' },
-  r10: { name: 'Thul', glyph: 'áš¦' },
-  r11: { name: 'Amn', glyph: 'á›˜' },
-  r12: { name: 'Sol', glyph: 'á›‹' },
-  r13: { name: 'Shael', glyph: 'á›‹' },
-  r14: { name: 'Dol', glyph: 'á›ž' },
-  r15: { name: 'Hel', glyph: 'áš¼' },
-  r16: { name: 'Io', glyph: 'á›' },
-  r17: { name: 'Lum', glyph: 'á›š' },
-  r18: { name: 'Ko', glyph: 'áš²' },
-  r19: { name: 'Fal', glyph: 'áš ' },
-  r20: { name: 'Lem', glyph: 'á›š' },
-  r21: { name: 'Pul', glyph: 'á›ˆ' },
-  r22: { name: 'Um', glyph: 'áš¢' },
-  r23: { name: 'Mal', glyph: 'á›˜' },
-  r24: { name: 'Ist', glyph: 'á›' },
-  r25: { name: 'Gul', glyph: 'áš·' },
-  r26: { name: 'Vex', glyph: 'áš ' },
-  r27: { name: 'Ohm', glyph: 'áš©' },
-  r28: { name: 'Lo', glyph: 'á›š' },
-  r29: { name: 'Sur', glyph: 'á›‹' },
-  r30: { name: 'Ber', glyph: 'á›’' },
-  r31: { name: 'Jah', glyph: 'á›ƒ' },
-  r32: { name: 'Cham', glyph: 'áš²' },
-  r33: { name: 'Zod', glyph: 'á›‰' },
+  r01: { name: 'El', glyph: '*' },
+  r02: { name: 'Eld', glyph: '*' },
+  r03: { name: 'Tir', glyph: '*' },
+  r04: { name: 'Nef', glyph: '*' },
+  r05: { name: 'Eth', glyph: '*' },
+  r06: { name: 'Ith', glyph: '*' },
+  r07: { name: 'Tal', glyph: '*' },
+  r08: { name: 'Ral', glyph: '*' },
+  r09: { name: 'Ort', glyph: '*' },
+  r10: { name: 'Thul', glyph: '*' },
+  r11: { name: 'Amn', glyph: '*' },
+  r12: { name: 'Sol', glyph: '*' },
+  r13: { name: 'Shael', glyph: '*' },
+  r14: { name: 'Dol', glyph: '*' },
+  r15: { name: 'Hel', glyph: '*' },
+  r16: { name: 'Io', glyph: '*' },
+  r17: { name: 'Lum', glyph: '*' },
+  r18: { name: 'Ko', glyph: '*' },
+  r19: { name: 'Fal', glyph: '*' },
+  r20: { name: 'Lem', glyph: '*' },
+  r21: { name: 'Pul', glyph: '*' },
+  r22: { name: 'Um', glyph: '*' },
+  r23: { name: 'Mal', glyph: '*' },
+  r24: { name: 'Ist', glyph: '*' },
+  r25: { name: 'Gul', glyph: '*' },
+  r26: { name: 'Vex', glyph: '*' },
+  r27: { name: 'Ohm', glyph: '*' },
+  r28: { name: 'Lo', glyph: '*' },
+  r29: { name: 'Sur', glyph: '*' },
+  r30: { name: 'Ber', glyph: '*' },
+  r31: { name: 'Jah', glyph: '*' },
+  r32: { name: 'Cham', glyph: '*' },
+  r33: { name: 'Zod', glyph: '*' },
 };
 
 // Gem colors mapped by gem letter (w=Diamond, r=Ruby, b=Sapphire, g=Emerald, y=Topaz, a=Amethyst, sk=Skull)
@@ -122,6 +122,7 @@ export default function ItemSprite({ item }) {
   const runeInfo = isRune ? RUNE_GLYPHS[type] : null;
 
   const name = getItemDisplayName(item);
+  const imagePath = `/__d2r_item_image/${encodeURIComponent(invFile)}.png`;
 
 
   // Quality border color
@@ -138,9 +139,10 @@ export default function ItemSprite({ item }) {
       <div className="item-sprite-wrapper" style={{ borderColor: qualityColor }}>
         <div className="item-sprite-container">
           <img
-            src={`/items/${encodeURIComponent(invFile)}.png`}
+            src={imagePath}
             alt={name}
             className="item-sprite-img"
+            decoding="async"
             style={transformFilter ? { filter: transformFilter } : undefined}
             onError={() => setImgError(true)}
           />
@@ -159,7 +161,7 @@ export default function ItemSprite({ item }) {
       {isRune ? (
         <div className="rune-sprite">
           <div className="rune-stone">
-            <span className="rune-glyph">{runeInfo?.glyph || 'á›'}</span>
+            <span className="rune-glyph">{runeInfo?.glyph || '*'}</span>
           </div>
           <span className="rune-label">{runeInfo?.name || type.toUpperCase()}</span>
         </div>

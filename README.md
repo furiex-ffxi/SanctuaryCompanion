@@ -19,6 +19,17 @@ npm run lint
 npm run test:vault
 ```
 
+## Local D2R artwork (optional)
+
+Item artwork is intentionally not bundled with this repository. The existing sprites were extracted/derived game assets without a redistribution license. To use private local artwork, extract the installed D2R item sprites into the default private cache with:
+
+```powershell
+python scripts/extract-d2r-item-assets.py
+npm run dev
+```
+
+The dev server reads the ignored .d2r-item-assets cache in the repository, or the directory specified by D2R_ITEM_ASSET_DIR, and exposes it only through the validated /__d2r_item_image route. Do not commit or publish the extracted files.
+
 ## D2SSharp worker
 
 The worker is built from the pinned sibling checkout described by `D2SSharp.lock.json`, rather than a floating NuGet package. Clone `https://github.com/ResurrectedTrader/D2SSharp.git` beside this repository and check out `f26f21897db5c0075e74defca1e31d1930080750` (add that repository as `upstream` if working from your own fork).

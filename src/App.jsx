@@ -27,7 +27,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div style={{ padding: 40, textAlign: 'center', color: '#ff6666' }}>
-          <h2>⚠️ Something went wrong rendering Sanctuary Companion</h2>
+          <h2>Warning: Something went wrong rendering Sanctuary Companion</h2>
           <pre style={{ textAlign: 'left', background: '#111', padding: 20, borderRadius: 6, overflowX: 'auto' }}>
             {this.state.error?.toString()}
           </pre>
@@ -63,6 +63,7 @@ function MainContent() {
     setActiveFile,
     syncedAt,
     syncing,
+    loadError,
     refreshFromServer,
     handleFileUpload,
     activeStats,
@@ -161,28 +162,30 @@ function MainContent() {
       <header>
         <div className="header-left">
           <h1>Sanctuary Companion</h1>
-          <div className="subtitle">Diablo II: Resurrected — Live Character & Stash Vault</div>
+          <div className="subtitle">Diablo II: Resurrected - Live Character &amp; Stash Vault</div>
           
           <nav className="main-nav-tabs">
             <button
               className={`main-nav-btn ${mainTab === 'character' ? 'active' : ''}`}
               onClick={() => handleNavClick('character')}
             >
-              👤 Character Inspector
+              Character Inspector
             </button>
             <button
               className={`main-nav-btn ${mainTab === 'shared_stash' ? 'active' : ''}`}
               onClick={() => handleNavClick('shared_stash')}
             >
-              🪙 Shared Stash
+              Shared Stash
             </button>
             <button
               className={`main-nav-btn ${mainTab === 'stash' ? 'active' : ''}`}
               onClick={() => handleNavClick('stash')}
             >
-              📦 Infinite Stash ({vaultTotal})
+              Infinite Stash ({vaultTotal})
             </button>
           </nav>
+          {loadError && <div className="error-banner" role="alert">{loadError}</div>}
+          {!charData && !loadError && <div className="loading-banner">Loading {activeFile || 'character save'}...</div>}
         </div>
 
         <div className="controls-row">
@@ -202,23 +205,23 @@ function MainContent() {
           )}
 
           <div className="file-input-wrapper" title="Or load any .d2s file manually">
-            <button className="header-control btn-d2r btn-secondary">Browse…</button>
+            <button className="header-control btn-d2r btn-secondary">Browse...</button>
             <input type="file" accept=".d2s" onChange={handleFileUpload} />
           </div>
 
           {syncedAt && (
             <span className="header-control sync-badge">
-              🟢 Synced {syncedAt.toLocaleTimeString()}
+              Synced {syncedAt.toLocaleTimeString()}
             </span>
           )}
 
           {isGameRunning ? (
             <span className="header-control game-running-badge" title="Game is running - save/stash edits are locked">
-              🔴 Game Running (Locked)
+              Game Running (Locked)
             </span>
           ) : (
             <span className="header-control game-idle-badge" title="Game is closed - full save/stash edit access active">
-              🟢 Game Closed (Unlocked)
+              Game Closed (Unlocked)
             </span>
           )}
 
@@ -228,14 +231,14 @@ function MainContent() {
             onClick={() => refreshFromServer(activeFile)}
             disabled={!activeFile || syncing}
           >
-            {syncing ? '↻ Refreshing…' : '↻ Refresh'}
+            {syncing ? 'Refreshing...' : 'Refresh'}
           </button>
         </div>
       </header>
 
       {isGameRunning && (
         <div className="game-running-warning-banner">
-          ⛔ <strong>Diablo II: Resurrected is currently running!</strong> Save files and Infinite Stash operations are disabled to prevent data corruption. Exit to the main menu or close D2R to enable moving items.
+          <strong>Diablo II: Resurrected is currently running!</strong> Save files and Infinite Stash operations are disabled to prevent data corruption. Exit to the main menu or close D2R to enable moving items.
         </div>
       )}
 
@@ -342,7 +345,7 @@ function MainContent() {
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}`}>
             <span className="toast-msg">{t.message}</span>
-            <button className="toast-dismiss" onClick={() => dismissToast(t.id)} aria-label="Dismiss">×</button>
+            <button className="toast-dismiss" onClick={() => dismissToast(t.id)} aria-label="Dismiss">x</button>
           </div>
         ))}
       </div>

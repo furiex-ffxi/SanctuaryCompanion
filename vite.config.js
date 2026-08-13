@@ -11,6 +11,7 @@ import { constants } from './src/domain/entities/static_constant_data.js'
 
 // Path to D2R saves directory
 const SAVES_DIR = 'C:/Users/chang/Saved Games/Diablo II Resurrected'
+const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item-assets')
 
 // D2SSharp owns all .d2s/.d2i parsing and writing through this thin process adapter.
 const require = createRequire(import.meta.url)
@@ -37,6 +38,19 @@ function d2sWatcherPlugin() {
     configureServer(server) {
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
+
+      // Proprietary D2R artwork is opt-in and served only from a local cache.
+      server.middlewares.use('/__d2r_item_image', (req, res) => {
+        if (!ITEM_ASSET_DIR) { res.writeHead(404); res.end(); return }
+        const relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '')
+        if (!/^[A-Za-z0-9._@-]+\.(?:png|svg)$/.test(relative)) { res.writeHead(400); res.end('invalid item asset'); return }
+        const fullPath = path.resolve(ITEM_ASSET_DIR, relative)
+        if (fullPath !== ITEM_ASSET_DIR && !fullPath.startsWith(ITEM_ASSET_DIR + path.sep)) { res.writeHead(403); res.end(); return }
+        if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) { res.writeHead(404); res.end(); return }
+        res.writeHead(200, { 'Content-Type': relative.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': 'private, max-age=3600' })
+        res.end(fs.readFileSync(fullPath))
+      })
+
       const vaultRepository = registerVaultRoutes(server, { savesDir: SAVES_DIR })
       registerItemSearchRoute(server, { savesDir: SAVES_DIR, repository: vaultRepository, parseD2S, parseD2I })
 
@@ -556,4 +570,5 @@ function d2sWatcherPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), d2sWatcherPlugin()],
+  server: { host: '127.0.0.1', port: 5173, strictPort: true },
 })

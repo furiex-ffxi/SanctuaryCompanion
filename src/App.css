@@ -106,7 +106,7 @@ h1 {
   cursor: pointer;
 }
 
-/* Header layout — title left, controls right */
+/* Header layout: title left, controls right */
 header {
   display: flex;
   align-items: center;
@@ -668,7 +668,7 @@ header {
   display: block;
 }
 
-/* ─── Item Sprites & Graphics ────────────────────────────────────────────────── */
+/* Item Sprites and Graphics */
 .item-sprite-wrapper {
   position: relative;
   width: 100%;
@@ -693,11 +693,21 @@ header {
   min-height: 0;
 }
 
+.item-sprite-picture {
+  display: contents;
+}
+
 .item-sprite-img {
+  display: block;
+  width: auto;
+  height: auto;
   max-width: 85%;
   max-height: 85%;
   object-fit: contain;
+  object-position: center;
   image-rendering: pixelated;
+  /* Keep the original game-pixel aesthetic while using @2x sources on HiDPI. */
+  -webkit-backface-visibility: hidden;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.9));
 }
 
@@ -1039,7 +1049,7 @@ header {
   font-weight: bold;
 }
 
-/* ─── Main Navigation Tabs ─────────────────────────────────────────────────── */
+/* Main Navigation Tabs */
 .main-nav-tabs {
   display: flex;
   gap: 10px;
@@ -1071,7 +1081,7 @@ header {
   box-shadow: 0 0 10px rgba(192, 160, 96, 0.4);
 }
 
-/* ─── Deposit Button on Items ──────────────────────────────────────────────── */
+/* Deposit Button on Items */
 .btn-deposit-stash {
   position: absolute;
   top: 2px;
@@ -1106,7 +1116,7 @@ header {
   padding: 2px 6px;
 }
 
-/* ─── Infinite Stash Vault Panel ────────────────────────────────────────────── */
+/* Infinite Stash Vault Panel */
 .infinite-stash-container {
   background-color: var(--color-bg-panel);
   border: 2px solid var(--color-border-dim);
@@ -1347,6 +1357,24 @@ header {
   border-radius: 3px;
 }
 
+
+.icon-cell .item-sprite-wrapper {
+  padding: 0;
+}
+
+.icon-cell .item-sprite-name {
+  display: none;
+}
+
+.icon-cell .item-sprite-picture {
+  display: contents;
+}
+
+.item-sprite-img {
+  max-width: 92%;
+  max-height: 92%;
+}
+
 .name-cell {
   display: flex;
   flex-direction: column;
@@ -1521,7 +1549,7 @@ header {
 }
 
 
-/* ── Toast Notifications ─────────────────────────────────────────── */
+/* Toast Notifications */
 .toast-container {
   position: fixed;
   bottom: 24px;
@@ -1590,3 +1618,7 @@ header {
   flex-shrink: 0;
 }
 .toast-dismiss:hover { opacity: 1; }
+
+.loading-banner, .error-banner { margin-top: 8px; font-size: 0.8rem; }
+.loading-banner { color: var(--color-text-dim); }
+.error-banner { color: #ff7777; }

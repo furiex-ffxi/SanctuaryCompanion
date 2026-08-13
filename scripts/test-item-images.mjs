@@ -4,7 +4,6 @@ import { getDiabloColorFilter } from '../src/components/itemColorTransforms.js';
 
 const root = process.cwd();
 const itemDir = path.join(root, 'public', 'items');
-const files = new Set(fs.readdirSync(itemDir));
 const keys = new Set(['invbox']);
 const imageRows = fs.readFileSync(path.join(root, 'D2RStashWorker', 'Data', 'item_images.tsv'), 'utf8')
   .split(/\r?\n/)
@@ -42,9 +41,9 @@ if (unmappedTransforms.length) {
   throw new Error('Missing renderer mappings for transform colors: ' + unmappedTransforms.join(', '));
 }
 
-const missing = [...keys].filter((key) => !files.has(`${key}.png`));
-if (missing.length) {
-  throw new Error(`Missing case-sensitive item assets: ${missing.join(', ')}`);
+const bundledAssets = fs.readdirSync(itemDir).filter((file) => file !== '.gitkeep');
+if (bundledAssets.length) {
+  throw new Error(`Proprietary item assets must not be bundled in public/items: ${bundledAssets.slice(0, 5).join(', ')}`);
 }
 
-console.log(`Verified ${keys.size} canonical item image keys against ${files.size} PNG assets.`);
+console.log(`Verified ${keys.size} canonical item image mappings; artwork is local-only.`);

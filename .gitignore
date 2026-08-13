@@ -33,3 +33,7 @@ D2RStashWorker/bin/
 D2RStashWorker/obj/
 server/bin/*
 !server/bin/.gitkeep
+
+# Local-only D2R artwork cache (never commit extracted Blizzard assets)
+.d2r-item-assets/
+local-item-assets/
