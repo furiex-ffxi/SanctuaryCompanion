@@ -218,7 +218,7 @@ export function useCharacterCompanion() {
       }
 
       await refreshVault();
-      emitToast(`Stashed "${item.type_name || item.type}" â†’ Infinite Stash`, 'success');
+      emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
     },
     [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault]
   );
