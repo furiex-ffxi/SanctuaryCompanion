@@ -10,6 +10,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $worker = Join-Path $repoRoot 'server\bin\D2RStashWorker.exe'
 $fixtures = Join-Path $repoRoot '..\D2SSharp\src\D2SSharp.Tests\Resources\105'
 $testRoot = Join-Path $SavesRoot (Join-Path 'backups' ('E2E_BACKUP_TEST_TEMP_' + [guid]::NewGuid().ToString('N')))
+$itemAssetRoot = if ($env:D2R_ITEM_ASSET_DIR) { (Resolve-Path -LiteralPath $env:D2R_ITEM_ASSET_DIR).Path } else { $null }
 
 function Assert-ImageKeys($value, [string]$sourceName) {
     if ($null -eq $value) { return }
@@ -18,9 +19,11 @@ function Assert-ImageKeys($value, [string]$sourceName) {
         return
     }
     if ($value.PSObject.Properties['image_key'] -and $value.image_key) {
-        $asset = Join-Path $repoRoot (Join-Path 'public/items' ($value.image_key + '.png'))
-        if (-not (Test-Path -LiteralPath $asset)) {
-            throw "Missing item image asset '$($value.image_key)' for $sourceName."
+        if ($itemAssetRoot) {
+            $asset = Join-Path $itemAssetRoot ($value.image_key + '.png')
+            if (-not (Test-Path -LiteralPath $asset)) {
+                throw "Missing configured local item image asset '$($value.image_key)' for $sourceName."
+            }
         }
     }
     foreach ($property in $value.PSObject.Properties) {

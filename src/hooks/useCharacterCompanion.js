@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import fallbackData from '../fallbackData.json';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
 import { calculateCharacterStats } from '../domain/entities/Character';
 import { STORAGE_META } from '../domain/entities/Item';
@@ -8,7 +7,7 @@ import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
 
 export function useCharacterCompanion() {
-  const [charData, setCharData]     = useState(fallbackData);
+  const [charData, setCharData]     = useState(null);
   const [isSwapped, setIsSwapped]   = useState(false);
   const [activeTab, setActiveTab]   = useState('inventory');
   const [mainTab, setMainTab]       = useState('character'); // 'character' | 'stash'
@@ -17,6 +16,7 @@ export function useCharacterCompanion() {
   const [activeFile, setActiveFile] = useState(null);
   const [syncedAt, setSyncedAt]     = useState(null);
   const [syncing, setSyncing]       = useState(false);
+  const [loadError, setLoadError]   = useState(null);
   const [vaultItems, setVaultItems] = useState([]);
   const [vaultTotal, setVaultTotal] = useState(0);
   const [vaultNextCursor, setVaultNextCursor] = useState(null);
@@ -132,7 +132,7 @@ export function useCharacterCompanion() {
   const depositItemToVault = useCallback(
     async (item, sourceName) => {
       if (isGameRunning) {
-        emitToast('⛔ D2R is running — exit the game before moving items.', 'error');
+        emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
       }
       // 1. Perform automated backup first
@@ -183,12 +183,12 @@ export function useCharacterCompanion() {
           const d2iRes = await D2SParserAdapter.removeItemFromSharedStash(item._selectedFile || null, item);
           if (!d2iRes.success) {
             console.error('removeItemFromSharedStash error detail:', d2iRes);
-            emitToast('❌ Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
+            emitToast('Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
             return;
           }
           if (!d2iRes.itemRemoved) {
             console.warn('Item not matched in .d2i file:', item);
-            emitToast('⚠️ Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
+            emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
             return;
           }
           if (d2iRes.stash) {
@@ -203,7 +203,7 @@ export function useCharacterCompanion() {
             emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
           }
         } catch (err) {
-          emitToast('❌ Failed to update Shared Stash file: ' + err.message, 'error');
+          emitToast('Failed to update Shared Stash file: ' + err.message, 'error');
           return;
         }
       }
@@ -218,7 +218,7 @@ export function useCharacterCompanion() {
       }
 
       await refreshVault();
-      emitToast(`📦 Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
+      emitToast(`Stashed "${item.type_name || item.type}" â†’ Infinite Stash`, 'success');
     },
     [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault]
   );
@@ -227,7 +227,7 @@ export function useCharacterCompanion() {
   const withdrawItemFromVault = useCallback(
     async (vaultId, itemData) => {
       if (isGameRunning) {
-        emitToast('⛔ D2R is running — exit the game before moving items.', 'error');
+        emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
       }
 
@@ -259,7 +259,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      emitToast(`↩️ "${itemData.type_name || itemData.type}" → Personal Stash`, 'success');
+      emitToast(`"${itemData.type_name || itemData.type}" â†’ Personal Stash`, 'success');
     },
     [activeFile, triggerSaveBackup, isGameRunning, removeItemFromVault]
   );
@@ -268,7 +268,7 @@ export function useCharacterCompanion() {
   const withdrawItemToSharedStash = useCallback(
     async (vaultId, itemData) => {
       if (isGameRunning) {
-        emitToast('⛔ D2R is running — exit the game before moving items.', 'error');
+        emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
       }
 
@@ -289,7 +289,7 @@ export function useCharacterCompanion() {
           targetTabIdx = res.targetTabIdx ?? 0;
         }
       } catch (err) {
-        emitToast('❌ Failed to write to Shared Stash: ' + err.message, 'error');
+        emitToast('Failed to write to Shared Stash: ' + err.message, 'error');
         return;
       }
 
@@ -301,7 +301,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      emitToast(`🪙 "${itemData.type_name || itemData.type}" → Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
+      emitToast(`"${itemData.type_name || itemData.type}" â†’ Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
     },
     [triggerSaveBackup, isGameRunning, removeItemFromVault]
   );
@@ -329,7 +329,7 @@ export function useCharacterCompanion() {
       return data;
     } catch (err) {
       console.error('Refresh error:', err);
-      alert('Could not refresh: ' + err.message);
+      setLoadError(`Could not load ${file}: ${err.message}`);
     } finally {
       setSyncing(false);
     }
@@ -400,6 +400,7 @@ export function useCharacterCompanion() {
     activeStats,
     storageItems,
     STORAGE_META,
+    loadError,
     vaultItems,
     vaultTotal,
     vaultNextCursor,
