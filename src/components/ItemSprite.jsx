@@ -55,6 +55,12 @@ const isGemType = (type) => {
   return /^(gp|gl|gs|gf|gc|sk)/.test(t);
 };
 
+export const getItemSocketCount = (item = {}) => {
+  const total = Number(item.total_nr_of_sockets);
+  if (Number.isFinite(total) && total >= 0) return total;
+  return Array.isArray(item.socketed_items) ? item.socketed_items.length : 0;
+};
+
 
 import { constants as constants99 } from '../domain/entities/static_constant_data.js';
 
@@ -111,6 +117,7 @@ export default function ItemSprite({ item }) {
   const isSunderCharm = type === 'cs2' || (item?.magic_attributes || []).some((attribute) => [187, 189, 190, 191, 192, 193].includes(Number(attribute?.id)));
   const invFile = isSunderCharm ? 'invch3' : (item?.image_key || item?.inv_file)?.toLowerCase();
   const transformFilter = getDiabloColorFilter(item?.transform_color);
+  const socketCount = getItemSocketCount(item);
 
   useEffect(() => {
     setImgError(false);
@@ -146,8 +153,8 @@ export default function ItemSprite({ item }) {
             style={transformFilter ? { filter: transformFilter } : undefined}
             onError={() => setImgError(true)}
           />
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
         <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
@@ -208,8 +215,8 @@ export default function ItemSprite({ item }) {
             </defs>
           </svg>
           <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       ) : item.equipped_id === 5 || item.equipped_id === 12 || ['bsh','uml','xml','kit','sml','buc','spl','rnd','lrg','kbt','kit','lkt','mxs','hxs','nef','gow','ow1','ow2','ow3','ow4','ow5','pa1','pa2','pa3','pa4','pa5'].includes(type) ? (
@@ -226,15 +233,15 @@ export default function ItemSprite({ item }) {
             </defs>
           </svg>
           <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       ) : (
         <div className="generic-item-sprite">
           <span className="item-badge-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       )}

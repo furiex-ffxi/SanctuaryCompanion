@@ -1,5 +1,5 @@
 import React from 'react';
-import { getBaseTypeName, getItemDisplayName } from './ItemSprite';
+import { getBaseTypeName, getItemDisplayName, getItemSocketCount } from './ItemSprite';
 import { getItemColorClass, getItemDimensions } from '../domain/entities/Item';
 
 export const ItemTooltip = ({ item }) => {
@@ -12,6 +12,7 @@ export const ItemTooltip = ({ item }) => {
     : baseTypeName;
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
+  const socketCount = getItemSocketCount(item);
 
   const rawAttrs = item.displayed_combined_magic_attributes
     || item.displayed_magic_attributes
@@ -36,9 +37,9 @@ export const ItemTooltip = ({ item }) => {
         {typeName || 'Item'} ({w}×{h})
       </div>
       <div className="tooltip-stats">
-        {item.socketed === 1 && (
+        {socketCount > 0 && (
           <div className="tooltip-stat-item white">
-            [{item.total_nr_of_sockets || item.socketed_items?.length || 0} sockets]
+            [{socketCount} sockets]
           </div>
         )}
         {attrs.map((a, i) => {
