@@ -380,13 +380,79 @@ namespace D2RStashWorker
             _ => statId.ToString()
         };
 
-        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> stats) =>
+        private static string ToFriendlyStatName(StatId statId) => statId switch
+        {
+            StatId.Strength => "Strength", StatId.Dexterity => "Dexterity", StatId.Vitality => "Vitality", StatId.Energy => "Energy",
+            StatId.Life or StatId.MaxLife => "Life", StatId.Mana or StatId.MaxMana => "Mana", StatId.Stamina or StatId.MaxStamina => "Stamina",
+            StatId.ArmorClass => "Defense", StatId.AttackRating => "Attack Rating", StatId.AttackRatingPercent => "Attack Rating",
+            StatId.ChanceToBlock => "Chance to Block", StatId.DamagePercent or StatId.MaxDamagePercent or StatId.MinDamagePercent => "Enhanced Damage",
+            StatId.FireResist => "Fire Resistance", StatId.ColdResist => "Cold Resistance", StatId.LightningResist => "Lightning Resistance", StatId.PoisonResist => "Poison Resistance",
+            StatId.MaxFireResist => "Maximum Fire Resistance", StatId.MaxColdResist => "Maximum Cold Resistance", StatId.MaxLightningResist => "Maximum Lightning Resistance", StatId.MaxPoisonResist => "Maximum Poison Resistance",
+            StatId.MagicResist => "Magic Resistance", StatId.MaxMagicResist => "Maximum Magic Resistance", StatId.MagicFind => "Magic Find", StatId.GoldFind => "Extra Gold from Monsters",
+            StatId.FasterCastRate => "Faster Cast Rate", StatId.FasterHitRecovery => "Faster Hit Recovery", StatId.FasterRunWalk => "Faster Run/Walk", StatId.IncreasedAttackSpeed => "Increased Attack Speed", StatId.FasterBlockRate => "Faster Block Rate",
+            StatId.LifeSteal => "Life Stolen per Hit", StatId.ManaSteal => "Mana Stolen per Hit", StatId.AllSkills => "All Skills", StatId.AddClassSkills => "Class Skills", StatId.AddSkillTab => "Skill Tab",
+            StatId.SingleSkill or StatId.NonClassSkill => "Skill", StatId.CannotBeFrozen => "Cannot Be Frozen", StatId.CrushingBlow => "Crushing Blow", StatId.DeadlyStrike => "Deadly Strike", StatId.OpenWounds => "Open Wounds", StatId.Knockback => "Knockback",
+            StatId.HealAfterKill => "Life after Each Kill", StatId.ManaAfterKill => "Mana after Each Kill", StatId.ReducePrices => "Reduced Vendor Prices", StatId.LightRadius => "Light Radius", StatId.RequirementPercent => "Requirements", StatId.NumSockets => "Sockets",
+            _ => HumanizeStatName(statId.ToString())
+        };
+
+        private static string HumanizeStatName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "Stat";
+            var text = System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+            return text.Replace("Percent", "%").Replace("PerLevel", " per Level").Trim();
+        }
+
+        private static string? SkillTabName(int packedLayer)
+        {
+            // AddSkillTab stores the class in the upper bits and the tab in the lower 3 bits.
+            // For example, 41 = (Druid class 5 << 3) | Shape Shifting tab 1.
+            var classIndex = packedLayer >> 3;
+            var tabIndex = packedLayer & 0x7;
+            return (classIndex, tabIndex) switch
+            {
+                (0, 0) => "Amazon Bow and Crossbow", (0, 1) => "Amazon Javelin and Spear", (0, 2) => "Amazon Passive and Magic",
+                (1, 0) => "Sorceress Fire", (1, 1) => "Sorceress Lightning", (1, 2) => "Sorceress Cold",
+                (2, 0) => "Necromancer Curses", (2, 1) => "Necromancer Poison and Bone", (2, 2) => "Necromancer Summoning",
+                (3, 0) => "Paladin Combat", (3, 1) => "Paladin Offensive Auras", (3, 2) => "Paladin Defensive Auras",
+                (4, 0) => "Barbarian Combat Skills", (4, 1) => "Barbarian Warcries", (4, 2) => "Barbarian Masteries",
+                (5, 0) => "Druid Elemental", (5, 1) => "Druid Shape Shifting", (5, 2) => "Druid Summoning",
+                (6, 0) => "Assassin Martial Arts", (6, 1) => "Assassin Shadow Disciplines", (6, 2) => "Assassin Traps",
+                (7, 0) => "Warlock Demonic Binding", (7, 1) => "Warlock Eldritch Weapons", (7, 2) => "Warlock Arts of Chaos",
+                _ => null
+            };
+        }
+
+        private static long ToUiStatValue(Stat stat, uint version)
+        {
+            var info = D2SSharp.Data.TxtFileExternalData.Default.GetStatInfo(stat.Id, version);
+            return stat.Value >> info.ValShift;
+        }
+
+        private static string ToUiStatDescription(Stat stat, uint version)
+        {
+            if (stat.Id == StatId.AddSkillTab)
+            {
+                var tab = SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer;
+                var displayValue = ToUiStatValue(stat, version);
+                return "+" + displayValue + " to " + tab + " Skills";
+            }
+            var percent = stat.Id is StatId.FireResist or StatId.ColdResist or StatId.LightningResist or StatId.PoisonResist
+                or StatId.MaxFireResist or StatId.MaxColdResist or StatId.MaxLightningResist or StatId.MaxPoisonResist
+                or StatId.MagicFind or StatId.GoldFind or StatId.FasterCastRate or StatId.FasterHitRecovery or StatId.FasterRunWalk or StatId.IncreasedAttackSpeed or StatId.FasterBlockRate;
+            var displayStatValue = ToUiStatValue(stat, version);
+            return (displayStatValue >= 0 ? "+" : "") + displayStatValue + (percent ? "%" : "") + " " + ToFriendlyStatName(stat.Id);
+        }
+
+        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> stats, uint version) =>
             stats.Select(stat => (object)new
             {
                 id = (uint)stat.Id,
                 name = ToUiStatName(stat.Id),
-                values = new[] { stat.Value },
-                description = $"{stat.Id}: {stat.Value}"
+                label = stat.Id == StatId.AddSkillTab ? (SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer) : ToFriendlyStatName(stat.Id),
+                layer = stat.Layer,
+                values = new[] { ToUiStatValue(stat, version) },
+                description = ToUiStatDescription(stat, version)
             }).ToArray();
 
         private static object SerializeItem(Item i, uint version, int altPositionId, string parentCode = "")
@@ -468,10 +534,10 @@ namespace D2RStashWorker
                 set_name = setName,
                 runeword_name = runewordName,
                 rawBytesHex = Convert.ToHexString(exactItemBytes),
-                magic_attributes = SerializeStats(itemStats),
-                runeword_attributes = SerializeStats(i.RunewordStats ?? []),
-                set_attributes = i.SetBonusStats.Select(SerializeStats).ToArray(),
-                displayed_combined_magic_attributes = SerializeStats(combinedStats),
+                magic_attributes = SerializeStats(itemStats, version),
+                runeword_attributes = SerializeStats(i.RunewordStats ?? [], version),
+                set_attributes = i.SetBonusStats.Select(stats => SerializeStats(stats, version)).ToArray(),
+                displayed_combined_magic_attributes = SerializeStats(combinedStats, version),
                 socketed_items = i.Sockets.Where(s => s != null).Select(s => SerializeItem(s!, version, 0, i.ItemCodeString)).ToArray()
             };
         }
