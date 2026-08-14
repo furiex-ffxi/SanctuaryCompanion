@@ -2,6 +2,50 @@ import React from 'react';
 import { getBaseTypeName, getItemDisplayName } from './ItemSprite';
 import { getItemColorClass, getItemDimensions } from '../domain/entities/Item';
 
+const skillTabNames = [
+  ["Amazon", ["Bow and Crossbow", "Javelin and Spear", "Passive and Magic"]],
+  ["Sorceress", ["Fire", "Lightning", "Cold"]],
+  ["Necromancer", ["Curses", "Poison and Bone", "Summoning"]],
+  ["Paladin", ["Combat", "Offensive Auras", "Defensive Auras"]],
+  ["Barbarian", ["Combat Skills", "Warcries", "Masteries"]],
+  ["Druid", ["Elemental", "Shape Shifting", "Summoning"]],
+  ["Assassin", ["Martial Arts", "Shadow Disciplines", "Traps"]],
+  ["Warlock", ["Demonic Binding", "Eldritch Weapons", "Arts of Chaos"]],
+];
+
+function formatAttributeDescription(attribute) {
+  const numericId = Number(attribute?.id);
+  const values = Array.isArray(attribute.values) ? attribute.values.map(Number) : [];
+  const rawValue = values[0];
+  if ([6, 7, 8, 9, 10, 11].includes(numericId) && Number.isFinite(rawValue) && Math.abs(rawValue) >= 256 && rawValue % 256 === 0) {
+    const label = numericId === 6 || numericId === 7 ? 'Life' : numericId === 8 || numericId === 9 ? 'Mana' : 'Stamina';
+    return (rawValue >= 0 ? '+' : '') + (rawValue / 256) + ' ' + label;
+  }
+  const normalizedName = String(attribute?.name || '').toLowerCase().replace(/_/g, '');
+  if (normalizedName.endsWith('addskilltab')) {
+    const values = Array.isArray(attribute.values) ? attribute.values.map(Number) : [];
+    let packedLayer = Number.isFinite(Number(attribute.layer)) ? Number(attribute.layer) : null;
+    let bonus = values.at(-1) || 0;
+
+    // New worker format: layer is the packed class/tab value and values[0] is the bonus.
+    // Legacy parser format: values were [tab, class, bonus].
+    if (packedLayer === null && values.length >= 3 && values[0] >= 0 && values[0] < 8 && values[1] >= 0) {
+      packedLayer = (values[1] << 3) | values[0];
+    }
+    // Some older vault entries embedded the packed value in their description.
+    if (packedLayer === null) {
+      const match = String(attribute.description || '').match(/(?:tab|to)\s+(\d+)/i);
+      if (match) packedLayer = Number(match[1]);
+    }
+    if (packedLayer !== null) {
+      const classIndex = packedLayer >> 3;
+      const tabIndex = packedLayer & 7;
+      const tab = skillTabNames[classIndex]?.[1]?.[tabIndex];
+      if (tab) return '+' + bonus + ' to ' + skillTabNames[classIndex][0] + ' ' + tab + ' Skills';
+    }
+  }
+  return attribute?.description || (attribute?.label || attribute?.name?.replace(/_/g, ' ') || 'Stat') + ': ' + (attribute?.values || []).join(', ');
+}
 export const ItemTooltip = ({ item }) => {
   if (!item) return null;
   const name = getItemDisplayName(item);
@@ -42,14 +86,14 @@ export const ItemTooltip = ({ item }) => {
           </div>
         )}
         {attrs.map((a, i) => {
-          const desc = a.description || `${a.name.replace(/_/g,' ')}: ${a.values.join(', ')}`;
+          const desc = formatAttributeDescription(a);
           return <div key={i} className="tooltip-stat-item">{desc}</div>;
         })}
         {setAttrs.length > 0 && (
           <div className="tooltip-set-bonuses">
             <div className="tooltip-section-header quality-set">Set Bonuses:</div>
             {setAttrs.map((sa, idx) => {
-              const desc = sa.description || `${sa.name.replace(/_/g, ' ')}: ${sa.values.join(', ')}`;
+              const desc = formatAttributeDescription(sa);
               return (
                 <div key={idx} className="tooltip-stat-item quality-set">
                   {desc}
