@@ -69,7 +69,7 @@ namespace D2RStashWorker
             { 86, "Infinity" }, { 87, "Innocence" }, { 88, "Insight" }, { 89, "Jealousy" }, { 90, "Judgement" },
             { 91, "King's Grace" }, { 92, "Kingslayer" }, { 93, "Knight's Vigil" }, { 94, "Knowledge" },
             { 95, "Last Wish" }, { 96, "Law" }, { 97, "Lawbringer" }, { 98, "Leaf" }, { 99, "Lightning" },
-            { 100, "Lionheart" }, { 101, "Love" }, { 102, "Loyalty" }, { 103, "Lust" }, { 104, "Madness" },
+            { 100, "Lionheart" }, { 101, "Lore" }, { 102, "Loyalty" }, { 103, "Lust" }, { 104, "Madness" },
             { 106, "Malice" }, { 107, "Melody" }, { 108, "Memory" }, { 109, "Mist" }, { 110, "Morning" },
             { 111, "Mystery" }, { 112, "Myth" }, { 113, "Nadir" }, { 114, "Nature's Kingdom" },
             { 115, "Night" }, { 116, "Oath" }, { 117, "Obedience" }, { 118, "Oblivion" }, { 119, "Obsession" },
