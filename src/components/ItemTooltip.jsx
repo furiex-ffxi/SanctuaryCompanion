@@ -1,6 +1,6 @@
 import React from 'react';
 import { getBaseTypeName, getItemDisplayName } from './ItemSprite';
-import { getItemColorClass, getItemDimensions } from '../domain/entities/Item';
+import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
 
 export const ItemTooltip = ({ item }) => {
   if (!item) return null;
@@ -12,6 +12,8 @@ export const ItemTooltip = ({ item }) => {
     : baseTypeName;
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
+  const levelRequirement = getItemLevelRequirement(item);
+  const itemLevel = getItemLevel(item);
 
   const rawAttrs = item.displayed_combined_magic_attributes
     || item.displayed_magic_attributes
@@ -19,7 +21,11 @@ export const ItemTooltip = ({ item }) => {
     || item.magic_attributes
     || [];
 
-  const attrs = rawAttrs.filter(a => a.visible !== false);
+  const attrs = rawAttrs.filter(a =>
+    a.visible !== false
+    && Number(a.id) !== 92
+    && String(a.name || '').toLowerCase() !== 'item_levelreq'
+  );
 
   // Extract set attributes if available on set items
   const setAttrs = (item.set_attributes || []).flat().filter(Boolean);
@@ -36,6 +42,10 @@ export const ItemTooltip = ({ item }) => {
         {typeName || 'Item'} ({w}×{h})
       </div>
       <div className="tooltip-stats">
+        <div className="tooltip-stat-item tooltip-level-requirement">
+          {levelRequirement > 0 ? `Required Level: ${levelRequirement}` : 'Not equippable'}
+        </div>
+        {itemLevel != null && <div className="tooltip-stat-item">Item Level: {itemLevel}</div>}
         {item.socketed === 1 && (
           <div className="tooltip-stat-item white">
             [{item.total_nr_of_sockets || item.socketed_items?.length || 0} sockets]

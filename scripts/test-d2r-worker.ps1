@@ -32,6 +32,29 @@ function Assert-ImageKeys($value, [string]$sourceName) {
         }
     }
 }
+function Assert-LevelFields($value, [string]$sourceName) {
+    if ($null -eq $value) { return }
+    if ($value -is [System.Array]) { foreach ($entry in $value) { Assert-LevelFields $entry $sourceName }; return }
+    if ($value.PSObject.Properties['equippable']) {
+        if ($value.equippable -and ($null -eq $value.level_requirement -or [int]$value.level_requirement -le 0)) {
+            throw "Equippable item in $sourceName has an invalid level_requirement."
+        }
+        if ($value.PSObject.Properties['skill_tab_name'] -and $value.skill_tab_name -eq 'Unknown') {
+            throw "Skill-tab item in $sourceName has an unknown skill-tab mapping."
+        }
+        if ($value.equippable -and [int]$value.quality -in @(4, 6, 8) -and -not ([string]$value.level_requirement_source).Contains('affixes[')) {
+            throw "Quality item in $sourceName is missing affix-derived requirement provenance."
+        }
+        if ($value.PSObject.Properties.Name -notcontains 'item_level') {
+            throw "Item in $sourceName is missing item_level."
+        }
+    }
+    foreach ($property in $value.PSObject.Properties) {
+        if ($property.Name -notin @('rawBytesHex', 'magic_attributes', 'runeword_attributes', 'set_attributes', 'displayed_combined_magic_attributes')) {
+            Assert-LevelFields $property.Value $sourceName
+        }
+    }
+}
 function Invoke-Worker([string[]]$Arguments) {
     $output = & $worker @Arguments 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Worker failed ($($Arguments[0])): $($output -join [Environment]::NewLine)" }
@@ -57,6 +80,7 @@ try {
             }
             $parsedSave = Invoke-Worker @('parse_save', $roundTrip) | ConvertFrom-Json
             Assert-ImageKeys $parsedSave $fixture.Name
+            Assert-LevelFields $parsedSave $fixture.Name
             $requiredParseFields = @('contained_items', 'merc_items', 'corpse_items', 'iron_golem_item')
             foreach ($field in $requiredParseFields) {
                 if ($parsedSave.PSObject.Properties.Name -notcontains $field) {
@@ -66,6 +90,7 @@ try {
         } else {
             $parsedStash = Invoke-Worker @('parse_stash', $roundTrip) | ConvertFrom-Json
             Assert-ImageKeys $parsedStash $fixture.Name
+            Assert-LevelFields $parsedStash $fixture.Name
         }
     }
 

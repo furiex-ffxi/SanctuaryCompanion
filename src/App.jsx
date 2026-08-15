@@ -88,6 +88,8 @@ function MainContent() {
     sharedStashError,
     refreshSharedStash,
     setSharedStash,
+    sharedStashTab,
+    setSharedStashTab,
     difficulty,
     setDifficulty,
     isGameRunning,
@@ -146,6 +148,7 @@ function MainContent() {
       window.history.pushState(null, '', `#${result.navigation.subTab === 'stash' ? 'char-stash' : result.navigation.subTab || 'inventory'}`);
       if (!containsCanonicalItem(refreshed, result.identity)) addToast('That search result is stale; the item is no longer in the save.', 'error');
     } else if (result.sourceKind === 'sharedStash') {
+      setSharedStashTab(plan.pageIndex ?? 0);
       setMainTab('shared_stash');
       window.history.pushState(null, '', '#shared-stash');
       addToast(`Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, 'info');
@@ -258,6 +261,8 @@ function MainContent() {
           onWithdraw={withdrawItemFromVault}
           onWithdrawShared={withdrawItemToSharedStash}
           highlightIdentity={searchHighlight}
+          searchQuery={vaultSearchQuery}
+          onSearchQueryChange={setVaultSearchQuery}
         />
       ) : mainTab === 'shared_stash' ? (
         <SharedStashPanel
@@ -267,6 +272,9 @@ function MainContent() {
           refreshSharedStash={refreshSharedStash}
           depositItemToVault={depositItemToVault}
           setSharedStash={setSharedStash}
+          sharedStashTab={sharedStashTab}
+          setSharedStashTab={setSharedStashTab}
+          highlightIdentity={searchHighlight}
           isGameRunning={isGameRunning}
         />
       ) : (
