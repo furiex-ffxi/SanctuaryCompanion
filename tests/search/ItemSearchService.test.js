@@ -16,7 +16,7 @@ function fixture() {
   const parseD2S = async file => {
     parses++
     if (path.basename(file) === 'Broken.d2s') throw Error('bad save')
-    return { name: path.basename(file, '.d2s'), items: [item(42, 'Needle Ring'), item(50, 'Parent', { socketed_items: [item(51, 'Needle Rune')] })], contained_items: [item(60, 'Needle Cube')], merc_items: [item(61, 'Needle Merc')], corpse_items: [item(62, 'Needle Corpse')], iron_golem_item: item(63, 'Needle Golem') }
+    return { name: path.basename(file, '.d2s'), items: [item(42, 'Needle Ring'), item(50, 'Needle Parent', { socketed_items: [item(51, 'Needle Rune')] })], contained_items: [item(60, 'Needle Cube')], merc_items: [item(61, 'Needle Merc')], corpse_items: [item(62, 'Needle Corpse')], iron_golem_item: item(63, 'Needle Golem') }
   }
   const parseD2I = async file => ({ pages: [{ items: [item(42, path.basename(file) === 'Chosen.d2i' ? 'Needle Shared' : 'Wrong Stash')] }] })
   const service = new ItemSearchService({ savesDir, repository, parseD2S, parseD2I })
@@ -31,6 +31,7 @@ test('groups every source, preserves duplicate seeds, locations, and partial err
   const result = await f.service.search({ q: 'needle', sharedFile: 'Chosen.d2i', limit: 50 })
   assert.equal(result.groups.infiniteStash.total, 1)
   assert.equal(result.groups.sharedStash.results[0].filename, 'Chosen.d2i')
+  assert.equal(result.groups.characters.results.find(row => row.itemSeed === 50).preview.socketCount, 1)
   assert.ok(result.errors.some(error => error.filename === 'Broken.d2s'))
   assert.ok(new Set(result.groups.characters.results.map(row => row.location)).isSupersetOf(new Set(['inventory', 'contained', 'mercenary', 'corpse', 'iron-golem'])))
   assert.equal(result.groups.characters.results.some(row => row.itemSeed === 51), false)
