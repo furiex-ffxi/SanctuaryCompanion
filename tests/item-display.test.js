@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatStat, getFriendlyBaseName, getItemDetails } from '../src/domain/entities/ItemDisplay.js';
+import { formatSkillTab, formatStat, getFriendlyBaseName, getItemDetails, getSkillTabName } from '../src/domain/entities/ItemDisplay.js';
 
 test('resolves internal item codes to Diablo II base names', () => {
   assert.equal(getFriendlyBaseName({ type: 'rin', type_name: 'rin' }), 'Ring');
@@ -14,6 +14,14 @@ test('formats worker stats with familiar Diablo II wording', () => {
   assert.equal(formatStat({ id: 999, values: [2], name: 'item_some_bonus' }), 'Some bonus: 2');
 });
 
+test('decodes packed skill-tree layers instead of treating them as random tree ids', () => {
+  assert.equal(getSkillTabName(56), 'Demon');
+  assert.equal(getSkillTabName(57), 'Eldritch');
+  assert.equal(getSkillTabName(58), 'Chaos');
+  assert.equal(formatSkillTab(3, 56), '+3 to Demon Skills');
+  assert.equal(formatSkillTab(2, 2), '+2 to Amazon Passive Skills');
+  assert.equal(getSkillTabName(999), null);
+});
 test('shows practical base item details in stash tooltips', () => {
   assert.deepEqual(getItemDetails({ defense: 120, durability: 10, max_durability: 14, ethereal: true, item_level: 85 }), [
     'Defense: 120', 'Durability: 10 of 14', 'Ethereal', 'Item Level: 85',

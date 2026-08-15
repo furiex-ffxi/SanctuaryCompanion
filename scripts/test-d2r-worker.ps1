@@ -32,6 +32,28 @@ function Assert-ImageKeys($value, [string]$sourceName) {
         }
     }
 }
+function Assert-FriendlySkillDescriptions($value, [string]$sourceName) {
+    if ($null -eq $value) { return }
+    if ($value -is [System.Array]) {
+        foreach ($entry in $value) { Assert-FriendlySkillDescriptions $entry $sourceName }
+        return
+    }
+    if ($value.PSObject.Properties['name'] -and $value.PSObject.Properties['description']) {
+        $name = [string]$value.name
+        $description = [string]$value.description
+        if ($name -eq 'AddSkillTab' -and $description -match '^AddSkillTab:') {
+            throw "Worker emitted the internal AddSkillTab name for $sourceName."
+        }
+        if ($name -eq 'SingleSkill' -and $description -match '^SingleSkill:') {
+            throw "Worker emitted the internal SingleSkill name for $sourceName."
+        }
+    }
+    foreach ($property in $value.PSObject.Properties) {
+        if ($property.Name -notin @('rawBytesHex', 'magic_attributes', 'runeword_attributes', 'set_attributes', 'displayed_combined_magic_attributes')) {
+            Assert-FriendlySkillDescriptions $property.Value $sourceName
+        }
+    }
+}
 function Invoke-Worker([string[]]$Arguments) {
     $output = & $worker @Arguments 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Worker failed ($($Arguments[0])): $($output -join [Environment]::NewLine)" }
@@ -57,6 +79,7 @@ try {
             }
             $parsedSave = Invoke-Worker @('parse_save', $roundTrip) | ConvertFrom-Json
             Assert-ImageKeys $parsedSave $fixture.Name
+            Assert-FriendlySkillDescriptions $parsedSave $fixture.Name
             $requiredParseFields = @('contained_items', 'merc_items', 'corpse_items', 'iron_golem_item')
             foreach ($field in $requiredParseFields) {
                 if ($parsedSave.PSObject.Properties.Name -notcontains $field) {
@@ -66,6 +89,7 @@ try {
         } else {
             $parsedStash = Invoke-Worker @('parse_stash', $roundTrip) | ConvertFrom-Json
             Assert-ImageKeys $parsedStash $fixture.Name
+            Assert-FriendlySkillDescriptions $parsedStash $fixture.Name
         }
     }
 

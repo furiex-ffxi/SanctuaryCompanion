@@ -19,6 +19,28 @@ const statLabels = {
 };
 
 const clean = (value) => typeof value === 'string' ? value.trim() : '';
+const skillTabs = {
+  '0:0': 'Amazon Bow', '0:1': 'Amazon Javelin', '0:2': 'Amazon Passive',
+  '1:0': 'Sorceress Fire', '1:1': 'Sorceress Lightning', '1:2': 'Sorceress Cold',
+  '2:0': 'Necromancer Curses', '2:1': 'Necromancer Poison and Bone', '2:2': 'Necromancer Summoning',
+  '3:0': 'Paladin Combat', '3:1': 'Paladin Offensive Auras', '3:2': 'Paladin Defensive Auras',
+  '4:0': 'Barbarian Combat', '4:1': 'Barbarian Warcries', '4:2': 'Barbarian Masteries',
+  '5:0': 'Druid Elemental', '5:1': 'Druid Shape Shifting', '5:2': 'Druid Summoning',
+  '6:0': 'Assassin Martial Arts', '6:1': 'Assassin Shadow Disciplines', '6:2': 'Assassin Traps',
+  '7:0': 'Demon', '7:1': 'Eldritch', '7:2': 'Chaos',
+};
+
+export function getSkillTabName(packedLayer) {
+  const layer = Number(packedLayer);
+  if (!Number.isInteger(layer) || layer < 0) return null;
+  return skillTabs[`${layer >> 3}:${layer & 7}`] || null;
+}
+
+export function formatSkillTab(value, packedLayer) {
+  const numeric = Number(value);
+  const amount = Number.isFinite(numeric) && numeric >= 0 ? `+${value}` : value;
+  return `${amount} to ${getSkillTabName(packedLayer) || `Skill Tab ${packedLayer}`} Skills`;
+}
 
 export function getFriendlyBaseName(item = {}) {
   const code = clean(item.type).toLowerCase();
