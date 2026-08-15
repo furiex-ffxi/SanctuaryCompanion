@@ -1,6 +1,6 @@
 import React from 'react';
 import { getBaseTypeName, getItemDisplayName, getItemSocketCount } from './ItemSprite';
-import { getItemColorClass, getItemDimensions } from '../domain/entities/Item';
+import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
 
 const skillTabNames = [
   ["Amazon", ["Bow and Crossbow", "Javelin and Spear", "Passive and Magic"]],
@@ -10,7 +10,7 @@ const skillTabNames = [
   ["Barbarian", ["Combat Skills", "Warcries", "Masteries"]],
   ["Druid", ["Elemental", "Shape Shifting", "Summoning"]],
   ["Assassin", ["Martial Arts", "Shadow Disciplines", "Traps"]],
-  ["Warlock", ["Demonic Binding", "Eldritch Weapons", "Arts of Chaos"]],
+  ["Warlock", ["Demon", "Eldritch", "Chaos"]],
 ];
 
 function formatAttributeDescription(attribute) {
@@ -57,6 +57,8 @@ export const ItemTooltip = ({ item }) => {
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
   const socketCount = getItemSocketCount(item);
+  const levelRequirement = getItemLevelRequirement(item);
+  const itemLevel = getItemLevel(item);
 
   const rawAttrs = item.displayed_combined_magic_attributes
     || item.displayed_magic_attributes
@@ -78,9 +80,13 @@ export const ItemTooltip = ({ item }) => {
         </div>
       )}
       <div className="tooltip-type">
-        {typeName || 'Item'} ({w}×{h})
+        {typeName || 'Item'} ({w}Ã—{h})
       </div>
       <div className="tooltip-stats">
+        <div className="tooltip-stat-item tooltip-level-requirement">
+          {levelRequirement > 0 ? 'Required Level: ' + levelRequirement : 'Not equippable'}
+        </div>
+        {itemLevel != null && <div className="tooltip-stat-item">Item Level: {itemLevel}</div>}
         {socketCount > 0 && (
           <div className="tooltip-stat-item white">
             [{socketCount} sockets]
