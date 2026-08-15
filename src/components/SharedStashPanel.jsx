@@ -9,11 +9,14 @@ export function SharedStashPanel({
   refreshSharedStash,
   depositItemToVault,
   setSharedStash,
+  sharedStashTab,
+  setSharedStashTab,
+  highlightIdentity,
 }) {
-  const [activePageIdx, setActivePageIdx] = useState(0);
   const [selectedFile, setSelectedFile] = useState('ModernSharedStashSoftCoreV2.d2i');
 
   const pages = sharedStash?.pages || [];
+  const activePageIdx = Math.min(sharedStashTab ?? 0, Math.max(pages.length - 1, 0));
   const activePage = pages[activePageIdx] || pages[0];
   const items = activePage?.items || [];
 
@@ -98,7 +101,7 @@ export function SharedStashPanel({
                 <button
                   key={idx}
                   className={`inv-tab ${activePageIdx === idx ? 'active' : ''}`}
-                  onClick={() => setActivePageIdx(idx)}
+                  onClick={() => setSharedStashTab(idx)}
                 >
                   📑 Tab {idx + 1} {page.name ? `(${page.name})` : ''} — {page.items?.length || 0} items
                 </button>
@@ -115,6 +118,7 @@ export function SharedStashPanel({
                   onDeposit: (item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__'),
                 }}
                 items={items}
+                highlightIdentity={highlightIdentity}
               />
             </div>
           </div>

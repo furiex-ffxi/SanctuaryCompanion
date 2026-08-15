@@ -26,6 +26,12 @@ export function getVaultItemSlot(item = {}) {
   return getItemSlotCategory(item)
 }
 
+export function getItemSocketCount(item = {}) {
+  const total = Number(item.total_nr_of_sockets)
+  if (Number.isFinite(total) && total >= 0) return total
+  return Array.isArray(item.socketed_items) ? item.socketed_items.length : 0
+}
+
 export function getVaultCategory(item, slot = getVaultItemSlot(item)) {
   if (item.set_name) return 'Set Items'
   if (Number(item.quality) === 7) return 'Unique Items'
@@ -77,6 +83,7 @@ export function projectVaultEntry(entry) {
     slot,
     category: getVaultCategory(item, slot),
     quality: Number.isFinite(Number(item.quality)) ? Number(item.quality) : null,
+    socketCount: getItemSocketCount(item),
     setName: normalizeText(item.set_name) || null,
     searchText,
   }

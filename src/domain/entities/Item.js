@@ -61,3 +61,32 @@ export const getItemColorClass = (item) => {
   if (item.runeword_name) return 'quality-runeword';
   return QUALITY_CLASS[item.quality] || 'quality-white';
 };
+
+const LEVEL_REQUIREMENT_STAT_ID = 92;
+
+// D2SSharp exposes level requirements as the item_levelreq stat. Keep the
+// direct-field fallbacks for older/imported vault records.
+export const getItemLevelRequirement = (item) => {
+  if (!item || item.equippable === false) return null;
+
+  const directValue = item.level_requirement ?? item.levelRequirement ?? item.reqlevel ?? item.req_level;
+  if (directValue != null && Number.isFinite(Number(directValue))) return Number(directValue);
+
+  const attributes = [
+    ...(item.magic_attributes || []),
+    ...(item.displayed_magic_attributes || []),
+    ...(item.combined_magic_attributes || []),
+    ...(item.displayed_combined_magic_attributes || []),
+  ];
+  const levelAttribute = attributes.find((attribute) =>
+    Number(attribute?.id) === LEVEL_REQUIREMENT_STAT_ID
+    || String(attribute?.name || '').toLowerCase() === 'item_levelreq'
+  );
+  const value = levelAttribute?.values?.[0];
+  return value != null && Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
+};
+
+export const getItemLevel = (item) => {
+  const value = item?.item_level ?? item?.itemLevel;
+  return value != null && Number.isFinite(Number(value)) ? Number(value) : null;
+};
