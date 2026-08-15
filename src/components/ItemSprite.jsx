@@ -77,7 +77,7 @@ export const getItemDisplayName = (item) => {
   const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
     ? item.type_name
     : null;
-  const baseType = typeName || getBaseTypeName(item.type) || 'Item';
+  const baseType = typeName || getFriendlyBaseName(item) || getBaseTypeName(item.type) || 'Item';
 
   // D2R set items carry both the individual piece name (unique_name) and the
   // set/family name (set_name). The piece name is what the game shows as the
@@ -110,6 +110,7 @@ export const getItemDisplayName = (item) => {
 
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
+import { getFriendlyBaseName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);

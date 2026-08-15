@@ -10,7 +10,7 @@ const skillTabNames = [
   ["Barbarian", ["Combat Skills", "Warcries", "Masteries"]],
   ["Druid", ["Elemental", "Shape Shifting", "Summoning"]],
   ["Assassin", ["Martial Arts", "Shadow Disciplines", "Traps"]],
-  ["Warlock", ["Demon", "Eldritch", "Chaos"]],
+  ["", ["Demon", "Eldritch", "Chaos"]],
 ];
 
 function formatAttributeDescription(attribute) {
@@ -41,7 +41,10 @@ function formatAttributeDescription(attribute) {
       const classIndex = packedLayer >> 3;
       const tabIndex = packedLayer & 7;
       const tab = skillTabNames[classIndex]?.[1]?.[tabIndex];
-      if (tab) return '+' + bonus + ' to ' + skillTabNames[classIndex][0] + ' ' + tab + ' Skills';
+      if (tab) {
+        const className = skillTabNames[classIndex][0];
+        return '+' + bonus + ' to ' + (className ? className + ' ' : '') + tab + ' Skills';
+      }
     }
   }
   return attribute?.description || (attribute?.label || attribute?.name?.replace(/_/g, ' ') || 'Stat') + ': ' + (attribute?.values || []).join(', ');
