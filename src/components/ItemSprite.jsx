@@ -106,6 +106,7 @@ export const getItemDisplayName = (item) => {
 
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
+import WORLDSTONE_SHARD_DATA_URLS from './worldstoneShardAssets.js';
 import { getFriendlyBaseName, getItemTypeDisplayName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
@@ -127,7 +128,8 @@ export default function ItemSprite({ item }) {
 
   const name = getItemDisplayName(item);
   const assetVersion = invFile?.startsWith('inv_worldstone_shard_') ? '?v=2' : '';
-  const imagePath = `/__d2r_item_image/${encodeURIComponent(invFile)}.png${assetVersion}`;
+  const embeddedAsset = invFile ? WORLDSTONE_SHARD_DATA_URLS[invFile] : null;
+  const imagePath = embeddedAsset || `/__d2r_item_image/${encodeURIComponent(invFile)}.png${assetVersion}`;
 
 
   // Quality border color
