@@ -33,13 +33,20 @@ namespace D2RStashWorker
     public static class D2Data
     {
         private static Dictionary<int, string> _uniques = new();
+        private static Dictionary<int, int> _uniqueLevelRequirements = new();
         private static Dictionary<int, (string ItemName, string SetName)> _sets = new();
+        private static Dictionary<int, int> _setLevelRequirements = new();
         private static Dictionary<string, ItemTransform> _uniqueTransforms = new();
         private static Dictionary<string, ItemTransform> _setTransforms = new();
         private static Dictionary<int, ItemTransform> _setTransformsById = new();
         private static Dictionary<string, GemEntry> _gems = new();
         private static Dictionary<string, (string Normal, string Unique, string Set)> _itemImages = new();
         private static Dictionary<string, string[]> _itemGfx = new();
+        private static Dictionary<int, int> _prefixLevelRequirements = new();
+        private static Dictionary<int, int> _suffixLevelRequirements = new();
+        public const string ItemDataSource = "blizzhackers/d2data@477bcf63e964f39f4c774e588a79fd598ae472de";
+        private static readonly HashSet<string> _accessoryCodes = new(StringComparer.OrdinalIgnoreCase) { "rin", "amu", "jew", "cm1", "cm2", "cm3" };
+        public static bool IsAccessoryCode(string code) => _accessoryCodes.Contains(code.Trim());
 
         private static readonly HashSet<string> _shieldCodes = new()
         {
@@ -69,7 +76,7 @@ namespace D2RStashWorker
             { 86, "Infinity" }, { 87, "Innocence" }, { 88, "Insight" }, { 89, "Jealousy" }, { 90, "Judgement" },
             { 91, "King's Grace" }, { 92, "Kingslayer" }, { 93, "Knight's Vigil" }, { 94, "Knowledge" },
             { 95, "Last Wish" }, { 96, "Law" }, { 97, "Lawbringer" }, { 98, "Leaf" }, { 99, "Lightning" },
-            { 100, "Lionheart" }, { 101, "Love" }, { 102, "Loyalty" }, { 103, "Lust" }, { 104, "Madness" },
+            { 100, "Lionheart" }, { 101, "Lore" }, { 102, "Loyalty" }, { 103, "Lust" }, { 104, "Madness" },
             { 106, "Malice" }, { 107, "Melody" }, { 108, "Memory" }, { 109, "Mist" }, { 110, "Morning" },
             { 111, "Mystery" }, { 112, "Myth" }, { 113, "Nadir" }, { 114, "Nature's Kingdom" },
             { 115, "Night" }, { 116, "Oath" }, { 117, "Obedience" }, { 118, "Oblivion" }, { 119, "Obsession" },
@@ -94,6 +101,32 @@ namespace D2RStashWorker
             { 203, "Cure" }, { 204, "Bulwark" }
         };
 
+        private static void LoadAffixRequirementData()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.affix-level-requirements.tsv");
+            using var reader = stream == null ? null : new StreamReader(stream);
+            if (reader == null) throw new InvalidDataException("Pinned affix requirement snapshot is missing.");
+            reader.ReadLine();
+            while (!reader.EndOfStream)
+            {
+                var parts = (reader.ReadLine() ?? "").Split((char)9);
+                if (parts.Length < 3) continue;
+                var kind = parts[0].Trim('"');
+                if (!int.TryParse(parts[1].Trim('"'), out var id) || !int.TryParse(parts[2].Trim('"'), out var requirement)) continue;
+                if (kind == "prefix") _prefixLevelRequirements[id] = requirement;
+                else if (kind == "suffix") _suffixLevelRequirements[id] = requirement;
+            }
+        }
+
+        public static int GetAffixLevelRequirement(string kind, int id)
+        {
+            if (id == 0) return 0;
+            var table = kind == "prefix" ? _prefixLevelRequirements : _suffixLevelRequirements;
+            if (!table.TryGetValue(id, out var requirement))
+                throw new InvalidDataException("Missing pinned " + kind + " affix mapping for id " + id + ".");
+            return requirement;
+        }
         private static void LoadItemImageData()
         {
             var assembly = Assembly.GetExecutingAssembly();
@@ -141,6 +174,7 @@ namespace D2RStashWorker
             try
             {
                 LoadItemImageData();
+                LoadAffixRequirementData();
                 var assembly = Assembly.GetExecutingAssembly();
                 using (var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.uniqueitems.txt"))
                 {
@@ -156,6 +190,9 @@ namespace D2RStashWorker
                             if (parts.Length > 1 && int.TryParse(parts[1], out int id))
                             {
                                 _uniques[id] = parts[0];
+                                var levelReqIndex = Array.IndexOf(headers, "lvl req");
+                                if (levelReqIndex >= 0 && levelReqIndex < parts.Length && int.TryParse(parts[levelReqIndex], out var levelReq))
+                                    _uniqueLevelRequirements[id] = levelReq;
                                 _uniqueTransforms[parts[0]] = ReadTransform(headers, parts);
                             }
                         }
@@ -175,6 +212,9 @@ namespace D2RStashWorker
                             if (parts.Length > 2 && int.TryParse(parts[1], out int id))
                             {
                                 _sets[id] = (parts[0], parts[2]);
+                                var levelReqIndex = Array.IndexOf(headers, "lvl req");
+                                if (levelReqIndex >= 0 && levelReqIndex < parts.Length && int.TryParse(parts[levelReqIndex], out var levelReq))
+                                    _setLevelRequirements[id] = levelReq;
                                 _setTransforms[parts[0]] = ReadTransform(headers, parts);
                                 _setTransformsById[id] = _setTransforms[parts[0]];
                             }
@@ -232,6 +272,10 @@ namespace D2RStashWorker
         }
 
         public static string? GetUniqueName(int id) => _uniques.TryGetValue(id, out var val) ? val : null;
+        public static int GetUniqueLevelRequirement(int id) => _uniqueLevelRequirements.GetValueOrDefault(id);
+        public static bool HasUniqueLevelRequirement(int id) => _uniqueLevelRequirements.ContainsKey(id);
+        public static int GetSetLevelRequirement(int id) => _setLevelRequirements.GetValueOrDefault(id);
+        public static bool HasSetLevelRequirement(int id) => _setLevelRequirements.ContainsKey(id);
         public static ItemTransform? GetUniqueTransform(string? name) => name != null && _uniqueTransforms.TryGetValue(name, out var val) ? val : null;
         public static ItemTransform? GetSetTransform(string? name) => name != null && _setTransforms.TryGetValue(name, out var val) ? val : null;
         public static ItemTransform? GetSetTransform(int id) => _setTransformsById.TryGetValue(id, out var val) ? val : null;
@@ -360,6 +404,21 @@ namespace D2RStashWorker
 
     class Program
     {
+        private static string ToSkillTabName(int layer) => layer switch {
+            0 or 1 or 2 => "Amazon",
+            3 or 4 or 5 => "Sorceress",
+            6 or 7 or 8 => "Necromancer",
+            9 or 10 or 11 => "Paladin",
+            12 or 13 or 14 => "Barbarian",
+            15 or 16 or 17 => "Druid",
+            18 or 19 or 20 => "Assassin",
+            21 or 22 or 23 or 48 or 49 or 50 => "Warlock",
+            56 => "Demon",
+            57 => "Eldritch",
+            58 => "Chaos",
+            _ => "Unknown"
+        };
+
         private static string ToUiStatName(StatId statId) => statId switch
         {
             StatId.Strength => "strength",
@@ -380,15 +439,143 @@ namespace D2RStashWorker
             _ => statId.ToString()
         };
 
-        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> stats) =>
+        private static string ToFriendlyStatName(StatId statId) => statId switch
+        {
+            StatId.Strength => "Strength", StatId.Dexterity => "Dexterity", StatId.Vitality => "Vitality", StatId.Energy => "Energy",
+            StatId.Life or StatId.MaxLife => "Life", StatId.Mana or StatId.MaxMana => "Mana", StatId.Stamina or StatId.MaxStamina => "Stamina",
+            StatId.ArmorClass => "Defense", StatId.AttackRating => "Attack Rating", StatId.AttackRatingPercent => "Attack Rating",
+            StatId.ChanceToBlock => "Chance to Block", StatId.DamagePercent or StatId.MaxDamagePercent or StatId.MinDamagePercent => "Enhanced Damage",
+            StatId.FireResist => "Fire Resistance", StatId.ColdResist => "Cold Resistance", StatId.LightningResist => "Lightning Resistance", StatId.PoisonResist => "Poison Resistance",
+            StatId.MaxFireResist => "Maximum Fire Resistance", StatId.MaxColdResist => "Maximum Cold Resistance", StatId.MaxLightningResist => "Maximum Lightning Resistance", StatId.MaxPoisonResist => "Maximum Poison Resistance",
+            StatId.MagicResist => "Magic Resistance", StatId.MaxMagicResist => "Maximum Magic Resistance", StatId.MagicFind => "Magic Find", StatId.GoldFind => "Extra Gold from Monsters",
+            StatId.FasterCastRate => "Faster Cast Rate", StatId.FasterHitRecovery => "Faster Hit Recovery", StatId.FasterRunWalk => "Faster Run/Walk", StatId.IncreasedAttackSpeed => "Increased Attack Speed", StatId.FasterBlockRate => "Faster Block Rate",
+            StatId.LifeSteal => "Life Stolen per Hit", StatId.ManaSteal => "Mana Stolen per Hit", StatId.AllSkills => "All Skills", StatId.AddClassSkills => "Class Skills", StatId.AddSkillTab => "Skill Tab",
+            StatId.SingleSkill or StatId.NonClassSkill => "Skill", StatId.CannotBeFrozen => "Cannot Be Frozen", StatId.CrushingBlow => "Crushing Blow", StatId.DeadlyStrike => "Deadly Strike", StatId.OpenWounds => "Open Wounds", StatId.Knockback => "Knockback",
+            StatId.HealAfterKill => "Life after Each Kill", StatId.ManaAfterKill => "Mana after Each Kill", StatId.ReducePrices => "Reduced Vendor Prices", StatId.LightRadius => "Light Radius", StatId.RequirementPercent => "Requirements", StatId.NumSockets => "Sockets",
+            _ => HumanizeStatName(statId.ToString())
+        };
+
+        private static string HumanizeStatName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "Stat";
+            var text = System.Text.RegularExpressions.Regex.Replace(value, "([a-z])([A-Z])", "$1 $2");
+            return text.Replace("Percent", "%").Replace("PerLevel", " per Level").Trim();
+        }
+
+        private static string? SkillTabName(int packedLayer)
+        {
+            // AddSkillTab stores the class in the upper bits and the tab in the lower 3 bits.
+            // For example, 41 = (Druid class 5 << 3) | Shape Shifting tab 1.
+            var classIndex = packedLayer >> 3;
+            var tabIndex = packedLayer & 0x7;
+            return (classIndex, tabIndex) switch
+            {
+                (0, 0) => "Amazon Bow and Crossbow", (0, 1) => "Amazon Javelin and Spear", (0, 2) => "Amazon Passive and Magic",
+                (1, 0) => "Sorceress Fire", (1, 1) => "Sorceress Lightning", (1, 2) => "Sorceress Cold",
+                (2, 0) => "Necromancer Curses", (2, 1) => "Necromancer Poison and Bone", (2, 2) => "Necromancer Summoning",
+                (3, 0) => "Paladin Combat", (3, 1) => "Paladin Offensive Auras", (3, 2) => "Paladin Defensive Auras",
+                (4, 0) => "Barbarian Combat Skills", (4, 1) => "Barbarian Warcries", (4, 2) => "Barbarian Masteries",
+                (5, 0) => "Druid Elemental", (5, 1) => "Druid Shape Shifting", (5, 2) => "Druid Summoning",
+                (6, 0) => "Assassin Martial Arts", (6, 1) => "Assassin Shadow Disciplines", (6, 2) => "Assassin Traps",
+                (7, 0) => "Demon", (7, 1) => "Eldritch", (7, 2) => "Chaos",
+                _ => null
+            };
+        }
+
+        private static long ToUiStatValue(Stat stat, uint version)
+        {
+            var info = D2SSharp.Data.TxtFileExternalData.Default.GetStatInfo(stat.Id, version);
+            return stat.Value >> info.ValShift;
+        }
+
+        private static string ToUiStatDescription(Stat stat, uint version)
+        {
+            if (stat.Id == StatId.AddSkillTab)
+            {
+                var tab = SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer;
+                var displayValue = ToUiStatValue(stat, version);
+                return "+" + displayValue + " to " + tab + " Skills";
+            }
+            var percent = stat.Id is StatId.FireResist or StatId.ColdResist or StatId.LightningResist or StatId.PoisonResist
+                or StatId.MaxFireResist or StatId.MaxColdResist or StatId.MaxLightningResist or StatId.MaxPoisonResist
+                or StatId.MagicFind or StatId.GoldFind or StatId.FasterCastRate or StatId.FasterHitRecovery or StatId.FasterRunWalk or StatId.IncreasedAttackSpeed or StatId.FasterBlockRate;
+            var displayStatValue = ToUiStatValue(stat, version);
+            return (displayStatValue >= 0 ? "+" : "") + displayStatValue + (percent ? "%" : "") + " " + ToFriendlyStatName(stat.Id);
+        }
+
+        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> stats, uint version) =>
             stats.Select(stat => (object)new
             {
                 id = (uint)stat.Id,
                 name = ToUiStatName(stat.Id),
-                values = new[] { stat.Value },
-                description = $"{stat.Id}: {stat.Value}"
+                label = stat.Id == StatId.AddSkillTab ? (SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer) : ToFriendlyStatName(stat.Id),
+                layer = stat.Layer,
+                values = new[] { ToUiStatValue(stat, version) },
+                skill_tab_name = stat.Id == StatId.AddSkillTab ? ToSkillTabName(stat.Layer) : null,
+                description = ToUiStatDescription(stat, version)
             }).ToArray();
 
+        private static (int Requirement, string Source) GetAffixRequirement(Item item)
+        {
+            var requirements = new List<int>();
+            var sources = new List<string>();
+            void Add(string kind, int id)
+            {
+                if (id == 0 || id == 2047) return;
+                var value = D2Data.GetAffixLevelRequirement(kind, id);
+                requirements.Add(value);
+                sources.Add(kind + "#" + id + "=" + value);
+            }
+
+            if (item.QualityData is MagicQualityData magic)
+            {
+                Add("prefix", magic.PrefixId);
+                Add("suffix", magic.SuffixId);
+            }
+            else if (item.QualityData is RareCraftQualityData rareCraft)
+            {
+                foreach (var id in rareCraft.Prefixes) Add("prefix", id);
+                foreach (var id in rareCraft.Suffixes) Add("suffix", id);
+            }
+
+            return requirements.Count == 0
+                ? (0, "")
+                : (requirements.Max(), "affixes[" + string.Join(",", sources) + "]");
+        }
+        private static (int Requirement, string Source, bool Equippable) GetItemLevelRequirement(Item item, uint version)
+        {
+            int itemIndex = D2SSharp.Data.TxtFileExternalData.Default.GetItemIndex(item.ItemCode, version);
+            var itemInfo = itemIndex >= 0 ? D2SSharp.Data.TxtFileExternalData.Default.GetItemInfo(itemIndex, version) : default;
+            bool equippable = itemIndex >= 0 && (itemInfo.IsArmor || itemInfo.IsWeapon || D2Data.IsAccessoryCode(item.ItemCodeString));
+            if (!equippable) return (0, D2Data.ItemDataSource + ":not-equippable", false);
+            if (itemIndex < 0) throw new InvalidDataException("Missing base item requirement mapping for equippable code '" + item.ItemCodeString + "'.");
+            int baseRequirement = itemInfo.LevelRequirement;
+            string source = D2Data.ItemDataSource + ":base/" + item.ItemCodeString.Trim().ToLowerInvariant();
+            int qualityRequirement = 0;
+            if (item.QualityData is SetUniqueQualityData qualityData)
+            {
+                if (item.Quality == ItemQuality.Unique)
+                {
+                    qualityRequirement = D2Data.GetUniqueLevelRequirement(qualityData.SetUniqueFileIndex);
+                    if (!D2Data.HasUniqueLevelRequirement(qualityData.SetUniqueFileIndex)) throw new InvalidDataException("Missing unique level requirement mapping for '" + item.ItemCodeString + "'.");
+                }
+                else if (item.Quality == ItemQuality.Set)
+                {
+                    qualityRequirement = D2Data.GetSetLevelRequirement(qualityData.SetUniqueFileIndex);
+                    if (!D2Data.HasSetLevelRequirement(qualityData.SetUniqueFileIndex)) throw new InvalidDataException("Missing set level requirement mapping for '" + item.ItemCodeString + "'.");
+                }
+            }
+            int statRequirement = item.Stats.Where(stat => stat.Id == StatId.LevelRequire).Select(stat => Convert.ToInt32(stat.Value)).FirstOrDefault();
+            var affixRequirement = GetAffixRequirement(item);
+            int skillTabRequirement = item.Stats.Any(stat => stat.Id == StatId.AddSkillTab && stat.Value >= 3) ? 45 : 0;
+            int requirement = Math.Max(1, Math.Max(Math.Max(baseRequirement + statRequirement, qualityRequirement), Math.Max(affixRequirement.Requirement, skillTabRequirement)));
+            if (requirement <= 0) throw new InvalidDataException("Equippable item '" + item.ItemCodeString + "' resolved to an invalid level requirement.");
+            if (qualityRequirement > 0) source = D2Data.ItemDataSource + ":" + (item.Quality == ItemQuality.Unique ? "unique" : "set") + "/" + qualityRequirement;
+            if (affixRequirement.Requirement > 0) source += "+" + affixRequirement.Source;
+            if (statRequirement != 0) source += "+stat92(" + statRequirement + ")";
+            if (skillTabRequirement > 0) source += "+skilltab(" + skillTabRequirement + ")";
+            return (requirement, source, true);
+        }
         private static object SerializeItem(Item i, uint version, int altPositionId, string parentCode = "")
         {
             byte[] itemBytes = new byte[2048];
@@ -446,6 +633,7 @@ namespace D2RStashWorker
             }
 
             var imageKey = D2Data.GetInventoryFile(i);
+            var requirement = GetItemLevelRequirement(i, version);
             return new
             {
                 id = i.ItemSeed,
@@ -463,14 +651,19 @@ namespace D2RStashWorker
                 alt_position_id = altPositionId,
                 quality = (int)i.Quality,
                 socketed = i.Flags.HasFlag(ItemFlags.Socketed) ? 1 : 0,
+                total_nr_of_sockets = i.Sockets.Count,
                 unique_name = uniqueName,
                 set_name = setName,
                 runeword_name = runewordName,
+                level_requirement = requirement.Equippable ? requirement.Requirement : (int?)null,
+                item_level = (int)i.ItemLevel,
+                level_requirement_source = requirement.Source,
+                equippable = requirement.Equippable,
                 rawBytesHex = Convert.ToHexString(exactItemBytes),
-                magic_attributes = SerializeStats(itemStats),
-                runeword_attributes = SerializeStats(i.RunewordStats ?? []),
-                set_attributes = i.SetBonusStats.Select(SerializeStats).ToArray(),
-                displayed_combined_magic_attributes = SerializeStats(combinedStats),
+                magic_attributes = SerializeStats(itemStats, version),
+                runeword_attributes = SerializeStats(i.RunewordStats ?? [], version),
+                set_attributes = i.SetBonusStats.Select(stats => SerializeStats(stats, version)).ToArray(),
+                displayed_combined_magic_attributes = SerializeStats(combinedStats, version),
                 socketed_items = i.Sockets.Where(s => s != null).Select(s => SerializeItem(s!, version, 0, i.ItemCodeString)).ToArray()
             };
         }
@@ -502,9 +695,14 @@ namespace D2RStashWorker
                 alt_position_id = serialized.alt_position_id,
                 quality = serialized.quality,
                 socketed = serialized.socketed,
+                total_nr_of_sockets = serialized.total_nr_of_sockets,
                 unique_name = serialized.unique_name,
                 set_name = serialized.set_name,
                 runeword_name = serialized.runeword_name,
+                level_requirement = serialized.level_requirement,
+                item_level = serialized.item_level,
+                level_requirement_source = serialized.level_requirement_source,
+                equippable = serialized.equippable,
                 rawBytesHex = serialized.rawBytesHex,
                 magic_attributes = serialized.magic_attributes,
                 runeword_attributes = serialized.runeword_attributes,

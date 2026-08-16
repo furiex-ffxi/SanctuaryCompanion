@@ -55,23 +55,25 @@ const isGemType = (type) => {
   return /^(gp|gl|gs|gf|gc|sk)/.test(t);
 };
 
+export const getItemSocketCount = (item = {}) => {
+  const total = Number(item.total_nr_of_sockets);
+  if (Number.isFinite(total) && total >= 0) return total;
+  return Array.isArray(item.socketed_items) ? item.socketed_items.length : 0;
+};
+
 
 import { constants as constants99 } from '../domain/entities/static_constant_data.js';
 
-export const getBaseTypeName = (type) => {
-  const t = (type || '').toLowerCase().trim();
-  const itemData = constants99.weapon_items[t] || constants99.armor_items[t] || constants99.other_items[t];
-  return itemData?.n || itemData?.nc || type;
-};
+export const getBaseTypeName = (type) => getItemTypeDisplayName({ type, type_name: type });
 
 export const getItemDisplayName = (item) => {
   if (!item) return '';
   if (item.runeword_name) return item.runeword_name;
 
   const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
-    ? item.type_name
+    ? getItemTypeDisplayName(item)
     : null;
-  const baseType = typeName || getBaseTypeName(item.type) || 'Item';
+  const baseType = typeName || getFriendlyBaseName(item) || getBaseTypeName(item.type) || 'Item';
 
   // D2R set items carry both the individual piece name (unique_name) and the
   // set/family name (set_name). The piece name is what the game shows as the
@@ -104,6 +106,7 @@ export const getItemDisplayName = (item) => {
 
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
+import { getFriendlyBaseName, getItemTypeDisplayName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
@@ -111,6 +114,7 @@ export default function ItemSprite({ item }) {
   const isSunderCharm = type === 'cs2' || (item?.magic_attributes || []).some((attribute) => [187, 189, 190, 191, 192, 193].includes(Number(attribute?.id)));
   const invFile = isSunderCharm ? 'invch3' : (item?.image_key || item?.inv_file)?.toLowerCase();
   const transformFilter = getDiabloColorFilter(item?.transform_color);
+  const socketCount = getItemSocketCount(item);
 
   useEffect(() => {
     setImgError(false);
@@ -146,8 +150,8 @@ export default function ItemSprite({ item }) {
             style={transformFilter ? { filter: transformFilter } : undefined}
             onError={() => setImgError(true)}
           />
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
         <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
@@ -208,8 +212,8 @@ export default function ItemSprite({ item }) {
             </defs>
           </svg>
           <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       ) : item.equipped_id === 5 || item.equipped_id === 12 || ['bsh','uml','xml','kit','sml','buc','spl','rnd','lrg','kbt','kit','lkt','mxs','hxs','nef','gow','ow1','ow2','ow3','ow4','ow5','pa1','pa2','pa3','pa4','pa5'].includes(type) ? (
@@ -226,15 +230,15 @@ export default function ItemSprite({ item }) {
             </defs>
           </svg>
           <span className="item-sprite-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       ) : (
         <div className="generic-item-sprite">
           <span className="item-badge-name" style={{ color: qualityColor }}>{name}</span>
-          {item.socketed_items?.length > 0 && (
-            <span className="sprite-socket-badge">({item.socketed_items.length})</span>
+          {socketCount > 0 && (
+            <span className="sprite-socket-badge">({socketCount})</span>
           )}
         </div>
       )}

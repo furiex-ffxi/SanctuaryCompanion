@@ -14,12 +14,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Data\item-data-source.json" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Data\runes.txt" />
     <EmbeddedResource Include="Data\setitems.txt" />
     <EmbeddedResource Include="Data\uniqueitems.txt" />
     <EmbeddedResource Include="Data\gems.txt" />
     <EmbeddedResource Include="Data\item_images.tsv" />
     <EmbeddedResource Include="Data\item_gfx.tsv" />
+    <EmbeddedResource Include="Data\affix-level-requirements.tsv" />
   </ItemGroup>
 
   <Target Name="RequirePinnedD2SSharp" BeforeTargets="Restore">

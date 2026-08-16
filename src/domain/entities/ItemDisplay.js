@@ -1,0 +1,88 @@
+import { constants } from './static_constant_data.js';
+
+const statLabels = {
+  0: ['Strength', true], 1: ['Energy', true], 2: ['Dexterity', true], 3: ['Vitality', true],
+  7: ['Life', true], 9: ['Mana', true], 16: ['Enhanced Defense', true], 19: ['Attack Rating', true],
+  20: ['Chance to Block', true], 25: ['Enhanced Damage', true], 31: ['Defense', true],
+  34: ['Damage Reduced', true], 36: ['Damage Reduced', true], 39: ['Fire Resist', true],
+  40: ['Maximum Fire Resist', true], 41: ['Lightning Resist', true], 42: ['Maximum Lightning Resist', true],
+  43: ['Cold Resist', true], 44: ['Maximum Cold Resist', true], 45: ['Poison Resist', true],
+  46: ['Maximum Poison Resist', true], 60: ['Life Stolen per Hit', true], 62: ['Mana Stolen per Hit', true],
+  67: ['Faster Run/Walk', true], 68: ['Increased Attack Speed', true], 79: ['Extra Gold from Monsters', true],
+  80: ['Better Chance of Getting Magic Items', true], 81: ['Knockback', false], 85: ['Extra Experience', true],
+  86: ['Life after Each Kill', true], 87: ['Reduced Prices', true], 89: ['Light Radius', true],
+  91: ['Requirements', true], 92: ['Required Level', true], 93: ['Increased Attack Speed', true],
+  96: ['Faster Run/Walk', true], 99: ['Faster Hit Recovery', true], 102: ['Faster Block Rate', true],
+  105: ['Faster Cast Rate', true], 108: ['Slain Monsters Rest in Peace', false],
+  110: ['Poison Length Reduced', true], 114: ['Damage Taken Goes to Mana', true], 127: ['to All Skills', true],
+  252: ['Repairs durability', false],
+};
+
+const clean = (value) => typeof value === 'string' ? value.trim() : '';
+// Remove parser-only classification suffixes from user-facing base names.
+export function cleanItemTypeName(value) {
+  return clean(value).replace(/\s+\([a-z0-9]+-[a-z0-9]+\)\s*$/i, '').trim();
+}
+const skillTabs = {
+  '0:0': 'Amazon Bow', '0:1': 'Amazon Javelin', '0:2': 'Amazon Passive',
+  '1:0': 'Sorceress Fire', '1:1': 'Sorceress Lightning', '1:2': 'Sorceress Cold',
+  '2:0': 'Necromancer Curses', '2:1': 'Necromancer Poison and Bone', '2:2': 'Necromancer Summoning',
+  '3:0': 'Paladin Combat', '3:1': 'Paladin Offensive Auras', '3:2': 'Paladin Defensive Auras',
+  '4:0': 'Barbarian Combat', '4:1': 'Barbarian Warcries', '4:2': 'Barbarian Masteries',
+  '5:0': 'Druid Elemental', '5:1': 'Druid Shape Shifting', '5:2': 'Druid Summoning',
+  '6:0': 'Assassin Martial Arts', '6:1': 'Assassin Shadow Disciplines', '6:2': 'Assassin Traps',
+  '7:0': 'Demon', '7:1': 'Eldritch', '7:2': 'Chaos',
+};
+
+export function getSkillTabName(packedLayer) {
+  const layer = Number(packedLayer);
+  if (!Number.isInteger(layer) || layer < 0) return null;
+  return skillTabs[`${layer >> 3}:${layer & 7}`] || null;
+}
+
+export function formatSkillTab(value, packedLayer) {
+  const numeric = Number(value);
+  const amount = Number.isFinite(numeric) && numeric >= 0 ? `+${value}` : value;
+  return `${amount} to ${getSkillTabName(packedLayer) || `Skill Tab ${packedLayer}`} Skills`;
+}
+
+export function getFriendlyBaseName(item = {}) {
+  const code = clean(item.type).toLowerCase();
+  const catalogItem = constants.weapon_items?.[code] || constants.armor_items?.[code] || constants.other_items?.[code];
+  const supplied = cleanItemTypeName(item.type_name);
+  if (supplied && supplied.toLowerCase() !== code) return supplied;
+  return clean(catalogItem?.n || catalogItem?.nc) || supplied || clean(item.type) || 'Item';
+}
+
+export function getItemTypeDisplayName(item = {}) {
+  return getFriendlyBaseName(item);
+}
+
+export function formatStat(attribute = {}) {
+  if (clean(attribute.description)) return clean(attribute.description);
+  const values = Array.isArray(attribute.values) ? attribute.values : [];
+  const value = values.length === 1 ? values[0] : values.join(', ');
+  const entry = statLabels[Number(attribute.id)];
+  if (!entry) {
+    const name = clean(attribute.name).replace(/^item_/, '').replace(/_/g, ' ');
+    return `${name ? name[0].toUpperCase() + name.slice(1) : 'Bonus'}: ${value}`;
+  }
+  const [label, hasValue] = entry;
+  if (!hasValue) return label;
+  const numeric = Number(value);
+  const formatted = Number.isFinite(numeric) && numeric >= 0 ? `+${value}` : value;
+  return `${formatted} ${label}`.replace(/^\+0 /, '');
+}
+
+export function getItemDetails(item = {}) {
+  const details = [];
+  if (item.defense_rating != null || item.defense != null) details.push(`Defense: ${item.defense_rating ?? item.defense}`);
+  if (item.current_durability != null || item.durability != null) {
+    const max = item.max_durability ?? item.maxDurability;
+    details.push(`Durability: ${item.current_durability ?? item.durability}${max != null ? ` of ${max}` : ''}`);
+  }
+  if (item.quantity != null) details.push(`Quantity: ${item.quantity}`);
+  if (item.ethereal || item.is_ethereal) details.push('Ethereal');
+  if (item.item_level != null || item.level != null) details.push(`Item Level: ${item.item_level ?? item.level}`);
+  return details;
+}
