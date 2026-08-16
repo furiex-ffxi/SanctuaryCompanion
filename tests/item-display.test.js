@@ -26,7 +26,7 @@ test('decodes packed skill-tree layers instead of treating them as random tree i
   assert.equal(getSkillTabName(57), 'Eldritch');
   assert.equal(getSkillTabName(58), 'Chaos');
   assert.equal(formatSkillTab(3, 56), '+3 to Demon Skills');
-  assert.equal(formatSkillTab(2, 2), '+2 to Amazon Passive Skills');
+  assert.equal(formatSkillTab(2, 2), '+2 to Amazon Passive and Magic Skills');
   assert.equal(getSkillTabName(999), null);
 });
 test('shows practical base item details in stash tooltips', () => {
