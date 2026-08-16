@@ -1,6 +1,7 @@
 import React from 'react';
 import ItemSprite from './ItemSprite';
 import { ItemTooltip } from './ItemTooltip';
+import { resolveItemImageKey } from './itemImageKey.js';
 
 const RUNE_CODES = Array.from({ length: 33 }, (_, i) => `r${(i + 1).toString().padStart(2, '0')}`);
 const GEM_CODES = [
@@ -44,7 +45,7 @@ const ITEM_METADATA = {
   gcw: { n: 'Chipped Diamond', img: 'inv_diamond_chipped' }, gfw: { n: 'Flawed Diamond', img: 'inv_diamond_flawed' }, gsw: { n: 'Diamond', img: 'inv_diamond_standard' }, glw: { n: 'Flawless Diamond', img: 'inv_diamond_flawless' }, gpw: { n: 'Perfect Diamond', img: 'inv_diamond_perfect' },
   skc: { n: 'Chipped Skull', img: 'inv_skull_chipped' }, skf: { n: 'Flawed Skull', img: 'inv_skull_flawed' }, sku: { n: 'Skull', img: 'inv_skull_standard' }, skl: { n: 'Flawless Skull', img: 'inv_skull_flawless' }, skz: { n: 'Perfect Skull', img: 'inv_skull_perfect' },
   // Materials
-  xa1: { n: 'Western Worldstone Shard', img: 'none' }, xa2: { n: 'Eastern Worldstone Shard', img: 'none' }, xa3: { n: 'Southern Worldstone Shard', img: 'none' }, xa4: { n: 'Deep Worldstone Shard', img: 'none' }, xa5: { n: 'Northern Worldstone Shard', img: 'none' },
+  xa1: { n: 'Western Worldstone Shard', img: 'inv_worldstone_shard_western' }, xa2: { n: 'Eastern Worldstone Shard', img: 'inv_worldstone_shard_eastern' }, xa3: { n: 'Southern Worldstone Shard', img: 'inv_worldstone_shard_southern' }, xa4: { n: 'Deep Worldstone Shard', img: 'inv_worldstone_shard_deep' }, xa5: { n: 'Northern Worldstone Shard', img: 'inv_worldstone_shard_northern' },
   toa: { n: 'Token of Absolution', img: 'inv_token_absolution' }, tes: { n: 'Twisted Essence of Suffering', img: 'inv_twisted_essence' }, ceh: { n: 'Charged Essence of Hatred', img: 'inv_charged_essence' }, bet: { n: 'Burning Essence of Terror', img: 'inv_burning_essence' }, fed: { n: 'Festering Essence of Destruction', img: 'inv_festering_essence' },
   pk1: { n: 'Key of Terror', img: 'inv_key_terror' }, pk2: { n: 'Key of Hate', img: 'inv_key_hate' }, pk3: { n: 'Key of Destruction', img: 'inv_key_destruction' },
   dhn: { n: "Diablo's Horn", img: 'inv_diablo_horn' }, bey: { n: "Baal's Eye", img: 'inv_baal_eye' }, mbr: { n: "Mephisto's Brain", img: 'inv_mephisto_brain' },
@@ -70,7 +71,7 @@ export function AdvancedStashPanel({ items, onDeposit, highlightIdentity }) {
               const isEmpty = count === 0;
               const defaultMeta = ITEM_METADATA[code] || {};
               const typeName = item?.type_name || defaultMeta.n || code;
-              const imageKey = defaultMeta.img === 'none' ? 'none' : (item?.image_key || defaultMeta.img);
+              const imageKey = resolveItemImageKey(code, item?.image_key, defaultMeta.img);
               const displayItem = item ? { ...item, image_key: imageKey } : { type: code, image_key: imageKey, type_name: typeName };
 
               return (
