@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatSkillTab, formatStat, getFriendlyBaseName, getItemDetails, getSkillTabName } from '../src/domain/entities/ItemDisplay.js';
+import { cleanItemTypeName, formatSkillTab, formatStat, getFriendlyBaseName, getItemDetails, getItemTypeDisplayName, getSkillTabName } from '../src/domain/entities/ItemDisplay.js';
 
 test('resolves internal item codes to Diablo II base names', () => {
   assert.equal(getFriendlyBaseName({ type: 'rin', type_name: 'rin' }), 'Ring');
   assert.equal(getFriendlyBaseName({ type: 'r33', type_name: 'r33' }), 'Zod Rune');
   assert.equal(getFriendlyBaseName({ type: 'rin', type_name: 'Ring' }), 'Ring');
+});
+
+test('removes parser classification suffixes from every item base name', () => {
+  assert.equal(cleanItemTypeName('Heavy Boots (2a-2)'), 'Heavy Boots');
+  assert.equal(getItemTypeDisplayName({ type: 'vbt', type_name: 'Heavy Boots (2a-2)' }), 'Heavy Boots');
+  assert.equal(getFriendlyBaseName({ type: 'vbt', type_name: 'vbt' }), 'Heavy Boots');
+  assert.equal(getItemTypeDisplayName({ type: 'rin', type_name: 'Ring (raw-1)' }), 'Ring');
 });
 
 test('formats worker stats with familiar Diablo II wording', () => {

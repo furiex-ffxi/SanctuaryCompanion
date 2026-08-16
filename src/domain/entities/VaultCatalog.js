@@ -1,4 +1,5 @@
 import { constants as constants99 } from './static_constant_data.js';
+import { cleanItemTypeName } from './ItemDisplay.js';
 
 function normalizedType(item) {
   return typeof item?.type === 'string' ? item.type.toLowerCase().trim() : '';
@@ -6,7 +7,7 @@ function normalizedType(item) {
 
 export function resolveVaultBaseType(item) {
   const type = normalizedType(item);
-  const suppliedName = typeof item?.type_name === 'string' ? item.type_name.trim() : '';
+  const suppliedName = cleanItemTypeName(item?.type_name);
   if (suppliedName && suppliedName.toLowerCase() !== type) return suppliedName;
 
   const catalogItem = constants99.weapon_items[type]
