@@ -126,7 +126,8 @@ export default function ItemSprite({ item }) {
   const runeInfo = isRune ? RUNE_GLYPHS[type] : null;
 
   const name = getItemDisplayName(item);
-  const imagePath = `/__d2r_item_image/${encodeURIComponent(invFile)}.png`;
+  const assetVersion = invFile?.startsWith('inv_worldstone_shard_') ? '?v=2' : '';
+  const imagePath = `/__d2r_item_image/${encodeURIComponent(invFile)}.png${assetVersion}`;
 
 
   // Quality border color
