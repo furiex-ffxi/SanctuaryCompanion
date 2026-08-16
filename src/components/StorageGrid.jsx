@@ -1,6 +1,7 @@
 import React from 'react';
 import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { ItemTooltip } from './ItemTooltip';
+import { TooltipTrigger } from './TooltipTrigger';
 import { getItemDimensions, getItemColorClass } from '../domain/entities/Item';
 
 export function StorageGrid({ meta, items, highlightIdentity }) {
@@ -32,17 +33,17 @@ export function StorageGrid({ meta, items, highlightIdentity }) {
         const [w, h] = getItemDimensions(item.type);
         const colorClass = getItemColorClass(item);
         cells.push(
-          <div
+          <TooltipTrigger
             key={`item-${r}-${c}`}
             className={`inv-item-card ${colorClass} ${highlightIdentity?.itemSeed != null && String(highlightIdentity.itemSeed) === String(item.id) ? 'item-search-highlight' : ''}`}
             style={{
               gridColumn: `${c + 1} / span ${w}`,
               gridRow: `${r + 1} / span ${h}`,
             }}
+            item={item}
           >
             <div className="inv-item-inner">
               <ItemSprite item={item} />
-              <ItemTooltip item={item} />
               {meta?.onDeposit && (
                 <button
                   className="btn-deposit-stash"
@@ -56,7 +57,7 @@ export function StorageGrid({ meta, items, highlightIdentity }) {
                 </button>
               )}
             </div>
-          </div>
+          </TooltipTrigger>
         );
       } else if (!occupied[r][c]) {
         cells.push(

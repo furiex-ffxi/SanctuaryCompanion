@@ -450,9 +450,7 @@ header {
 }
 
 /* Tooltips */
-.equip-slot .tooltip-card {
-  display: none;
-  position: absolute;
+.tooltip-card {
   background-color: rgba(0, 0, 0, 0.95);
   border: 1px solid var(--color-border-gold);
   color: var(--color-text-normal);
@@ -466,26 +464,7 @@ header {
   pointer-events: none;
 }
 
-.equip-slot:hover .tooltip-card {
-  display: block;
-}
 
-/* Tooltip positioning depending on column */
-.equip-column.left .tooltip-card {
-  left: 115%;
-  top: 0;
-}
-
-.equip-column.right .tooltip-card {
-  right: 115%;
-  top: 0;
-}
-
-.equip-column.center .tooltip-card {
-  left: 50%;
-  transform: translateX(-50%);
-  top: 105%;
-}
 
 .tooltip-header {
   font-family: 'Cinzel', serif;
@@ -644,29 +623,7 @@ header {
   font-family: 'Cinzel', serif;
 }
 
-/* Tooltip positioning for grid items */
-.inv-item-card .tooltip-card {
-  display: none;
-  position: absolute;
-  background-color: rgba(10, 10, 10, 0.96);
-  border: 1px solid var(--color-border-gold);
-  color: var(--color-text-normal);
-  padding: 10px;
-  width: 250px;
-  z-index: 999;
-  border-radius: 4px;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.9);
-  font-size: 0.8rem;
-  text-align: center;
-  pointer-events: none;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 105%;
-}
 
-.inv-item-card:hover .tooltip-card {
-  display: block;
-}
 
 /* Item Sprites and Graphics */
 .item-sprite-wrapper {
