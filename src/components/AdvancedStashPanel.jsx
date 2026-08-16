@@ -70,7 +70,8 @@ export function AdvancedStashPanel({ items, onDeposit, highlightIdentity }) {
               const isEmpty = count === 0;
               const defaultMeta = ITEM_METADATA[code] || {};
               const typeName = item?.type_name || defaultMeta.n || code;
-              const imageKey = item?.image_key || defaultMeta.img;
+              const imageKey = defaultMeta.img === 'none' ? 'none' : (item?.image_key || defaultMeta.img);
+              const displayItem = item ? { ...item, image_key: imageKey } : { type: code, image_key: imageKey, type_name: typeName };
 
               return (
                 <div 
@@ -79,7 +80,7 @@ export function AdvancedStashPanel({ items, onDeposit, highlightIdentity }) {
                   title={typeName}
                 >
                   <div className="tile-image" style={{ opacity: isEmpty ? 0.3 : 1 }}>
-                    <ItemSprite item={item || { type: code, image_key: imageKey, type_name: typeName }} />
+                    <ItemSprite item={displayItem} />
                   </div>
                   <div className="tile-info">
                     <div className="tile-name">{typeName}</div>
