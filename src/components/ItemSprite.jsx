@@ -64,18 +64,14 @@ export const getItemSocketCount = (item = {}) => {
 
 import { constants as constants99 } from '../domain/entities/static_constant_data.js';
 
-export const getBaseTypeName = (type) => {
-  const t = (type || '').toLowerCase().trim();
-  const itemData = constants99.weapon_items[t] || constants99.armor_items[t] || constants99.other_items[t];
-  return itemData?.n || itemData?.nc || type;
-};
+export const getBaseTypeName = (type) => getItemTypeDisplayName({ type, type_name: type });
 
 export const getItemDisplayName = (item) => {
   if (!item) return '';
   if (item.runeword_name) return item.runeword_name;
 
   const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
-    ? item.type_name
+    ? getItemTypeDisplayName(item)
     : null;
   const baseType = typeName || getFriendlyBaseName(item) || getBaseTypeName(item.type) || 'Item';
 
@@ -110,7 +106,7 @@ export const getItemDisplayName = (item) => {
 
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
-import { getFriendlyBaseName } from '../domain/entities/ItemDisplay.js';
+import { getFriendlyBaseName, getItemTypeDisplayName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);

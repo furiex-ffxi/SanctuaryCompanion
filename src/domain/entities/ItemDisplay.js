@@ -19,6 +19,10 @@ const statLabels = {
 };
 
 const clean = (value) => typeof value === 'string' ? value.trim() : '';
+// Remove parser-only classification suffixes from user-facing base names.
+export function cleanItemTypeName(value) {
+  return clean(value).replace(/\s+\([a-z0-9]+-[a-z0-9]+\)\s*$/i, '').trim();
+}
 const skillTabs = {
   '0:0': 'Amazon Bow', '0:1': 'Amazon Javelin', '0:2': 'Amazon Passive',
   '1:0': 'Sorceress Fire', '1:1': 'Sorceress Lightning', '1:2': 'Sorceress Cold',
@@ -45,9 +49,13 @@ export function formatSkillTab(value, packedLayer) {
 export function getFriendlyBaseName(item = {}) {
   const code = clean(item.type).toLowerCase();
   const catalogItem = constants.weapon_items?.[code] || constants.armor_items?.[code] || constants.other_items?.[code];
-  const supplied = clean(item.type_name);
+  const supplied = cleanItemTypeName(item.type_name);
   if (supplied && supplied.toLowerCase() !== code) return supplied;
   return clean(catalogItem?.n || catalogItem?.nc) || supplied || clean(item.type) || 'Item';
+}
+
+export function getItemTypeDisplayName(item = {}) {
+  return getFriendlyBaseName(item);
 }
 
 export function formatStat(attribute = {}) {

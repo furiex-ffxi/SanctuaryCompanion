@@ -1,5 +1,6 @@
 import React from 'react';
-import { getBaseTypeName, getItemDisplayName, getItemSocketCount } from './ItemSprite';
+import { getItemDisplayName, getItemSocketCount } from './ItemSprite';
+import { getItemTypeDisplayName } from '../domain/entities/ItemDisplay.js';
 import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
 
 const skillTabNames = [
@@ -52,11 +53,7 @@ function formatAttributeDescription(attribute) {
 export const ItemTooltip = ({ item }) => {
   if (!item) return null;
   const name = getItemDisplayName(item);
-  const baseTypeName = getBaseTypeName(item.type);
-  const typeName = item.type_name
-    && item.type_name.trim().toLowerCase() !== (item.type || '').trim().toLowerCase()
-    ? item.type_name.trim()
-    : baseTypeName;
+  const typeName = getItemTypeDisplayName(item);
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
   const socketCount = getItemSocketCount(item);
@@ -83,7 +80,7 @@ export const ItemTooltip = ({ item }) => {
         </div>
       )}
       <div className="tooltip-type">
-        {typeName || 'Item'} ({w}Ã—{h})
+        {typeName || 'Item'} ({w} x {h})
       </div>
       <div className="tooltip-stats">
         <div className="tooltip-stat-item tooltip-level-requirement">
