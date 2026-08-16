@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StorageGrid } from './StorageGrid';
+import { AdvancedStashPanel } from './AdvancedStashPanel';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
 
 export function SharedStashPanel({
@@ -110,16 +111,29 @@ export function SharedStashPanel({
 
             {/* Centered grid display for active tab */}
             <div className="shared-stash-grid-center">
-              <StorageGrid
-                meta={{
-                  cols: 10,
-                  rows: 10,
-                  activePageIdx,
-                  onDeposit: (item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__'),
-                }}
-                items={items}
-                highlightIdentity={highlightIdentity}
-              />
+              {activePage.type === 1 ? (
+                <AdvancedStashPanel 
+                  items={items} 
+                  onDeposit={(item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__')}
+                  highlightIdentity={highlightIdentity}
+                />
+              ) : activePage.type === 2 ? (
+                <div className="stash-empty-state">
+                  <h3>Chronicle Page</h3>
+                  <p>Chronicle pages are not fully supported yet.</p>
+                </div>
+              ) : (
+                <StorageGrid
+                  meta={{
+                    cols: 10,
+                    rows: 10,
+                    activePageIdx,
+                    onDeposit: (item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__'),
+                  }}
+                  items={items}
+                  highlightIdentity={highlightIdentity}
+                />
+              )}
             </div>
           </div>
         )}
