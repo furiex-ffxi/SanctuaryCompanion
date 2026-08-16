@@ -24,11 +24,11 @@ export function cleanItemTypeName(value) {
   return clean(value).replace(/\s+\([a-z0-9]+-[a-z0-9]+\)\s*$/i, '').trim();
 }
 const skillTabs = {
-  '0:0': 'Amazon Bow', '0:1': 'Amazon Javelin', '0:2': 'Amazon Passive',
+  '0:0': 'Amazon Bow and Crossbow', '0:1': 'Amazon Javelin and Spear', '0:2': 'Amazon Passive and Magic',
   '1:0': 'Sorceress Fire', '1:1': 'Sorceress Lightning', '1:2': 'Sorceress Cold',
   '2:0': 'Necromancer Curses', '2:1': 'Necromancer Poison and Bone', '2:2': 'Necromancer Summoning',
   '3:0': 'Paladin Combat', '3:1': 'Paladin Offensive Auras', '3:2': 'Paladin Defensive Auras',
-  '4:0': 'Barbarian Combat', '4:1': 'Barbarian Warcries', '4:2': 'Barbarian Masteries',
+  '4:0': 'Barbarian Combat Skills', '4:1': 'Barbarian Warcries', '4:2': 'Barbarian Masteries',
   '5:0': 'Druid Elemental', '5:1': 'Druid Shape Shifting', '5:2': 'Druid Summoning',
   '6:0': 'Assassin Martial Arts', '6:1': 'Assassin Shadow Disciplines', '6:2': 'Assassin Traps',
   '7:0': 'Demon', '7:1': 'Eldritch', '7:2': 'Chaos',
@@ -59,19 +59,145 @@ export function getItemTypeDisplayName(item = {}) {
 }
 
 export function formatStat(attribute = {}) {
-  if (clean(attribute.description)) return clean(attribute.description);
-  const values = Array.isArray(attribute.values) ? attribute.values : [];
-  const value = values.length === 1 ? values[0] : values.join(', ');
-  const entry = statLabels[Number(attribute.id)];
-  if (!entry) {
-    const name = clean(attribute.name).replace(/^item_/, '').replace(/_/g, ' ');
-    return `${name ? name[0].toUpperCase() + name.slice(1) : 'Bonus'}: ${value}`;
+  const numericId = Number(attribute?.id);
+  const values = Array.isArray(attribute.values) ? attribute.values.map(Number) : [];
+  const rawValue = values[0];
+
+  // Scale fixed-point life/mana/stamina
+  if ([6, 7, 8, 9, 10, 11].includes(numericId) && Number.isFinite(rawValue) && Math.abs(rawValue) >= 256 && rawValue % 256 === 0) {
+    const label = numericId === 6 || numericId === 7 ? 'Life' : numericId === 8 || numericId === 9 ? 'Mana' : 'Stamina';
+    return (rawValue >= 0 ? '+' : '') + (rawValue / 256) + ' ' + label;
   }
+
+  const normalizedName = String(attribute?.name || '').toLowerCase().replace(/_/g, '');
+  if (normalizedName.endsWith('addskilltab')) {
+    let packedLayer = Number.isFinite(Number(attribute.layer)) ? Number(attribute.layer) : null;
+    let bonus = values.at(-1) || 0;
+
+    // Legacy parser format: values were [tab, class, bonus].
+    if (packedLayer === null && values.length >= 3 && values[0] >= 0 && values[0] < 8 && values[1] >= 0) {
+      packedLayer = (values[1] << 3) | values[0];
+    }
+    // Some older vault entries embedded the packed value in their description.
+    if (packedLayer === null) {
+      const match = String(attribute.description || '').match(/(?:tab|to)\s+(\d+)/i);
+      if (match) packedLayer = Number(match[1]);
+    }
+    if (packedLayer !== null) {
+      return formatSkillTab(bonus, packedLayer);
+    }
+  }
+
+  const classNames = {
+    0: 'Amazon', 1: 'Sorceress', 2: 'Necromancer', 3: 'Paladin', 
+    4: 'Barbarian', 5: 'Druid', 6: 'Assassin'
+  };
+
+  if (normalizedName.endsWith('addclassskills')) {
+    let layer = Number.isFinite(Number(attribute.layer)) ? Number(attribute.layer) : null;
+    let val = values.at(-1) || 0;
+    if (layer === null && values.length >= 2) {
+      layer = values[0];
+    }
+    if (layer !== null && classNames[layer]) {
+      const amount = val >= 0 ? `+${val}` : val;
+      return `${amount} to ${classNames[layer]} Skill Levels`;
+    }
+  }
+
+  const skillNames = {
+    59: 'Blizzard (Sorceress Only)', 
+    61: 'Fire Mastery (Sorceress Only)', 
+    63: 'Lightning Mastery (Sorceress Only)', 
+    65: 'Cold Mastery (Sorceress Only)', 
+    91: 'Lower Resist'
+  };
+
+  if (normalizedName.endsWith('singleskill') || normalizedName.endsWith('nonclassskill')) {
+    let layer = Number.isFinite(Number(attribute.layer)) ? Number(attribute.layer) : null;
+    let val = values.at(-1) || 0;
+    if (layer === null && values.length >= 2) {
+      layer = values[0];
+    }
+    if (layer !== null && skillNames[layer]) {
+      const amount = val >= 0 ? `+${val}` : val;
+      return `${amount} to ${skillNames[layer]}`;
+    }
+  }
+
+  if (clean(attribute.description)) return clean(attribute.description);
+
+  const value = values.length === 1 ? values[0] : values.join(', ');
+  const entry = statLabels[numericId];
+
+  if (!entry) {
+    const nameStr = clean(attribute.name || attribute.label || 'Stat');
+    const humanized = nameStr.replace(/^item_/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+    const finalName = humanized.charAt(0).toUpperCase() + humanized.slice(1);
+    return `${finalName}: ${value}`;
+  }
+
   const [label, hasValue] = entry;
   if (!hasValue) return label;
   const numeric = Number(value);
   const formatted = Number.isFinite(numeric) && numeric >= 0 ? `+${value}` : value;
   return `${formatted} ${label}`.replace(/^\+0 /, '');
+}
+
+export function groupItemStats(attrs) {
+  let res = [...attrs];
+
+  const getVal = id => Number((res.find(a => Number(a.id) === id) || {values:[0]}).values[0] || 0);
+
+  // Group All Resistances
+  const vF = getVal(39);
+  const vL = getVal(41);
+  const vC = getVal(43);
+  const vP = getVal(45);
+
+  if (vF > 0 && vL > 0 && vC > 0 && vP > 0) {
+    const minRes = Math.min(vF, vL, vC, vP);
+    const idxs = [39, 41, 43, 45].map(id => res.findIndex(a => Number(a.id) === id)).filter(i => i >= 0);
+    const insertIdx = Math.min(...idxs);
+
+    res = res.map(a => {
+      const numId = Number(a.id);
+      if ([39, 41, 43, 45].includes(numId)) {
+        const newVal = Number(a.values[0] || 0) - minRes;
+        if (newVal <= 0) return null;
+        return { ...a, values: [newVal] };
+      }
+      return a;
+    }).filter(Boolean);
+
+    res.splice(insertIdx, 0, { id: 'allresist', description: `All Resistances +${minRes}` });
+  }
+
+  // Group All Attributes
+  const vS = getVal(0);
+  const vE = getVal(1);
+  const vD = getVal(2);
+  const vV = getVal(3);
+
+  if (vS > 0 && vE > 0 && vD > 0 && vV > 0) {
+    const minAttr = Math.min(vS, vE, vD, vV);
+    const idxs = [0, 1, 2, 3].map(id => res.findIndex(a => Number(a.id) === id)).filter(i => i >= 0);
+    const insertIdx = Math.min(...idxs);
+
+    res = res.map(a => {
+      const numId = Number(a.id);
+      if ([0, 1, 2, 3].includes(numId)) {
+        const newVal = Number(a.values[0] || 0) - minAttr;
+        if (newVal <= 0) return null;
+        return { ...a, values: [newVal] };
+      }
+      return a;
+    }).filter(Boolean);
+
+    res.splice(insertIdx, 0, { id: 'allattr', description: `All Attributes +${minAttr}` });
+  }
+
+  return res;
 }
 
 export function getItemDetails(item = {}) {
