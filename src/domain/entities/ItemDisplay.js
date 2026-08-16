@@ -19,9 +19,7 @@ const statLabels = {
 };
 
 const clean = (value) => typeof value === 'string' ? value.trim() : '';
-// Some worker/parser versions append an internal item classification to the
-// friendly base name (for example, "Heavy Boots (2a-2)"). This diagnostic
-// data must never be shown as part of an item name.
+// Remove parser-only classification suffixes from user-facing base names.
 export function cleanItemTypeName(value) {
   return clean(value).replace(/\s+\([a-z0-9]+-[a-z0-9]+\)\s*$/i, '').trim();
 }

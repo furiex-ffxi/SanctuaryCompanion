@@ -62,6 +62,8 @@ export const getItemSocketCount = (item = {}) => {
 };
 
 
+import { constants as constants99 } from '../domain/entities/static_constant_data.js';
+
 export const getBaseTypeName = (type) => getItemTypeDisplayName({ type, type_name: type });
 
 export const getItemDisplayName = (item) => {
