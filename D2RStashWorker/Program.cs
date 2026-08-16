@@ -400,6 +400,28 @@ namespace D2RStashWorker
             }
             return list;
         }
+
+        private static readonly Dictionary<string, string> _baseNames = new(StringComparer.OrdinalIgnoreCase) {
+            {"r01", "El Rune"}, {"r02", "Eld Rune"}, {"r03", "Tir Rune"}, {"r04", "Nef Rune"}, {"r05", "Eth Rune"}, {"r06", "Ith Rune"}, {"r07", "Tal Rune"}, {"r08", "Ral Rune"}, {"r09", "Ort Rune"}, {"r10", "Thul Rune"},
+            {"r11", "Amn Rune"}, {"r12", "Sol Rune"}, {"r13", "Shael Rune"}, {"r14", "Dol Rune"}, {"r15", "Hel Rune"}, {"r16", "Io Rune"}, {"r17", "Lum Rune"}, {"r18", "Ko Rune"}, {"r19", "Fal Rune"}, {"r20", "Lem Rune"},
+            {"r21", "Pul Rune"}, {"r22", "Um Rune"}, {"r23", "Mal Rune"}, {"r24", "Ist Rune"}, {"r25", "Gul Rune"}, {"r26", "Vex Rune"}, {"r27", "Ohm Rune"}, {"r28", "Lo Rune"}, {"r29", "Sur Rune"}, {"r30", "Ber Rune"},
+            {"r31", "Jah Rune"}, {"r32", "Cham Rune"}, {"r33", "Zod Rune"},
+            {"gcv", "Chipped Amethyst"}, {"gfv", "Flawed Amethyst"}, {"gsv", "Amethyst"}, {"gzv", "Flawless Amethyst"}, {"gpv", "Perfect Amethyst"},
+            {"gcy", "Chipped Topaz"}, {"gfy", "Flawed Topaz"}, {"gsy", "Topaz"}, {"gly", "Flawless Topaz"}, {"gpy", "Perfect Topaz"},
+            {"gcb", "Chipped Sapphire"}, {"gfb", "Flawed Sapphire"}, {"gsb", "Sapphire"}, {"glb", "Flawless Sapphire"}, {"gpb", "Perfect Sapphire"},
+            {"gcg", "Chipped Emerald"}, {"gfg", "Flawed Emerald"}, {"gsg", "Emerald"}, {"glg", "Flawless Emerald"}, {"gpg", "Perfect Emerald"},
+            {"gcr", "Chipped Ruby"}, {"gfr", "Flawed Ruby"}, {"gsr", "Ruby"}, {"glr", "Flawless Ruby"}, {"gpr", "Perfect Ruby"},
+            {"gcw", "Chipped Diamond"}, {"gfw", "Flawed Diamond"}, {"gsw", "Diamond"}, {"glw", "Flawless Diamond"}, {"gpw", "Perfect Diamond"},
+            {"skc", "Chipped Skull"}, {"skf", "Flawed Skull"}, {"sku", "Skull"}, {"skl", "Flawless Skull"}, {"skz", "Perfect Skull"},
+            {"std", "Standard of Heroes"},
+            {"xa1", "Western Worldstone Shard"}, {"xa2", "Eastern Worldstone Shard"}, {"xa3", "Southern Worldstone Shard"}, {"xa4", "Deep Worldstone Shard"}, {"xa5", "Northern Worldstone Shard"},
+            {"toa", "Token of Absolution"}, {"tes", "Twisted Essence of Suffering"}, {"ceh", "Charged Essence of Hatred"}, {"bet", "Burning Essence of Terror"}, {"fed", "Festering Essence of Destruction"},
+            {"pk1", "Key of Terror"}, {"pk2", "Key of Hate"}, {"pk3", "Key of Destruction"},
+            {"dhn", "Diablo's Horn"}, {"bey", "Baal's Eye"}, {"mbr", "Mephisto's Brain"},
+            {"rvs", "Rejuvenation Potion"}, {"rvl", "Full Rejuvenation Potion"}
+        };
+
+        public static string GetBaseName(string code) => _baseNames.TryGetValue(code.Trim(), out var name) ? name : code;
     }
 
     class Program
@@ -638,7 +660,8 @@ namespace D2RStashWorker
             {
                 id = i.ItemSeed,
                 type = i.ItemCodeString,
-                type_name = i.ItemCodeString,
+                type_name = D2Data.GetBaseName(i.ItemCodeString),
+                advanced_stash_stack_size = i.AdvancedStashStackSize,
                 inv_file = imageKey,
                 image_key = imageKey,
                 inv_transform = transform?.InvTransform,
@@ -683,6 +706,7 @@ namespace D2RStashWorker
                 id = serialized.id,
                 type = serialized.type,
                 type_name = serialized.type_name,
+                advanced_stash_stack_size = serialized.advanced_stash_stack_size,
                 inv_file = serialized.inv_file,
                 image_key = serialized.image_key,
                 inv_transform = serialized.inv_transform,
@@ -714,8 +738,7 @@ namespace D2RStashWorker
 
         static void Main(string[] args)
         {
-            if (args.Length < 2)
-            {
+            if (args.Length < 2){
                 Console.Error.WriteLine("Invalid usage.");
                 Console.Error.WriteLine("Stash Remove: D2RStashWorker remove <source> <target> <itemSeed>");
                 Console.Error.WriteLine("Stash Add: D2RStashWorker add <source> <target> <itemHexBytes> <tabIdx> <x> <y>");
