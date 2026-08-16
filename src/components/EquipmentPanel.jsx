@@ -1,6 +1,7 @@
 import React from 'react';
 import ItemSprite from './ItemSprite';
 import { ItemTooltip } from './ItemTooltip';
+import { TooltipTrigger } from './TooltipTrigger';
 import { SLOT_META } from '../domain/entities/Item';
 
 export function EquipmentPanel({ charData, isSwapped, setIsSwapped, onDeposit }) {
@@ -15,12 +16,11 @@ export function EquipmentPanel({ charData, isSwapped, setIsSwapped, onDeposit })
     const item = getItemInSlot(slotId);
 
     return (
-      <div key={slotId} className={`equip-slot ${meta.cls}`}>
+      <TooltipTrigger key={slotId} className={`equip-slot ${meta.cls}`} item={item}>
         {!item && <span className="slot-label">{meta.label}</span>}
         {item && (
           <div className="slot-content">
             <ItemSprite item={item} />
-            <ItemTooltip item={item} />
             {onDeposit && (
               <button
                 className="btn-deposit-stash equip-deposit"
@@ -35,7 +35,7 @@ export function EquipmentPanel({ charData, isSwapped, setIsSwapped, onDeposit })
             )}
           </div>
         )}
-      </div>
+      </TooltipTrigger>
     );
   };
 

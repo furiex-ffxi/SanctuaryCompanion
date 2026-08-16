@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { getItemColorClass } from '../domain/entities/Item';
 import { getItemSlotCategory, resolveVaultBaseType } from '../domain/entities/VaultCatalog';
-import { ItemTooltip } from './ItemTooltip';
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
+import { TooltipTrigger } from './TooltipTrigger';
 
 export function InfiniteStashPanel({
   vaultItems,
@@ -28,10 +28,8 @@ export function InfiniteStashPanel({
   const [selectedSlot, setSelectedSlot] = useState('All');
   const [selectedSet, setSelectedSet] = useState('All');
   const [selectedQuality, setSelectedQuality] = useState('All');
-  const [activeHoverItem, setActiveHoverItem] = useState(null);
   const [backupMessage, setBackupMessage] = useState(null);
   const fileInputRef = useRef(null);
-  const tooltipRef = useRef(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -95,12 +93,6 @@ export function InfiniteStashPanel({
     setSelectedSet('All');
     setSelectedQuality('All');
     onSearchQueryChange('');
-  };
-
-  const handleMouseMove = (event) => {
-    if (!tooltipRef.current) return;
-    tooltipRef.current.style.left = `${event.clientX + 15}px`;
-    tooltipRef.current.style.top = `${event.clientY + 15}px`;
   };
 
   return (
@@ -188,7 +180,7 @@ export function InfiniteStashPanel({
               const item = entry.itemData;
               const colorClass = getItemColorClass(item);
               return (
-                <div key={entry.vaultId} className={`stash-item-row ${highlightIdentity?.vaultId === entry.vaultId ? 'item-search-highlight' : ''}`} onMouseEnter={() => setActiveHoverItem(item)} onMouseLeave={() => setActiveHoverItem(null)} onMouseMove={handleMouseMove}>
+                <TooltipTrigger key={entry.vaultId} className={`stash-item-row ${highlightIdentity?.vaultId === entry.vaultId ? 'item-search-highlight' : ''}`} item={item}>
                   <div className="col-icon icon-cell"><ItemSprite item={item} showTooltip={false} /></div>
                   <div className="col-name name-cell"><span className={`item-name-text ${colorClass}`}>{getItemDisplayName(item)}</span></div>
                   <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
@@ -199,15 +191,13 @@ export function InfiniteStashPanel({
                     <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
                     <button className="btn-remove" onClick={() => handleRemove(entry.vaultId)}>🗑️</button>
                   </div>
-                </div>
+                </TooltipTrigger>
               );
             })}
           </div>
           {vaultNextCursor && <button className="btn-d2r btn-secondary" disabled={vaultLoading} onClick={onLoadMore}>{vaultLoading ? 'Loading...' : 'Load 100 more'}</button>}
         </div>
       )}
-
-      {activeHoverItem && <div ref={tooltipRef} className="floating-tooltip-wrapper" style={{ position: 'fixed', left: '-9999px', top: '-9999px', zIndex: 9999, pointerEvents: 'none' }}><ItemTooltip item={activeHoverItem} /></div>}
     </div>
   );
 }
