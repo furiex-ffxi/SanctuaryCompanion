@@ -107,7 +107,7 @@ export const getItemDisplayName = (item) => {
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
 import WORLDSTONE_SHARD_DATA_URLS from './worldstoneShardAssets.js';
-import { getFriendlyBaseName, getItemTypeDisplayName } from '../domain/entities/ItemDisplay.js';
+import { getFriendlyBaseName, getItemTypeDisplayName, isItemEthereal } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
@@ -116,6 +116,7 @@ export default function ItemSprite({ item }) {
   const invFile = isSunderCharm ? 'invch3' : (item?.image_key || item?.inv_file)?.toLowerCase();
   const transformFilter = getDiabloColorFilter(item?.transform_color);
   const socketCount = getItemSocketCount(item);
+  const isEthereal = isItemEthereal(item);
 
   useEffect(() => {
     setImgError(false);
@@ -143,14 +144,14 @@ export default function ItemSprite({ item }) {
   // 1. Try loading image file if available and not errored
   if (invFile && !imgError) {
     return (
-      <div className="item-sprite-wrapper" style={{ borderColor: qualityColor }}>
+      <div className={`item-sprite-wrapper${isEthereal ? ' ethereal-item-sprite' : ''}`} style={{ borderColor: qualityColor }}>
         <div className="item-sprite-container">
           <img
             src={imagePath}
             alt={name}
             className="item-sprite-img"
             decoding="async"
-            style={transformFilter ? { filter: transformFilter } : undefined}
+            style={{ ...(transformFilter ? { filter: transformFilter } : {}), ...(isEthereal ? { opacity: 0.35 } : {}) }}
             onError={() => setImgError(true)}
           />
           {socketCount > 0 && (
@@ -164,7 +165,7 @@ export default function ItemSprite({ item }) {
 
   // 2. Dynamic Fallback Graphic Engine
   return (
-    <div className="item-sprite-wrapper fallback-sprite" style={{ borderColor: qualityColor }}>
+    <div className={`item-sprite-wrapper fallback-sprite${isEthereal ? ' ethereal-item-sprite' : ''}`} style={{ borderColor: qualityColor }}>
       {isRune ? (
         <div className="rune-sprite">
           <div className="rune-stone">

@@ -654,6 +654,10 @@ header {
   display: contents;
 }
 
+.ethereal-item-sprite.fallback-sprite > :first-child {
+  opacity: 0.35;
+}
+
 .item-sprite-img {
   display: block;
   width: auto;

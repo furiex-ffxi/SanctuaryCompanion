@@ -200,6 +200,22 @@ export function groupItemStats(attrs) {
   return res;
 }
 
+function hasEtherealRawFlag(rawBytesHex) {
+  const hex = typeof rawBytesHex === 'string' ? rawBytesHex.trim() : '';
+  if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) return false;
+
+  // D2R items begin with flags; legacy JM items begin with 4a4d and
+  // store flags immediately after that two-byte marker.
+  const flagsHex = /^4a4d/i.test(hex) ? hex.slice(4, 12) : hex.slice(0, 8);
+  if (flagsHex.length !== 8) return false;
+  const flags = Number.parseInt(flagsHex.match(/../g).reverse().join(''), 16);
+  return Number.isFinite(flags) && (flags & 0x00400000) !== 0;
+}
+
+export function isItemEthereal(item = {}) {
+  return Boolean(item.ethereal || item.is_ethereal || hasEtherealRawFlag(item.rawBytesHex));
+}
+
 export function getItemDetails(item = {}) {
   const details = [];
   if (item.defense_rating != null || item.defense != null) details.push(`Defense: ${item.defense_rating ?? item.defense}`);
@@ -208,7 +224,7 @@ export function getItemDetails(item = {}) {
     details.push(`Durability: ${item.current_durability ?? item.durability}${max != null ? ` of ${max}` : ''}`);
   }
   if (item.quantity != null) details.push(`Quantity: ${item.quantity}`);
-  if (item.ethereal || item.is_ethereal) details.push('Ethereal');
+  if (isItemEthereal(item)) details.push('Ethereal');
   if (item.item_level != null || item.level != null) details.push(`Item Level: ${item.item_level ?? item.level}`);
   return details;
 }

@@ -29,6 +29,10 @@ test('decodes packed skill-tree layers instead of treating them as random tree i
   assert.equal(formatSkillTab(2, 2), '+2 to Amazon Passive and Magic Skills');
   assert.equal(getSkillTabName(999), null);
 });
+test('recovers ethereal status from legacy raw item bytes', () => {
+  assert.deepEqual(getItemDetails({ rawBytesHex: '00004000' }), ['Ethereal']);
+  assert.deepEqual(getItemDetails({ rawBytesHex: '4a4d00004000' }), ['Ethereal']);
+});
 test('shows practical base item details in stash tooltips', () => {
   assert.deepEqual(getItemDetails({ defense: 120, durability: 10, max_durability: 14, ethereal: true, item_level: 85 }), [
     'Defense: 120', 'Durability: 10 of 14', 'Ethereal', 'Item Level: 85',
