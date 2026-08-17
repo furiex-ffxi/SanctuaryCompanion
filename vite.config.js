@@ -8,6 +8,7 @@ import crypto from 'node:crypto'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 import { safeSavePath } from './server/savePath.js'
+import { rejectWhileD2RRunning } from './server/processLock.js'
 
 import { constants } from './src/domain/entities/static_constant_data.js'
 
@@ -127,18 +128,7 @@ function d2sWatcherPlugin() {
             const { file, item } = JSON.parse(body)
             if (!item) throw new Error('Missing item object in request body')
             
-            // Enforce process locks: Check if Diablo II Resurrected is running
-            const { execSync } = require('child_process')
-            let isRunning = false
-            try {
-              const stdout = execSync('tasklist /FI "IMAGENAME eq D2R.exe"').toString()
-              isRunning = stdout.toLowerCase().includes('d2r.exe')
-            } catch (err) {}
-            if (isRunning) {
-              res.writeHead(423, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ success: false, error: 'Diablo II Resurrected is running! File is locked.' }))
-              return
-            }
+            if (rejectWhileD2RRunning(res)) return
 
             if (!file) throw new Error('Missing file parameter')
             const targetFile = file
@@ -195,22 +185,12 @@ function d2sWatcherPlugin() {
         req.on('end', async () => {
           try {
             const { file, item } = JSON.parse(body)
+            if (rejectWhileD2RRunning(res)) return
             if (!file) throw new Error('Missing file parameter')
             const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
-            // Enforce process locks: Check if Diablo II Resurrected is running
-            const { execSync } = require('child_process')
-            let isRunning = false
-            try {
-              const stdout = execSync('tasklist /FI "IMAGENAME eq D2R.exe"').toString()
-              isRunning = stdout.toLowerCase().includes('d2r.exe')
-            } catch (err) {}
-            if (isRunning) {
-              res.writeHead(423, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ success: false, error: 'Diablo II Resurrected is running! File is locked.' }))
-              return
-            }
+            if (rejectWhileD2RRunning(res)) return
 
             // Write modified d2s to backup directory first
             const backupDir = path.join(SAVES_DIR, 'backups')
@@ -258,18 +238,7 @@ function d2sWatcherPlugin() {
           try {
             const { file, item } = JSON.parse(body)
             
-            // Enforce process locks: Check if Diablo II Resurrected is running
-            const { execSync } = require('child_process')
-            let isRunning = false
-            try {
-              const stdout = execSync('tasklist /FI "IMAGENAME eq D2R.exe"').toString()
-              isRunning = stdout.toLowerCase().includes('d2r.exe')
-            } catch (err) {}
-            if (isRunning) {
-              res.writeHead(423, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ success: false, error: 'Diablo II Resurrected is running! File is locked.' }))
-              return
-            }
+            if (rejectWhileD2RRunning(res)) return
 
             if (!file) throw new Error('Missing file parameter')
             const targetFile = file
@@ -397,6 +366,7 @@ function d2sWatcherPlugin() {
         req.on('end', async () => {
           try {
             const { file, item } = JSON.parse(body)
+            if (rejectWhileD2RRunning(res)) return
             if (!file) throw new Error('Missing file parameter')
             const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
@@ -498,6 +468,7 @@ function d2sWatcherPlugin() {
       // Expose endpoint to trigger backup of all save files (.d2s & .d2i)
       server.middlewares.use('/__d2s_backup', async (_req, res) => {
         try {
+          if (rejectWhileD2RRunning(res)) return
           if (!fs.existsSync(SAVES_DIR)) {
             res.writeHead(404); res.end(JSON.stringify({ error: 'SAVES_DIR not found' })); return
           }

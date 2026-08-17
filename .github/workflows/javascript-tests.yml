@@ -1,0 +1,30 @@
+name: JavaScript tests
+
+on:
+  push:
+  pull_request:
+
+env:
+  D2R_SHARP_ROOT: ${{ github.workspace }}/D2SSharp
+  D2R_FIXTURES_ROOT: ${{ github.workspace }}/D2SSharp/src/D2SSharp.Tests/Resources/105
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned D2SSharp source
+        uses: actions/checkout@v4
+        with:
+          repository: ResurrectedTrader/D2SSharp
+          ref: f26f21897db5c0075e74defca1e31d1930080750
+          path: D2SSharp
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+      - run: npm test

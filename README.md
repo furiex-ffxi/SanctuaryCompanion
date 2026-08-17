@@ -40,13 +40,19 @@ Publish the sole runtime worker output with:
 .\scripts\build-d2r-worker.ps1
 ```
 
-Run its integration test with:
+Run all JavaScript tests, including the worker integration suite, with:
+
+```powershell
+npm test
+```
+
+The worker integration suite can also be run directly with:
 
 ```powershell
 .\scripts\test-d2r-worker.ps1
 ```
 
-The test uses D2R `.d2s`/`.d2i` fixtures only after copying them into a uniquely named `Saved Games/Diablo II Resurrected/backups/E2E_BACKUP_TEST_TEMP_*` directory. It tests round trips, save checksum/file-size validity, add/remove operations, and repeated parsing; the directory is removed in `finally` on completion or failure.
+The test uses D2R `.d2s`/`.d2i` fixtures only after copying them into a uniquely named `Saved Games/Diablo II Resurrected/backups/D2R_JS_TEST_TEMP_*` directory. It tests round trips, save checksum/file-size validity, add/remove operations, and repeated parsing; the directory is removed in `finally` on completion or failure.
 
 ## Infinite Stash persistence and recovery
 

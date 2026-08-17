@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { cp, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
@@ -10,7 +10,8 @@ import { describe, expect, test } from 'vitest';
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const worker = process.env.D2R_WORKER || path.join(repoRoot, 'server', 'bin', 'D2RStashWorker.exe');
-const fixtures = path.resolve(repoRoot, '..', 'D2SSharp', 'src', 'D2SSharp.Tests', 'Resources', '105');
+const d2rSharpRoot = process.env.D2R_SHARP_ROOT || path.resolve(repoRoot, '..', 'D2SSharp');
+const fixtures = process.env.D2R_FIXTURES_ROOT || path.join(d2rSharpRoot, 'src', 'D2SSharp.Tests', 'Resources', '105');
 const savesRoot = process.env.D2R_SAVES_ROOT || path.join(os.homedir(), 'Saved Games', 'Diablo II Resurrected');
 const stressIterations = Number(process.env.D2R_STRESS_ITERATIONS || 20);
 const skippedFields = new Set(['rawBytesHex', 'magic_attributes', 'runeword_attributes', 'set_attributes', 'displayed_combined_magic_attributes']);
@@ -34,7 +35,7 @@ function assertImageKeys(value, sourceName) {
   });
 }
 function requireAsset(assetRoot, imageKey) {
-  return path.isAbsolute(path.join(assetRoot, `${imageKey}.png`));
+  return existsSync(path.join(assetRoot, `${imageKey}.png`));
 }
 function assertLevelFields(value, sourceName) {
   walk(value, (item) => {
