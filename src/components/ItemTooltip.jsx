@@ -1,6 +1,6 @@
 import React from 'react';
 import { getItemDisplayName, getItemSocketCount } from './ItemSprite';
-import { getItemTypeDisplayName, formatStat, groupItemStats } from '../domain/entities/ItemDisplay.js';
+import { getItemTypeDisplayName, getItemDetails, formatStat, groupItemStats } from '../domain/entities/ItemDisplay.js';
 import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
 
 export const ItemTooltip = ({ item }) => {
@@ -12,6 +12,7 @@ export const ItemTooltip = ({ item }) => {
   const socketCount = getItemSocketCount(item);
   const levelRequirement = getItemLevelRequirement(item);
   const itemLevel = getItemLevel(item);
+  const itemDetails = getItemDetails(item).filter((detail) => !detail.startsWith('Item Level:'));
 
   const rawAttrs = item.displayed_combined_magic_attributes
     || item.displayed_magic_attributes
@@ -41,6 +42,9 @@ export const ItemTooltip = ({ item }) => {
           {levelRequirement > 0 ? 'Required Level: ' + levelRequirement : 'Not equippable'}
         </div>
         {itemLevel != null && <div className="tooltip-stat-item">Item Level: {itemLevel}</div>}
+        {itemDetails.map((detail) => (
+          <div key={detail} className="tooltip-stat-item">{detail}</div>
+        ))}
         {socketCount > 0 && (
           <div className="tooltip-stat-item white">
             [{socketCount} sockets]
