@@ -1,9 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { getItemColorClass } from '../domain/entities/Item';
 import { getItemSlotCategory, resolveVaultBaseType } from '../domain/entities/VaultCatalog';
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { TooltipTrigger } from './TooltipTrigger';
+import { getVirtualRange } from '../domain/virtualList';
+
+const VIRTUAL_ROW_HEIGHT = 86;
+const VIRTUAL_OVERSCAN = 8;
+
 
 export function InfiniteStashPanel({
   vaultItems,
@@ -29,10 +34,22 @@ export function InfiniteStashPanel({
   const [selectedSet, setSelectedSet] = useState('All');
   const [selectedQuality, setSelectedQuality] = useState('All');
   const [backupMessage, setBackupMessage] = useState(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listViewportHeight, setListViewportHeight] = useState(600);
   const fileInputRef = useRef(null);
+  const listBodyRef = useRef(null);
+  const listHeaderRef = useRef(null);
+  const listScrollTopRef = useRef(0);
+  const scrollFrameRef = useRef(null);
+  const loadMoreTriggerRef = useRef(null);
+  const loadMoreRef = useRef(null);
+  const backupTimerRef = useRef(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
+      listScrollTopRef.current = 0;
+      setListScrollTop(0);
+      if (listBodyRef.current) listBodyRef.current.scrollTop = 0;
       onQuery({
         category: selectedCategory,
         slot: selectedSlot,
@@ -43,6 +60,36 @@ export function InfiniteStashPanel({
     }, 250);
     return () => clearTimeout(timeout);
   }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, onQuery]);
+
+  useEffect(() => () => {
+    clearTimeout(backupTimerRef.current);
+    if (scrollFrameRef.current != null) cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
+  useEffect(() => {
+    const root = listBodyRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return undefined;
+    const resizeObserver = new ResizeObserver(([entry]) => setListViewportHeight(entry.contentRect.height));
+    resizeObserver.observe(root);
+    setListViewportHeight(root.clientHeight);
+    return () => resizeObserver.disconnect();
+  }, [vaultItems.length]);
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    const root = listBodyRef.current;
+    if (!sentinel || !root || !vaultNextCursor) return undefined;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !vaultLoading && loadMoreTriggerRef.current !== vaultNextCursor) {
+          loadMoreTriggerRef.current = vaultNextCursor;
+          Promise.resolve(onLoadMore?.()).catch(() => { loadMoreTriggerRef.current = null; });
+        }
+      },
+      { root, rootMargin: '240px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [vaultNextCursor, vaultLoading, onLoadMore]);
 
   const handleRemove = async (vaultId) => {
     if (isGameRunning) {
@@ -78,15 +125,39 @@ export function InfiniteStashPanel({
   };
 
   const handleTriggerBackup = async () => {
-    const result = await onBackupTrigger?.();
-    if (result?.success) {
-      setBackupMessage(`Safe backup created in backups/${result.timestamp}`);
-      setTimeout(() => setBackupMessage(null), 6000);
-    } else {
-      alert(`Backup error: ${result?.error || 'Unknown error'}`);
+    try {
+      const result = await onBackupTrigger?.();
+      if (result?.success) {
+        setBackupMessage(`Safe backup created in backups/${result.timestamp}`);
+        clearTimeout(backupTimerRef.current);
+        backupTimerRef.current = setTimeout(() => setBackupMessage(null), 6000);
+      } else {
+        alert(`Backup error: ${result?.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert(`Backup error: ${error.message}`);
     }
   };
 
+  const { start: virtualStart, end: virtualEnd } = getVirtualRange(
+    vaultItems.length,
+    listScrollTop,
+    listViewportHeight,
+    VIRTUAL_ROW_HEIGHT,
+    VIRTUAL_OVERSCAN,
+  );
+  const virtualItems = useMemo(() => vaultItems.slice(virtualStart, virtualEnd), [vaultItems, virtualStart, virtualEnd]);
+  const handleListScroll = (event) => {
+    const target = event.currentTarget;
+    listScrollTopRef.current = target.scrollTop;
+    if (listHeaderRef.current) listHeaderRef.current.scrollLeft = target.scrollLeft;
+    if (scrollFrameRef.current == null) {
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollFrameRef.current = null;
+        setListScrollTop(listScrollTopRef.current);
+      });
+    }
+  };
   const resetFilters = () => {
     setSelectedCategory('All');
     setSelectedSlot('All');
@@ -113,7 +184,8 @@ export function InfiniteStashPanel({
       </div>
 
       {backupMessage && <div className="backup-banner-success">{backupMessage}</div>}
-      {vaultError && <div className="game-running-warning-banner">Vault error: {vaultError}</div>}
+      {vaultError && <div className="game-running-warning-banner" role="alert">Vault error: {vaultError}</div>}
+      <div className="stash-status" role="status" aria-live="polite">{vaultLoading ? (vaultItems.length ? `Loading more items… ${vaultItems.length} shown` : "Loading vault…") : ""}</div>
 
       <div className="stash-toolbar">
         <div className="filter-selects">
@@ -132,29 +204,29 @@ export function InfiniteStashPanel({
             </div>
           </div>
           <div className="filter-group">
-            <label>Category:</label>
-            <select className="d2r-select" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+            <label htmlFor="infinite-vault-category">Category:</label>
+            <select id="infinite-vault-category" className="d2r-select" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
               <option value="All">All Categories</option>
               {vaultFacets.categories.map((category) => <option key={category}>{category}</option>)}
             </select>
           </div>
           <div className="filter-group">
-            <label>Slot:</label>
-            <select className="d2r-select" value={selectedSlot} onChange={(event) => setSelectedSlot(event.target.value)}>
+            <label htmlFor="infinite-vault-slot">Slot:</label>
+            <select id="infinite-vault-slot" className="d2r-select" value={selectedSlot} onChange={(event) => setSelectedSlot(event.target.value)}>
               <option value="All">All Slots</option>
               {vaultFacets.slots.map((slot) => <option key={slot}>{slot}</option>)}
             </select>
           </div>
           <div className="filter-group">
-            <label>Set Name:</label>
-            <select className="d2r-select" value={selectedSet} onChange={(event) => setSelectedSet(event.target.value)}>
+            <label htmlFor="infinite-vault-set">Set Name:</label>
+            <select id="infinite-vault-set" className="d2r-select" value={selectedSet} onChange={(event) => setSelectedSet(event.target.value)}>
               <option value="All">All Sets ({vaultFacets.sets.length})</option>
               {vaultFacets.sets.map((setName) => <option key={setName}>{setName}</option>)}
             </select>
           </div>
           <div className="filter-group">
-            <label>Rarity:</label>
-            <select className="d2r-select" value={selectedQuality} onChange={(event) => setSelectedQuality(event.target.value)}>
+            <label htmlFor="infinite-vault-quality">Rarity:</label>
+            <select id="infinite-vault-quality" className="d2r-select" value={selectedQuality} onChange={(event) => setSelectedQuality(event.target.value)}>
               <option value="All">All Qualities</option>
               <option value="7">Unique</option><option value="5">Set</option><option value="6">Rare</option>
               <option value="4">Magic</option><option value="2">Normal</option>
@@ -170,13 +242,14 @@ export function InfiniteStashPanel({
         </div>
       ) : (
         <div className="stash-list-view">
-          <div className="stash-list-header">
+          <div className="stash-list-header" ref={listHeaderRef}>
             <span className="col-icon">Icon</span><span className="col-name">Item Name</span>
             <span className="col-type">Type & Slot</span><span className="col-set">Set / Rarity</span>
             <span className="col-source">Source Save</span><span className="col-actions">Actions</span>
           </div>
-          <div className="stash-list-body">
-            {vaultItems.map((entry) => {
+          <div className="stash-list-body" ref={listBodyRef} onScroll={handleListScroll}>
+                        <div className="stash-virtual-spacer" style={{ height: `${virtualStart * VIRTUAL_ROW_HEIGHT}px` }} aria-hidden="true" />
+            {virtualItems.map((entry) => {
               const item = entry.itemData;
               const colorClass = getItemColorClass(item);
               return (
@@ -189,13 +262,21 @@ export function InfiniteStashPanel({
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6 }}>
                     <button className="btn-d2r btn-secondary" onClick={() => onWithdraw?.(entry.vaultId, item)}>👤 Personal Stash</button>
                     <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
-                    <button className="btn-remove" onClick={() => handleRemove(entry.vaultId)}>🗑️</button>
+                    <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑️</button>
                   </div>
                 </TooltipTrigger>
               );
             })}
+            <div className="stash-virtual-spacer" style={{ height: `${(vaultItems.length - virtualEnd) * VIRTUAL_ROW_HEIGHT}px` }} aria-hidden="true" />
+          {vaultNextCursor && (
+            <div ref={loadMoreRef} className="stash-load-more" aria-live="polite">
+              <button className="btn-d2r btn-secondary" disabled={vaultLoading} onClick={() => Promise.resolve(onLoadMore?.()).catch(() => {})}>
+                {vaultLoading ? 'Loading...' : 'Load more items'}
+              </button>
+            </div>
+          )}
           </div>
-          {vaultNextCursor && <button className="btn-d2r btn-secondary" disabled={vaultLoading} onClick={onLoadMore}>{vaultLoading ? 'Loading...' : 'Load 100 more'}</button>}
+          {!vaultNextCursor && vaultItems.length > 0 && <div className="stash-end-message" role="status" aria-live="polite">Showing all {vaultTotal} matching items</div>}
         </div>
       )}
     </div>

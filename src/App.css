@@ -1268,10 +1268,11 @@ header {
   background: rgba(8, 6, 4, 0.8);
   border: 1px solid var(--color-border-dim);
   border-radius: 4px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .stash-list-header {
+  min-width: 900px;
   display: grid;
   grid-template-columns: 70px 2fr 1.2fr 1.5fr 1.2fr 100px;
   padding: 12px 16px;
@@ -1281,16 +1282,49 @@ header {
   font-size: 0.85rem;
   color: var(--color-border-gold);
   font-weight: bold;
+  overflow: hidden;
 }
 
 .stash-list-body {
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   max-height: 65vh;
-  overflow-y: auto;
+  overflow: auto;
 }
 
+.stash-virtual-spacer {
+  flex: 0 0 auto;
+  width: 1px;
+  pointer-events: none;
+}
+.stash-status {
+  min-height: 1.2em;
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  padding: 4px 0;
+}
+.stash-load-more,
+.stash-end-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 52px;
+  padding: 8px 16px;
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+}
+
+.stash-load-more .btn-d2r {
+  min-width: 160px;
+}
 .stash-item-row {
+  min-width: 900px;
+  min-height: 86px;
+  height: 86px;
+  box-sizing: border-box;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 70px 2fr 1.2fr 1.5fr 1.2fr 100px;
   align-items: center;
