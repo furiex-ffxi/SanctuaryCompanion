@@ -79,6 +79,12 @@ test('supports stable pagination, filters, search, and soft withdrawal', async (
     const second = repository.list({ limit: 100, cursor: first.nextCursor })
     const third = repository.list({ limit: 100, cursor: second.nextCursor })
     assert.equal(first.items.length, 100)
+    assert.throws(() => repository.list({ cursor: 'not-a-cursor' }), /Invalid vault pagination cursor/)
+    assert.throws(() => repository.list({ slot: 'Ring', cursor: first.nextCursor }), /mismatched vault pagination cursor/)
+    const cursorPayload = JSON.parse(Buffer.from(first.nextCursor, 'base64url').toString('utf8'))
+    cursorPayload.vaultId = ''
+    const emptyIdCursor = Buffer.from(JSON.stringify(cursorPayload)).toString('base64url')
+    assert.throws(() => repository.list({ cursor: emptyIdCursor }), /mismatched vault pagination cursor/)
     assert.equal(second.items.length, 100)
     assert.equal(third.items.length, 25)
     assert.equal(new Set([...first.items, ...second.items, ...third.items].map((item) => item.vaultId)).size, 225)

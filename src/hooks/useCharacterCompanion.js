@@ -24,6 +24,11 @@ export function useCharacterCompanion() {
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultError, setVaultError] = useState(null);
   const vaultFiltersRef = useRef({});
+  const vaultRequestRef = useRef(0);
+  const vaultLoadingRef = useRef(false);
+  const vaultMountedRef = useRef(true);
+  const sharedRequestRef = useRef(0);
+  const facetsRequestRef = useRef(0);
   const [sharedStash, setSharedStash] = useState(null);
   const [sharedStashTab, setSharedStashTab] = useState(0);
   const [sharedStashLoading, setSharedStashLoading] = useState(false);
@@ -32,24 +37,33 @@ export function useCharacterCompanion() {
 
   const queryVault = useCallback(async (filters = {}, { append = false, cursor = null } = {}) => {
     vaultFiltersRef.current = filters;
+    if (append && vaultLoadingRef.current) return null;
+    const requestId = ++vaultRequestRef.current;
+    vaultLoadingRef.current = true;
     setVaultLoading(true);
     setVaultError(null);
     try {
       const result = await InfiniteStashAdapter.list(filters, { cursor, limit: 100 });
-      setVaultItems((current) => append ? [...current, ...result.items] : result.items);
+      if (!vaultMountedRef.current || requestId !== vaultRequestRef.current) return result;
+      setVaultItems((current) => append ? [...current, ...result.items].slice(0, 500) : result.items);
       setVaultTotal(result.total);
       setVaultNextCursor(result.nextCursor);
       return result;
     } catch (err) {
-      setVaultError(err.message);
+      if (vaultMountedRef.current && requestId === vaultRequestRef.current) setVaultError(err.message);
       throw err;
     } finally {
-      setVaultLoading(false);
+      if (vaultMountedRef.current && requestId === vaultRequestRef.current) {
+        vaultLoadingRef.current = false;
+        setVaultLoading(false);
+      }
     }
   }, []);
 
   const refreshVaultFacets = useCallback(async () => {
+    const requestId = ++facetsRequestRef.current;
     const facets = await InfiniteStashAdapter.facets();
+    if (!vaultMountedRef.current || requestId !== facetsRequestRef.current) return facets;
     setVaultFacets(facets);
     return facets;
   }, []);
@@ -61,7 +75,7 @@ export function useCharacterCompanion() {
   }, [queryVault, refreshVaultFacets]);
 
   const loadMoreVault = useCallback(() => {
-    if (!vaultNextCursor || vaultLoading) return Promise.resolve();
+    if (!vaultNextCursor || vaultLoading || vaultLoadingRef.current) return Promise.resolve();
     return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor });
   }, [queryVault, vaultNextCursor, vaultLoading]);
 
@@ -71,10 +85,12 @@ export function useCharacterCompanion() {
   }, [refreshVault]);
 
   useEffect(() => {
-    Promise.all([queryVault(), refreshVaultFacets()]).catch((err) => {
+    refreshVaultFacets().catch((err) => {
       console.error('Failed to load Infinite Stash:', err);
     });
-  }, [queryVault, refreshVaultFacets]);
+  }, [refreshVaultFacets]);
+
+  useEffect(() => () => { vaultMountedRef.current = false; }, []);
 
   // Poll server for D2R process status
   useEffect(() => {
@@ -100,16 +116,17 @@ export function useCharacterCompanion() {
 
   // Refresh shared stash file from server (.d2i)
   const refreshSharedStash = useCallback(async (filename) => {
+    const requestId = ++sharedRequestRef.current;
     setSharedStashLoading(true);
     setSharedStashError(null);
     try {
       const stashData = await D2SParserAdapter.fetchSharedStash(filename || 'ModernSharedStashSoftCoreV2.d2i');
-      setSharedStash(stashData);
+      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStash(stashData);
     } catch (err) {
       console.error('Shared stash fetch error:', err);
-      setSharedStashError(err.message);
+      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashError(err.message);
     } finally {
-      setSharedStashLoading(false);
+      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashLoading(false);
     }
   }, []);
 
@@ -310,6 +327,7 @@ export function useCharacterCompanion() {
   useEffect(() => {
     D2SParserAdapter.fetchList()
       .then((files) => {
+        if (!vaultMountedRef.current) return;
         setSaveFiles(files);
         const preferred = files.find((f) => f.toLowerCase().includes('furisorc')) || files[0];
         if (preferred) setActiveFile(preferred);

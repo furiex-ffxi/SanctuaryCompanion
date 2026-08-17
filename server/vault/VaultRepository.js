@@ -17,19 +17,37 @@ function operationId() {
   return crypto.randomUUID()
 }
 
-function decodeCursor(cursor) {
-  if (!cursor) return null
-  try {
-    const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
-    if (typeof decoded.stashedAt !== 'string' || typeof decoded.vaultId !== 'string') return null
-    return decoded
-  } catch {
-    return null
+function cursorSignature(options = {}) {
+  const filters = {
+    q: options.q?.trim().toLowerCase() || '',
+    slot: options.slot || 'All',
+    category: options.category || 'All',
+    setName: options.setName || 'All',
+    quality: options.quality || 'All',
   }
+  return crypto.createHash('sha256').update(JSON.stringify(filters)).digest('base64url')
 }
 
-function encodeCursor(row) {
-  return Buffer.from(JSON.stringify({ stashedAt: row.stashed_at, vaultId: row.vault_id })).toString('base64url')
+function decodeCursor(cursor, signature) {
+  if (!cursor) return null
+  let decoded
+  try {
+    decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+  } catch {
+    const error = new Error('Invalid vault pagination cursor')
+    error.statusCode = 400
+    throw error
+  }
+  if (typeof decoded.stashedAt !== 'string' || !decoded.stashedAt || typeof decoded.vaultId !== 'string' || !decoded.vaultId.trim() || decoded.signature !== signature) {
+    const error = new Error('Invalid or mismatched vault pagination cursor')
+    error.statusCode = 400
+    throw error
+  }
+  return decoded
+}
+
+function encodeCursor(row, signature) {
+  return Buffer.from(JSON.stringify({ stashedAt: row.stashed_at, vaultId: row.vault_id, signature })).toString('base64url')
 }
 
 function hydrateRow(row) {
@@ -263,7 +281,8 @@ export class VaultRepository {
 
   list(options = {}) {
     const limit = Math.min(Math.max(Number(options.limit) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
-    const cursor = decodeCursor(options.cursor)
+    const signature = cursorSignature(options)
+    const cursor = decodeCursor(options.cursor, signature)
     const conditions = ["status = 'active'"]
     const parameters = {}
 
@@ -300,7 +319,7 @@ export class VaultRepository {
     return {
       items: pageRows.map(hydrateRow),
       total: count,
-      nextCursor: hasMore ? encodeCursor(pageRows.at(-1)) : null,
+      nextCursor: hasMore ? encodeCursor(pageRows.at(-1), signature) : null,
     }
   }
 
