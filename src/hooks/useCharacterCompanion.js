@@ -97,6 +97,11 @@ export function useCharacterCompanion() {
     return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor });
   }, [queryVault, vaultNextCursor, vaultLoading]);
 
+  const backfillVaultItemFields = useCallback(async () => {
+    const result = await InfiniteStashAdapter.backfillItemFields();
+    await refreshVault();
+    return result;
+  }, [refreshVault]);
   const removeItemFromVault = useCallback(async (vaultId, reason = 'delete') => {
     await InfiniteStashAdapter.remove(vaultId, reason);
     await refreshVault();
@@ -486,6 +491,7 @@ export function useCharacterCompanion() {
     refreshVault,
     loadMoreVault,
     removeItemFromVault,
+    backfillVaultItemFields,
     depositItemToVault,
     withdrawItemFromVault,
     withdrawItemToSharedStash,

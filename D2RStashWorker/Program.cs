@@ -755,6 +755,7 @@ namespace D2RStashWorker
                 Console.Error.WriteLine("Save Remove: D2RStashWorker remove_save <source> <target> <itemSeed>");
                 Console.Error.WriteLine("Save Add: D2RStashWorker add_save <source> <target> <itemHexBytes> <x> <y>");
                 Console.Error.WriteLine("Save Parse: D2RStashWorker parse_save <source>");
+                Console.Error.WriteLine("Item Parse: D2RStashWorker parse_item <itemHex> [version]");
                 Environment.Exit(1);
             }
 
@@ -763,6 +764,18 @@ namespace D2RStashWorker
 
             try
             {
+                if (mode == "parse_item")
+                {
+                    byte[] itemBytes = Convert.FromHexString(sourceFile);
+                    uint itemVersion = 105;
+                    if (args.Length >= 3 && !uint.TryParse(args[2], out itemVersion))
+                        throw new InvalidDataException("Invalid item format version.");
+                    var reader = new D2SSharp.IO.BitReader(itemBytes);
+                    var item = Item.Read(ref reader, D2SSharp.Data.TxtFileExternalData.Default, itemVersion);
+                    Console.WriteLine(JsonSerializer.Serialize(SerializeItem(item, itemVersion, 0)));
+                    Environment.Exit(0);
+                }
+
                 byte[] bytes = File.ReadAllBytes(sourceFile);
 
                 if (mode == "parse_save")
