@@ -28,7 +28,6 @@ export const InfiniteStashAdapter = {
   async import(entries) {
     return parseResponse(await fetch('/__vault/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entries) }))
   },
-  async backfillItemFields() { return parseResponse(await fetch('/__vault/backfill-item-fields', { method: 'POST' })) },
   async export() {
     const response = await fetch('/__vault/export')
     if (!response.ok) return parseResponse(response)

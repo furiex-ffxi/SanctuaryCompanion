@@ -83,7 +83,6 @@ function MainContent() {
     withdrawItemFromVault,
     withdrawItemToSharedStash,
     triggerSaveBackup,
-    backfillVaultItemFields,
     sharedStash,
     sharedStashLoading,
     sharedStashError,
@@ -279,7 +278,6 @@ function MainContent() {
           onLoadMore={loadMoreVault}
           onRemove={removeItemFromVault}
           onBackupTrigger={triggerSaveBackup}
-          onBackfill={backfillVaultItemFields}
           isGameRunning={isGameRunning}
           onWithdraw={withdrawItemFromVault}
           onWithdrawShared={withdrawItemToSharedStash}

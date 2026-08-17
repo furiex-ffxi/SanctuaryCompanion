@@ -22,7 +22,6 @@ export function InfiniteStashPanel({
   onRemove,
   onRefresh,
   onBackupTrigger,
-  onBackfill,
   isGameRunning,
   onWithdraw,
   onWithdrawShared,
@@ -125,19 +124,6 @@ export function InfiniteStashPanel({
     }
   };
 
-  const handleBackfill = async () => {
-    if (isGameRunning) {
-      alert('Cannot repair Infinite Stash details while Diablo II: Resurrected is running.');
-      return;
-    }
-    try {
-      const result = await onBackfill?.();
-      alert(`Repaired ${result?.updatedCount || 0} Infinite Stash item details.`);
-    } catch (error) {
-      alert(`Backfill failed: ${error.message}`);
-    }
-  };
-
   const handleTriggerBackup = async () => {
     try {
       const result = await onBackupTrigger?.();
@@ -190,7 +176,6 @@ export function InfiniteStashPanel({
           </span>
         </div>
         <div className="stash-actions">
-          <button className="btn-d2r btn-secondary" onClick={handleBackfill}>Repair item details</button>
           <button className="btn-d2r btn-secondary" onClick={handleTriggerBackup}>🛡️ Backup Save Files</button>
           <button className="btn-d2r btn-secondary" onClick={() => InfiniteStashAdapter.export().catch((error) => alert(error.message))}>💾 Export Vault JSON</button>
           <button className="btn-d2r btn-secondary" onClick={() => fileInputRef.current?.click()}>📥 Import Vault JSON</button>

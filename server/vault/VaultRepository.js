@@ -429,34 +429,6 @@ export class VaultRepository {
     return { addedCount }
   }
 
-  async backfillItemFields(rehydrate, { id = operationId() } = {}) {
-    if (typeof rehydrate !== 'function') throw new Error('Vault item rehydrator is required')
-    const rows = this.db.prepare("SELECT * FROM vault_items WHERE status = 'active' AND json_extract(item_json, '$.rawBytesHex') IS NOT NULL AND (json_type(item_json, '$.defense') IS NULL OR json_type(item_json, '$.max_durability') IS NULL OR json_type(item_json, '$.durability') IS NULL)").all()
-    if (rows.length === 0) return { updatedCount: 0, skippedCount: 0 }
-
-    const updates = []
-    for (const row of rows) {
-      const current = hydrateRow(row)
-      const itemData = await rehydrate(current.itemData)
-      if (!itemData || typeof itemData !== 'object') throw new Error(`Backfill returned invalid item for ${row.vault_id}`)
-      updates.push({ current, updated: { ...current, itemData } })
-    }
-
-    await this.ensureCheckpoint()
-    this.#appendJournal({
-      operationId: id,
-      phase: 'intent',
-      operation: 'backfill_item_fields',
-      entries: updates.map(({ current, updated }) => ({ vaultId: current.vaultId, before: current.itemData, after: updated.itemData })),
-    })
-    const apply = this.db.transaction(() => {
-      for (const { updated } of updates) this.#insertEntry(updated, updated.status, this.now().toISOString())
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'backfill_item_fields', this.now().toISOString())
-    })
-    apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'backfill_item_fields', updatedCount: updates.length })
-    return { updatedCount: updates.length, skippedCount: 0 }
-  }
   exportEntries() {
     return this.db.prepare("SELECT * FROM vault_items WHERE status = 'active' ORDER BY stashed_at DESC, vault_id DESC").all().map(hydrateRow)
   }

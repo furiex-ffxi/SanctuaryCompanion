@@ -51,13 +51,11 @@ function assertFriendlySkillDescriptions(value, sourceName) {
     if (item.name === 'SingleSkill') expect(item.description, sourceName).not.toMatch(/^SingleSkill:/);
   });
 }
-async function assertArmorDetails(parsed, sourceName) {
+function assertArmorDetails(parsed, sourceName) {
   const armor = parsed.items.find((item) => item.type === 'uar');
   expect(armor, `${sourceName}: Sacred Armor fixture`).toBeDefined();
   expect(armor).toMatchObject({ defense: expect.any(Number), max_durability: expect.any(Number), durability: expect.any(Number) });
   expect(armor.defense).toBeGreaterThan(0);
-  const rehydrated = parse(await runWorker(['parse_item', armor.rawBytesHex, '105']));
-  expect(rehydrated).toMatchObject({ defense: armor.defense, max_durability: armor.max_durability, durability: armor.durability });
 }
 function parse(output) { return JSON.parse(output); }
 
@@ -85,7 +83,7 @@ describe('D2R worker integration contract', () => {
           const parsed = parse(await runWorker(['parse_save', roundTrip]));
           assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name);
           for (const field of ['contained_items', 'merc_items', 'corpse_items', 'iron_golem_item']) expect(Object.hasOwn(parsed, field), `${name}: ${field}`).toBe(true);
-          if (name === 'Roka.d2s') await assertArmorDetails(parsed, name);
+          if (name === 'Roka.d2s') assertArmorDetails(parsed, name);
         } else {
           const parsed = parse(await runWorker(['parse_stash', roundTrip]));
           assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name);

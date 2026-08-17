@@ -1,6 +1,5 @@
 import { execSync } from 'node:child_process'
 import { VaultRepository } from './VaultRepository.js'
-import { rehydrateVaultItem } from './itemBackfill.js'
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024
 
@@ -101,10 +100,6 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
       if (req.method === 'POST' && url.pathname === '/__vault/import') {
         const entries = await readJsonBody(req)
         const result = await enqueue(async () => { requireUnlocked(); return vault.importEntries(entries) })
-        return sendJson(res, 200, { success: true, ...result })
-      }
-      if (req.method === 'POST' && url.pathname === '/__vault/backfill-item-fields') {
-        const result = await enqueue(async () => { requireUnlocked(); return vault.backfillItemFields(rehydrateVaultItem) })
         return sendJson(res, 200, { success: true, ...result })
       }
       if (req.method === 'POST' && url.pathname === '/__vault/backup') {
