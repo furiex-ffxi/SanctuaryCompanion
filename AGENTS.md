@@ -26,3 +26,8 @@
 
 ## 5. Editing Workflow
 - Direct edits in the shared workspace are permitted for implementation work; patches are optional and should not be required when the environment cannot apply them.
+
+## 6. Mandatory Post-Change Validation
+- After writing or modifying code, always run the most relevant automated tests before reporting completion.
+- For changes spanning multiple layers, run each affected test suite (for example, React/UI tests, JavaScript unit tests, worker integration tests, and build validation as applicable).
+- If a required test cannot run or fails, report the exact command and result; never claim the change is complete without disclosing the validation status.
