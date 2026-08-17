@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StorageGrid } from './StorageGrid';
 import { AdvancedStashPanel } from './AdvancedStashPanel';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
@@ -10,16 +10,20 @@ export function SharedStashPanel({
   refreshSharedStash,
   depositItemToVault,
   setSharedStash,
+  sharedStashFile,
+  setSharedStashFile,
+  sharedStashLoadedFile,
+  setSharedStashLoadedFile,
+  setSharedStashError,
   sharedStashTab,
   setSharedStashTab,
   highlightIdentity,
 }) {
-  const [selectedFile, setSelectedFile] = useState('ModernSharedStashSoftCoreV2.d2i');
-
   const pages = sharedStash?.pages || [];
   const activePageIdx = Math.min(sharedStashTab ?? 0, Math.max(pages.length - 1, 0));
   const activePage = pages[activePageIdx] || pages[0];
   const items = activePage?.items || [];
+  const sharedStashReady = !sharedStashLoading && !sharedStashError && sharedStashLoadedFile === sharedStashFile;
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -28,6 +32,9 @@ export function SharedStashPanel({
       const buf = await file.arrayBuffer();
       const parsed = await D2SParserAdapter.parseSharedStashBuffer(buf);
       setSharedStash(parsed);
+      setSharedStashFile('');
+      setSharedStashLoadedFile('');
+      setSharedStashError(null);
     } catch (err) {
       alert('Error parsing uploaded .d2i file: ' + err.message);
     }
@@ -50,12 +57,13 @@ export function SharedStashPanel({
           <div className="shared-stash-actions">
             <select
               className="header-control save-picker"
-              value={selectedFile}
+              value={sharedStashFile || ""}
               onChange={(e) => {
-                setSelectedFile(e.target.value);
+                setSharedStashFile(e.target.value);
                 refreshSharedStash(e.target.value);
               }}
             >
+              {sharedStashFile === '' && <option value="">Uploaded browser file (local only)</option>}
               <option value="ModernSharedStashSoftCoreV2.d2i">Modern Softcore (ModernSharedStashSoftCoreV2.d2i)</option>
               <option value="SharedStashSoftCoreV2.d2i">Vanilla Softcore (SharedStashSoftCoreV2.d2i)</option>
               <option value="ModernSharedStashHardCoreV2.d2i">Modern Hardcore (ModernSharedStashHardCoreV2.d2i)</option>
@@ -69,7 +77,7 @@ export function SharedStashPanel({
 
             <button
               className={`header-control btn-d2r btn-refresh ${sharedStashLoading ? 'spinning' : ''}`}
-              onClick={() => refreshSharedStash(selectedFile)}
+              onClick={() => refreshSharedStash(sharedStashFile)}
               disabled={sharedStashLoading}
             >
               {sharedStashLoading ? '↻ Loading…' : '↻ Refresh .d2i'}
@@ -79,7 +87,7 @@ export function SharedStashPanel({
 
         {sharedStashError && (
           <div className="stash-empty-state" style={{ color: '#ff6666', marginTop: 20 }}>
-            ⚠️ Could not load shared stash ({selectedFile}): {sharedStashError}
+            ⚠️ Could not load shared stash ({sharedStashFile}): {sharedStashError}
             <br />
             <small style={{ color: '#aaa', marginTop: 8, display: 'block' }}>
               Make sure D2R has created a shared stash file or upload your own .d2i file.
@@ -114,7 +122,7 @@ export function SharedStashPanel({
               {activePage.type === 1 ? (
                 <AdvancedStashPanel 
                   items={items} 
-                  onDeposit={(item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__')}
+                  onDeposit={sharedStashReady ? (item) => depositItemToVault(item, '__shared_stash__') : undefined}
                   highlightIdentity={highlightIdentity}
                 />
               ) : activePage.type === 2 ? (
@@ -128,7 +136,7 @@ export function SharedStashPanel({
                     cols: 10,
                     rows: 10,
                     activePageIdx,
-                    onDeposit: (item) => depositItemToVault({ ...item, _selectedFile: selectedFile }, '__shared_stash__'),
+                    onDeposit: sharedStashReady ? (item) => depositItemToVault(item, '__shared_stash__') : undefined,
                   }}
                   items={items}
                   highlightIdentity={highlightIdentity}

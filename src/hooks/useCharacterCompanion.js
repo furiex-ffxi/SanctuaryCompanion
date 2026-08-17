@@ -6,6 +6,16 @@ import { STORAGE_META } from '../domain/entities/Item';
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
 
+const DEFAULT_SHARED_STASH_FILE = 'ModernSharedStashSoftCoreV2.d2i';
+
+function isSharedStashBasename(filename) {
+  return typeof filename === 'string'
+    && filename.length > 0
+    && !filename.includes('/')
+    && !filename.includes('\\')
+    && filename.toLowerCase().endsWith('.d2i');
+}
+
 export function useCharacterCompanion() {
   const [charData, setCharData]     = useState(null);
   const [isSwapped, setIsSwapped]   = useState(false);
@@ -30,6 +40,13 @@ export function useCharacterCompanion() {
   const sharedRequestRef = useRef(0);
   const facetsRequestRef = useRef(0);
   const [sharedStash, setSharedStash] = useState(null);
+  const [sharedStashFile, setSharedStashFile] = useState(DEFAULT_SHARED_STASH_FILE);
+  const [sharedStashLoadedFile, setSharedStashLoadedFile] = useState(null);
+  const sharedStashFileRef = useRef(DEFAULT_SHARED_STASH_FILE);
+  const updateSharedStashFile = useCallback((filename) => {
+    sharedStashFileRef.current = filename;
+    setSharedStashFile(filename);
+  }, []);
   const [sharedStashTab, setSharedStashTab] = useState(0);
   const [sharedStashLoading, setSharedStashLoading] = useState(false);
   const [sharedStashError, setSharedStashError] = useState(null);
@@ -119,22 +136,36 @@ export function useCharacterCompanion() {
 
   // Refresh shared stash file from server (.d2i)
   const refreshSharedStash = useCallback(async (filename) => {
+    const requestedFile = filename ?? sharedStashFileRef.current;
     const requestId = ++sharedRequestRef.current;
+    updateSharedStashFile(requestedFile);
     setSharedStashLoading(true);
     setSharedStashError(null);
+    if (!isSharedStashBasename(requestedFile)) {
+      const error = 'Shared stash file must be a .d2i basename';
+      if (vaultMountedRef.current && requestId === sharedRequestRef.current) {
+        setSharedStashError(error);
+        setSharedStashLoading(false);
+      }
+      return null;
+    }
     try {
-      const stashData = await D2SParserAdapter.fetchSharedStash(filename || 'ModernSharedStashSoftCoreV2.d2i');
-      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStash(stashData);
+      const stashData = await D2SParserAdapter.fetchSharedStash(requestedFile);
+      if (vaultMountedRef.current && requestId === sharedRequestRef.current) {
+        setSharedStash(stashData);
+        setSharedStashLoadedFile(requestedFile);
+      }
+      return stashData;
     } catch (err) {
       console.error('Shared stash fetch error:', err);
       if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashError(err.message);
     } finally {
       if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashLoading(false);
     }
-  }, []);
+  }, [updateSharedStashFile]);
 
   useEffect(() => {
-    refreshSharedStash('ModernSharedStashSoftCoreV2.d2i');
+    refreshSharedStash(DEFAULT_SHARED_STASH_FILE);
   }, [refreshSharedStash]);
 
   // Trigger safe backup on server
@@ -155,6 +186,10 @@ export function useCharacterCompanion() {
         emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
       }
+      if (sourceName === '__shared_stash__' && sharedStashFile !== sharedStashLoadedFile) {
+        emitToast('Shared Stash is not ready for edits; refresh the selected file first.', 'error');
+        return;
+      }
       // 1. Perform automated backup first
       const backup = await triggerSaveBackup();
       if (!backup?.success) {
@@ -164,7 +199,7 @@ export function useCharacterCompanion() {
 
       // Persist and journal the item before changing its source save. A failure can duplicate, never lose, the item.
       const label = sourceName === '__shared_stash__'
-        ? `Shared Stash (${item._selectedFile || 'ModernSharedStashSoftCoreV2.d2i'})`
+        ? `Shared Stash (${sharedStashFile || DEFAULT_SHARED_STASH_FILE})`
         : (sourceName || activeFile || charData?.header?.name || 'Uploaded Character');
       const entry = {
         vaultId: `stash_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -197,34 +232,40 @@ export function useCharacterCompanion() {
         }
       }
 
-      // 3. Remove item from .d2i shared stash file on disk if item was in shared stash
+      // 3. Remove item from the selected shared stash. Browser uploads are local-only.
       if (sourceName === '__shared_stash__') {
-        try {
-          const d2iRes = await D2SParserAdapter.removeItemFromSharedStash(item._selectedFile || null, item);
-          if (!d2iRes.success) {
-            console.error('removeItemFromSharedStash error detail:', d2iRes);
-            emitToast('Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
-            return;
-          }
-          if (!d2iRes.itemRemoved) {
-            console.warn('Item not matched in .d2i file:', item);
-            emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
-            return;
-          }
-          if (d2iRes.stash) {
-            setSharedStash(d2iRes.stash);
-          }
-          if (d2iRes.itemBytesHex) {
-            item.rawBytesHex = d2iRes.itemBytesHex;
-          }
+        if (!sharedStashFile) {
+          setSharedStash((current) => current ? {
+            ...current,
+            pages: (current.pages || []).map((page) => ({
+              ...page,
+              items: (page.items || []).filter((candidate) => item.id != null ? candidate.id !== item.id : candidate !== item),
+            })),
+          } : current);
+        } else {
           try {
-            await InfiniteStashAdapter.update(entry);
-          } catch (updateError) {
-            emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
+            const d2iRes = await D2SParserAdapter.removeItemFromSharedStash(sharedStashFile, item);
+            if (!d2iRes.success) {
+              console.error('removeItemFromSharedStash error detail:', d2iRes);
+              emitToast('Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
+              return;
+            }
+            if (!d2iRes.itemRemoved) {
+              console.warn('Item not matched in .d2i file:', item);
+              emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
+              return;
+            }
+            if (d2iRes.stash) setSharedStash(d2iRes.stash);
+            if (d2iRes.itemBytesHex) item.rawBytesHex = d2iRes.itemBytesHex;
+            try {
+              await InfiniteStashAdapter.update(entry);
+            } catch (updateError) {
+              emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
+            }
+          } catch (err) {
+            emitToast('Failed to update Shared Stash file: ' + err.message, 'error');
+            return;
           }
-        } catch (err) {
-          emitToast('Failed to update Shared Stash file: ' + err.message, 'error');
-          return;
         }
       }
 
@@ -240,7 +281,7 @@ export function useCharacterCompanion() {
       await refreshVault();
       emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
     },
-    [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault]
+    [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault, sharedStashFile, sharedStashLoadedFile]
   );
 
   // Withdraw item from Infinite Stash Vault back into active character's in-game Stash (.d2s)
@@ -291,6 +332,10 @@ export function useCharacterCompanion() {
         emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
       }
+      if (!sharedStashFile || sharedStashLoadedFile !== sharedStashFile) {
+        emitToast('Select a loaded disk-backed Shared Stash before withdrawing from the vault.', 'error');
+        return;
+      }
 
       const backup = await triggerSaveBackup();
       if (!backup?.success) {
@@ -300,7 +345,7 @@ export function useCharacterCompanion() {
 
       let targetTabIdx = 0;
       try {
-        const res = await D2SParserAdapter.addItemToSharedStash(null, itemData);
+        const res = await D2SParserAdapter.addItemToSharedStash(sharedStashFile, itemData);
         if (!res.success) {
           throw new Error(res.error || res.message || 'Server failed to add item to shared stash');
         }
@@ -323,7 +368,7 @@ export function useCharacterCompanion() {
 
       emitToast(`"${itemData.type_name || itemData.type}" â†’ Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
     },
-    [triggerSaveBackup, isGameRunning, removeItemFromVault]
+    [triggerSaveBackup, isGameRunning, removeItemFromVault, sharedStashFile, sharedStashLoadedFile]
   );
 
   // Fetch list of files
@@ -438,6 +483,10 @@ export function useCharacterCompanion() {
     triggerSaveBackup,
     sharedStash,
     setSharedStash,
+    sharedStashFile,
+    setSharedStashFile: updateSharedStashFile,
+    sharedStashLoadedFile,
+    setSharedStashError,
     sharedStashTab,
     setSharedStashTab,
     sharedStashLoading,

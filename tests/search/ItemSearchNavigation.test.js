@@ -7,7 +7,7 @@ test('plans character alternate-weapon and Shared Stash page navigation', () => 
   assert.equal(character.useAlternateWeapons, true)
   assert.equal(character.filename, 'Hero.d2s')
   const shared = planItemSearchNavigation({ sourceKind: 'sharedStash', filename: 'Chosen.d2i', pageIndex: 2, identity: { itemSeed: 8 } })
-  assert.deepEqual([shared.mainTab, shared.pageIndex], ['shared_stash', 2])
+  assert.deepEqual([shared.mainTab, shared.filename, shared.pageIndex], ['shared_stash', 'Chosen.d2i', 2])
 })
 
 test('plans vault focusing and canonical highlight matching', () => {
