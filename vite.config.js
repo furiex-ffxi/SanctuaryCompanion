@@ -4,6 +4,7 @@ import { createRequire } from 'module'
 import chokidar from 'chokidar'
 import fs from 'fs'
 import path from 'path'
+import crypto from 'node:crypto'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 import { safeSavePath } from './server/savePath.js'
@@ -75,7 +76,7 @@ function d2sWatcherPlugin() {
           res.writeHead(400); res.end('missing file param'); return
         }
         let fullPath
-        try { fullPath = safeSavePath(file, '.d2s') } catch (err) {
+        try { fullPath = safeSavePath(SAVES_DIR, file, '.d2s') } catch (err) {
           res.writeHead(400); res.end(err.message); return
         }
         try {
@@ -94,7 +95,7 @@ function d2sWatcherPlugin() {
         const file = url.searchParams.get('file')
         if (!file) { res.writeHead(400); res.end('missing file param'); return }
         let fullPath
-        try { fullPath = safeSavePath(file, '.d2i') } catch (err) {
+        try { fullPath = safeSavePath(SAVES_DIR, file, '.d2i') } catch (err) {
           res.writeHead(400); res.end(err.message); return
         }
         try {
@@ -141,7 +142,7 @@ function d2sWatcherPlugin() {
 
             if (!file) throw new Error('Missing file parameter')
             const targetFile = file
-            const fullPath = safeSavePath(targetFile, '.d2i')
+            const fullPath = safeSavePath(SAVES_DIR, targetFile, '.d2i')
             if (!fs.existsSync(fullPath)) throw new Error(`Shared stash file ${targetFile} not found`)
 
             // Write modified d2i to backup directory first
@@ -149,7 +150,7 @@ function d2sWatcherPlugin() {
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true })
             }
-            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}`)
+            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}_${crypto.randomUUID()}`)
 
             // Spawn the C# D2RStashWorker executable to perform the extraction/removal
             const { execFile } = require('child_process')
@@ -195,7 +196,7 @@ function d2sWatcherPlugin() {
           try {
             const { file, item } = JSON.parse(body)
             if (!file) throw new Error('Missing file parameter')
-            const fullPath = safeSavePath(file, ".d2s")
+            const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             // Enforce process locks: Check if Diablo II Resurrected is running
@@ -216,7 +217,7 @@ function d2sWatcherPlugin() {
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true })
             }
-            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}`)
+            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}_${crypto.randomUUID()}`)
 
             // Spawn the C# D2RStashWorker executable to perform the removal from .d2s
             const { execFile } = require('child_process')
@@ -272,7 +273,7 @@ function d2sWatcherPlugin() {
 
             if (!file) throw new Error('Missing file parameter')
             const targetFile = file
-            const fullPath = safeSavePath(targetFile, '.d2i')
+            const fullPath = safeSavePath(SAVES_DIR, targetFile, '.d2i')
             if (!fs.existsSync(fullPath)) throw new Error(`Shared stash file ${targetFile} not found`)
 
 
@@ -350,7 +351,7 @@ function d2sWatcherPlugin() {
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true })
             }
-            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}`)
+            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}_${crypto.randomUUID()}`)
 
             // Spawn the C# D2RStashWorker executable to perform the insertion
             const { execFile } = require('child_process')
@@ -397,7 +398,7 @@ function d2sWatcherPlugin() {
           try {
             const { file, item } = JSON.parse(body)
             if (!file) throw new Error('Missing file parameter')
-            const fullPath = safeSavePath(file, ".d2s")
+            const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             const char = await parseD2S(fullPath)
@@ -464,7 +465,7 @@ function d2sWatcherPlugin() {
             if (!fs.existsSync(backupDir)) {
               fs.mkdirSync(backupDir, { recursive: true })
             }
-            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}`)
+            const tempFilePath = path.join(backupDir, `temp_${path.basename(fullPath)}_${crypto.randomUUID()}`)
 
             // Spawn the C# D2RStashWorker executable to perform the insertion into .d2s
             const { execFile } = require('child_process')

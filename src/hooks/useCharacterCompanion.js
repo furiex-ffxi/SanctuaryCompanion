@@ -33,6 +33,7 @@ export function useCharacterCompanion() {
   const [vaultFacets, setVaultFacets] = useState({ slots: [], sets: [], categories: [] });
   const [vaultLoading, setVaultLoading] = useState(false);
   const [vaultError, setVaultError] = useState(null);
+  const transferInFlight = useRef(new Set());
   const vaultFiltersRef = useRef({});
   const vaultRequestRef = useRef(0);
   const vaultLoadingRef = useRef(false);
@@ -182,6 +183,11 @@ export function useCharacterCompanion() {
   // Deposit item to vault with automatic safe backup & save file cleanup
   const depositItemToVault = useCallback(
     async (item, sourceName) => {
+      const itemId = item?.id ?? item?.item_seed;
+      const transferKey = `deposit:${sourceName || activeFile || 'uploaded'}:${itemId ?? item?.rawBytesHex ?? ''}`;
+      if (transferInFlight.current.has(transferKey)) return;
+      transferInFlight.current.add(transferKey);
+      try {
       if (isGameRunning) {
         emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
@@ -280,6 +286,9 @@ export function useCharacterCompanion() {
 
       await refreshVault();
       emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
+      } finally {
+        transferInFlight.current.delete(transferKey);
+      }
     },
     [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault, sharedStashFile, sharedStashLoadedFile]
   );
