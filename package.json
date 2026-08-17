@@ -11,6 +11,8 @@
     "test:vault": "node --test tests/vault/*.test.js",
     "test:search": "node --test tests/search/*.test.js",
     "test:unit": "node --test tests/unit/*.test.js",
+    "test:react": "vitest run tests/react",
+    "test:worker": "node scripts/build-d2r-worker.mjs && vitest run tests/integration",
     "test:images": "node scripts/test-item-images.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package"
@@ -21,14 +23,18 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "chokidar": "^5.0.0",
+    "jsdom": "^29.1.1",
     "oxlint": "^1.75.0",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
     "puppeteer": "^25.7.0",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }
