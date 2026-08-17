@@ -90,7 +90,10 @@ export function useCharacterCompanion() {
     });
   }, [refreshVaultFacets]);
 
-  useEffect(() => () => { vaultMountedRef.current = false; }, []);
+  useEffect(() => {
+    vaultMountedRef.current = true;
+    return () => { vaultMountedRef.current = false; };
+  }, []);
 
   // Poll server for D2R process status
   useEffect(() => {
