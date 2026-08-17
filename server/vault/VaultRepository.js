@@ -60,6 +60,13 @@ function hydrateRow(row) {
   }
 }
 
+function itemIdentity(entry) {
+  const item = entry?.itemData
+  const id = item?.id ?? item?.item_seed
+  if (id === undefined || id === null || id === '') return null
+  return entry.sourceSave + String.fromCharCode(31) + id
+}
+
 export class VaultRepository {
   constructor({ savesDir, databasePath, now = () => new Date() }) {
     this.savesDir = savesDir
@@ -333,10 +340,26 @@ export class VaultRepository {
     return row ? hydrateRow(row) : null
   }
 
+
+  #findActiveByItemIdentity(entry) {
+    const identity = itemIdentity(entry)
+    if (!identity) return null
+    const separator = identity.indexOf(String.fromCharCode(31))
+    const sourceSave = identity.slice(0, separator)
+    const itemId = identity.slice(separator + 1)
+    const row = this.db.prepare("SELECT * FROM vault_items WHERE status IN ('active', 'pending_deposit', 'pending_withdraw') AND source_save = ? AND (CAST(json_extract(item_json, '$.id') AS TEXT) = ? OR CAST(json_extract(item_json, '$.item_seed') AS TEXT) = ?) LIMIT 1").get(sourceSave, itemId, itemId)
+    return row ? hydrateRow(row) : null
+  }
+
   async add(entry, { id = operationId() } = {}) {
     if (!entry?.vaultId || !entry?.itemData) throw new Error('Vault entry requires vaultId and itemData')
     await this.ensureCheckpoint()
     if (this.get(entry.vaultId, { includeInactive: true })) throw new Error(`Vault item already exists: ${entry.vaultId}`)
+    if (this.#findActiveByItemIdentity(entry)) {
+      const error = new Error(`Item identity already exists in the vault: ${entry.sourceSave}`)
+      error.statusCode = 409
+      throw error
+    }
     this.#appendJournal({ operationId: id, phase: 'intent', operation: 'deposit', entry })
     const apply = this.db.transaction(() => {
       this.#insertEntry(entry)

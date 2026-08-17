@@ -39,6 +39,20 @@ test.afterEach(() => {
   }
 })
 
+test('rejects a second active entry with the same save item identity', async () => {
+  const savesDir = temporarySavesDirectory()
+  const repository = new VaultRepository({ savesDir })
+  const first = entry(500, { sourceSave: 'RavenClaw.d2s', itemData: { id: 424242, type: '9s8', type_name: 'Raven Claw', rawBytesHex: '4a4d4242' } })
+  const duplicate = { ...first, vaultId: 'stash_duplicate', itemData: { ...first.itemData } }
+  try {
+    await repository.add(first)
+    await assert.rejects(() => repository.add(duplicate), error => error.statusCode === 409)
+    assert.equal(repository.list().total, 1)
+  } finally {
+    repository.close()
+  }
+})
+
 test('migrates legacy JSON once and preserves the original in backups', () => {
   const savesDir = temporarySavesDirectory()
   const legacyPath = path.join(savesDir, 'infinite_stash_vault.json')
