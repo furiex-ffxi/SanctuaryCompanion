@@ -22,6 +22,7 @@ export function InfiniteStashPanel({
   onRemove,
   onRefresh,
   onBackupTrigger,
+  onBackfill,
   isGameRunning,
   onWithdraw,
   onWithdrawShared,
