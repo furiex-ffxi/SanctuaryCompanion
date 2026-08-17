@@ -88,6 +88,11 @@ function MainContent() {
     sharedStashError,
     refreshSharedStash,
     setSharedStash,
+    sharedStashFile,
+    setSharedStashFile,
+    sharedStashLoadedFile,
+    setSharedStashLoadedFile,
+    setSharedStashError,
     sharedStashTab,
     setSharedStashTab,
     difficulty,
@@ -98,6 +103,7 @@ function MainContent() {
   const { toasts, addToast, dismissToast } = useToasts();
   const [searchHighlight, setSearchHighlight] = React.useState(null);
   const [vaultSearchQuery, setVaultSearchQuery] = React.useState('');
+  const searchNavigationRef = React.useRef(0);
 
   // Sync tab selection with URL hash (#character, #inventory, #char-stash, #stash, #cube, #skills, #shared-stash, #infinite-stash)
   React.useEffect(() => {
@@ -136,11 +142,13 @@ function MainContent() {
   };
 
   const handleSearchSelect = async (result) => {
+    const navigationId = ++searchNavigationRef.current;
     const plan = planItemSearchNavigation(result);
     setSearchHighlight(plan.highlight);
     window.setTimeout(() => setSearchHighlight((current) => current === result.identity ? null : current), 3500);
     if (result.sourceKind === 'character') {
       const refreshed = await refreshFromServer(plan.filename);
+      if (navigationId !== searchNavigationRef.current) return;
       setActiveFile(plan.filename);
       setMainTab('character');
       setActiveTab(plan.subTab);
@@ -148,17 +156,30 @@ function MainContent() {
       window.history.pushState(null, '', `#${result.navigation.subTab === 'stash' ? 'char-stash' : result.navigation.subTab || 'inventory'}`);
       if (!containsCanonicalItem(refreshed, result.identity)) addToast('That search result is stale; the item is no longer in the save.', 'error');
     } else if (result.sourceKind === 'sharedStash') {
+      if (!plan.filename) {
+        addToast('That Shared Stash search result has no filename.', 'error');
+        return;
+      }
+      setSharedStashFile(plan.filename);
+      const refreshed = await refreshSharedStash(plan.filename);
+      if (navigationId !== searchNavigationRef.current) return;
+      if (!refreshed) {
+        addToast(`Could not load Shared Stash file ${plan.filename}.`, 'error');
+        return;
+      }
+      const stale = !containsCanonicalItem(refreshed, result.identity);
       setSharedStashTab(plan.pageIndex ?? 0);
       setMainTab('shared_stash');
       window.history.pushState(null, '', '#shared-stash');
-      addToast(`Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, 'info');
+      addToast(stale
+        ? 'That Shared Stash search result is stale; the item is no longer in the save.'
+        : `Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, stale ? 'error' : 'info');
     } else {
       setVaultSearchQuery(result.preview.displayName);
       setMainTab('stash');
       window.history.pushState(null, '', '#infinite-stash');
     }
   };
-
   return (
     <div className="app-container">
       <header>
@@ -191,7 +212,7 @@ function MainContent() {
         </div>
 
         <div className="controls-row">
-          <GlobalItemSearch onSelect={handleSearchSelect} />
+          <GlobalItemSearch sharedFile={sharedStashFile || ""} onSelect={handleSearchSelect} />
           {saveFiles.length > 0 && (
             <select
               className="header-control save-picker"
@@ -272,6 +293,11 @@ function MainContent() {
           refreshSharedStash={refreshSharedStash}
           depositItemToVault={depositItemToVault}
           setSharedStash={setSharedStash}
+          sharedStashFile={sharedStashFile}
+          setSharedStashFile={setSharedStashFile}
+          sharedStashLoadedFile={sharedStashLoadedFile}
+          setSharedStashLoadedFile={setSharedStashLoadedFile}
+          setSharedStashError={setSharedStashError}
           sharedStashTab={sharedStashTab}
           setSharedStashTab={setSharedStashTab}
           highlightIdentity={searchHighlight}

@@ -6,6 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
+import { safeSavePath } from './server/savePath.js'
 
 import { constants } from './src/domain/entities/static_constant_data.js'
 
@@ -16,6 +17,7 @@ const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item
 // D2SSharp owns all .d2s/.d2i parsing and writing through this thin process adapter.
 const require = createRequire(import.meta.url)
 const { parseD2S, parseD2I } = require('./src/domain/parsers/CustomD2Parser.cjs');
+
 
 function getItemDimensions(type) {
   const t = (type || '').toLowerCase().trim()
@@ -72,7 +74,10 @@ function d2sWatcherPlugin() {
         if (!file) {
           res.writeHead(400); res.end('missing file param'); return
         }
-        const fullPath = path.join(SAVES_DIR, file)
+        let fullPath
+        try { fullPath = safeSavePath(file, '.d2s') } catch (err) {
+          res.writeHead(400); res.end(err.message); return
+        }
         try {
           const data = await parseD2S(fullPath)
           cache[file] = data
@@ -86,18 +91,11 @@ function d2sWatcherPlugin() {
       // Expose endpoint for shared stash files: GET /__d2i_refresh?file=<basename_or_relative_path>
       server.middlewares.use('/__d2i_refresh', async (req, res) => {
         const url = new URL(req.url, 'http://localhost')
-        let file = url.searchParams.get('file')
-        let fullPath = file ? path.join(SAVES_DIR, file) : null
-        if (!fullPath || !fs.existsSync(fullPath)) {
-          if (fs.existsSync(path.join(SAVES_DIR, 'ModernSharedStashSoftCoreV2.d2i'))) {
-            fullPath = path.join(SAVES_DIR, 'ModernSharedStashSoftCoreV2.d2i')
-          } else if (fs.existsSync(path.join(SAVES_DIR, 'SharedStashSoftCoreV2.d2i'))) {
-            fullPath = path.join(SAVES_DIR, 'SharedStashSoftCoreV2.d2i')
-          } else {
-            const allFiles = fs.existsSync(SAVES_DIR) ? fs.readdirSync(SAVES_DIR) : []
-            const foundD2i = allFiles.find(f => f.endsWith('.d2i'))
-            if (foundD2i) fullPath = path.join(SAVES_DIR, foundD2i)
-          }
+        const file = url.searchParams.get('file')
+        if (!file) { res.writeHead(400); res.end('missing file param'); return }
+        let fullPath
+        try { fullPath = safeSavePath(file, '.d2i') } catch (err) {
+          res.writeHead(400); res.end(err.message); return
         }
         try {
           if (!fullPath || !fs.existsSync(fullPath)) {
@@ -141,8 +139,9 @@ function d2sWatcherPlugin() {
               return
             }
 
-            const targetFile = file || (fs.existsSync(path.join(SAVES_DIR, 'ModernSharedStashSoftCoreV2.d2i')) ? 'ModernSharedStashSoftCoreV2.d2i' : 'SharedStashSoftCoreV2.d2i')
-            const fullPath = path.isAbsolute(targetFile) ? targetFile : path.join(SAVES_DIR, targetFile)
+            if (!file) throw new Error('Missing file parameter')
+            const targetFile = file
+            const fullPath = safeSavePath(targetFile, '.d2i')
             if (!fs.existsSync(fullPath)) throw new Error(`Shared stash file ${targetFile} not found`)
 
             // Write modified d2i to backup directory first
@@ -196,7 +195,7 @@ function d2sWatcherPlugin() {
           try {
             const { file, item } = JSON.parse(body)
             if (!file) throw new Error('Missing file parameter')
-            const fullPath = path.join(SAVES_DIR, file)
+            const fullPath = safeSavePath(file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             // Enforce process locks: Check if Diablo II Resurrected is running
@@ -271,8 +270,9 @@ function d2sWatcherPlugin() {
               return
             }
 
-            const targetFile = file || (fs.existsSync(path.join(SAVES_DIR, 'ModernSharedStashSoftCoreV2.d2i')) ? 'ModernSharedStashSoftCoreV2.d2i' : 'SharedStashSoftCoreV2.d2i')
-            const fullPath = path.isAbsolute(targetFile) ? targetFile : path.join(SAVES_DIR, targetFile)
+            if (!file) throw new Error('Missing file parameter')
+            const targetFile = file
+            const fullPath = safeSavePath(targetFile, '.d2i')
             if (!fs.existsSync(fullPath)) throw new Error(`Shared stash file ${targetFile} not found`)
 
 
@@ -397,7 +397,7 @@ function d2sWatcherPlugin() {
           try {
             const { file, item } = JSON.parse(body)
             if (!file) throw new Error('Missing file parameter')
-            const fullPath = path.join(SAVES_DIR, file)
+            const fullPath = safeSavePath(file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             const char = await parseD2S(fullPath)
