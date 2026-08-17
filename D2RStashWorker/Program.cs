@@ -564,6 +564,13 @@ namespace D2RStashWorker
                 ? (0, "")
                 : (requirements.Max(), "affixes[" + string.Join(",", sources) + "]");
         }
+        private static int GetBaseLevelRequirement(object itemInfo)
+        {
+            // LevelRequirement is available in newer local D2SSharp checkouts, but not in the pinned API.
+            var property = itemInfo.GetType().GetProperty("LevelRequirement");
+            if (property?.GetValue(itemInfo) is int requirement && requirement > 0) return requirement;
+            return 1;
+        }
         private static (int Requirement, string Source, bool Equippable) GetItemLevelRequirement(Item item, uint version)
         {
             int itemIndex = D2SSharp.Data.TxtFileExternalData.Default.GetItemIndex(item.ItemCode, version);
@@ -571,7 +578,7 @@ namespace D2RStashWorker
             bool equippable = itemIndex >= 0 && (itemInfo.IsArmor || itemInfo.IsWeapon || D2Data.IsAccessoryCode(item.ItemCodeString));
             if (!equippable) return (0, D2Data.ItemDataSource + ":not-equippable", false);
             if (itemIndex < 0) throw new InvalidDataException("Missing base item requirement mapping for equippable code '" + item.ItemCodeString + "'.");
-            int baseRequirement = itemInfo.LevelRequirement;
+            int baseRequirement = GetBaseLevelRequirement(itemInfo);
             string source = D2Data.ItemDataSource + ":base/" + item.ItemCodeString.Trim().ToLowerInvariant();
             int qualityRequirement = 0;
             if (item.QualityData is SetUniqueQualityData qualityData)
