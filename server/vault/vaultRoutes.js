@@ -11,35 +11,43 @@ function sendJson(res, status, value) {
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
-    let body = ''
-    let bytes = 0
+    const chunks = [];
+    let bytes = 0;
+    const timeout = setTimeout(() => {
+      reject(new Error('Request timed out'));
+      req.destroy();
+    }, 10000);
+
     req.on('data', (chunk) => {
-      bytes += chunk.length
+      bytes += chunk.length;
       if (bytes > MAX_BODY_BYTES) {
-        reject(new Error('Request body exceeds 64 MiB'))
-        req.destroy()
-        return
+        clearTimeout(timeout);
+        reject(new Error('Request body exceeds 64 MiB'));
+        req.destroy();
+        return;
       }
-      body += chunk
-    })
-    req.on('error', reject)
+      chunks.push(chunk);
+    });
+    req.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
     req.on('end', () => {
+      clearTimeout(timeout);
       try {
-        resolve(body ? JSON.parse(body) : {})
+        const body = Buffer.concat(chunks).toString('utf8');
+        resolve(body ? JSON.parse(body) : {});
       } catch (error) {
-        reject(new Error(`Invalid JSON request: ${error.message}`))
+        reject(new Error(`Invalid JSON request: ${error.message}`));
       }
-    })
-  })
+    });
+  });
 }
 
+import { isD2RRunning } from '../processLock.js'
+
 export function isD2Running() {
-  try {
-    return execSync('tasklist /FI "IMAGENAME eq D2R.exe"', { stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString().toLowerCase().includes('d2r.exe')
-  } catch {
-    return false
-  }
+  return isD2RRunning();
 }
 
 export async function rehydrateVaultEntries(vault, entries, rehydrateItem = rehydrateVaultItem) {
