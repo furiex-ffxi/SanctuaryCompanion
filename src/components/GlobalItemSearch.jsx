@@ -1,22 +1,32 @@
 import React, { useId, useState } from 'react';
 import { useGlobalItemSearchResults } from '../hooks/useGlobalItemSearchResults.js';
+import { TooltipTrigger } from './TooltipTrigger.jsx';
+import { summarizeItemComparison } from '../domain/entities/ItemRollComparison.js';
 
 const sourceLabel = sourceKind => ({
   character: 'Character',
   sharedStash: 'Shared Stash',
 }[sourceKind] || 'Infinite Stash');
 
-function SearchOption({ id, result, selected, onHover, onSelect }) {
+function SearchOption({ id, result, results, selected, onHover, onSelect }) {
   const sockets = result.preview.socketCount > 0
     ? ' (' + result.preview.socketCount + ' sockets)'
     : '';
   const tab = result.pageIndex != null
     ? ' · Tab ' + (result.pageIndex + 1)
     : '';
+  const item = result.preview.item;
+  const comparisonItems = results
+    .map(row => row.preview.item)
+    .filter(Boolean)
+    .filter(peer => peer.type === item.type);
+  const comparison = summarizeItemComparison(item, comparisonItems);
 
   return (
-    <div
+    <TooltipTrigger
       id={id}
+      item={item}
+      comparisonItems={comparisonItems}
       className={'global-search-option' + (selected ? ' active' : '')}
       role="option"
       aria-selected={selected}
@@ -25,7 +35,14 @@ function SearchOption({ id, result, selected, onHover, onSelect }) {
       onClick={onSelect}
       title={(result.preview.typeName || '') + ' — ' + result.location}
     >
-      <span>{result.preview.displayName}{sockets}</span>
+      <span className="global-search-option-heading">
+        <span>{result.preview.displayName}{sockets}</span>
+        {comparison.comparableCount > 0 && (
+          <small className="search-comparison-badge">
+            {comparison.bestCount}/{comparison.comparableCount} best
+          </small>
+        )}
+      </span>
       <small className="search-match-reason">
         {result.match.field}: {result.match.text}
       </small>
@@ -37,7 +54,7 @@ function SearchOption({ id, result, selected, onHover, onSelect }) {
         {result.location}
         {tab}
       </small>
-    </div>
+    </TooltipTrigger>
   );
 }
 
@@ -129,6 +146,7 @@ export function GlobalItemSearch({
                 key={JSON.stringify(result.identity)}
                 id={listboxId + '-option-' + index}
                 result={result}
+                results={rows}
                 selected={index === activeIndex}
                 onHover={() => setActiveIndex(index)}
                 onSelect={() => select(result)}
