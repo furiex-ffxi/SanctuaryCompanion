@@ -5,6 +5,11 @@ function normalizeText(value) {
   return text === "Tal Rasha's Howling Wind" ? "Tal Rasha's Guardianship" : text
 }
 
+export function unicodeSortKey(value) {
+  const text = normalizeText(value)
+  return text ? text.normalize('NFKC').toLocaleLowerCase('und') : null
+}
+
 export function getSearchableItemAttributes(item) {
   // Combined/displayed attributes may contain bonuses contributed by socketed
   // children. Global search intentionally indexes only the owning item's stats.
@@ -58,6 +63,13 @@ export function projectVaultEntry(entry) {
       || item.type
       || 'Unknown Item',
   )
+  const hasStoredType = Boolean(normalizeText(item.type) || normalizeText(item.type_name))
+  const normalizedTypeName = hasStoredType ? normalizeText(typeName) || null : null
+  const numericQuality = Number(item.quality)
+  const quality = item.quality !== null && item.quality !== undefined && item.quality !== ''
+    && Number.isInteger(numericQuality) && numericQuality > 0
+    ? numericQuality
+    : null
   const searchText = [
     displayName,
     item.type,
@@ -78,11 +90,14 @@ export function projectVaultEntry(entry) {
 
   return {
     displayName,
-    typeCode: normalizeText(item.type),
-    typeName: normalizeText(typeName),
+    displayNameSort: unicodeSortKey(displayName),
+    typeCode: normalizeText(item.type) || null,
+    typeName: normalizedTypeName,
+    typeNameSort: unicodeSortKey(normalizedTypeName),
+    sourceSaveSort: unicodeSortKey(entry.sourceSave),
     slot,
     category: getVaultCategory(item, slot),
-    quality: Number.isFinite(Number(item.quality)) ? Number(item.quality) : null,
+    quality,
     socketCount: getItemSocketCount(item),
     setName: normalizeText(item.set_name) || null,
     searchText,

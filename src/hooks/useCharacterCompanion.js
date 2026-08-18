@@ -94,7 +94,13 @@ export function useCharacterCompanion() {
 
   const loadMoreVault = useCallback(() => {
     if (!vaultNextCursor || vaultLoading || vaultLoadingRef.current) return Promise.resolve();
-    return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor });
+    return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor })
+      .catch((error) => {
+        // Replace the page if a cursor from an older server version is
+        // rejected after an upgrade.
+        if (error.status === 400) return queryVault(vaultFiltersRef.current);
+        throw error;
+      });
   }, [queryVault, vaultNextCursor, vaultLoading]);
 
   const removeItemFromVault = useCallback(async (vaultId, reason = 'delete') => {

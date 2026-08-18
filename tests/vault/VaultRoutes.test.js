@@ -51,7 +51,21 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     assert.equal(firstPage.total, 3)
     assert.equal(firstPage.items.length, 2)
     assert.ok(firstPage.nextCursor)
+    assert.deepEqual(firstPage.items.map((item) => item.vaultId), ['route_3', 'route_2'])
     assert.ok(repository.epoch)
+
+    const defaults = await fetch(origin + '/__vault/items').then((response) => response.json())
+    assert.deepEqual(defaults.items.map((item) => item.vaultId), ['route_3', 'route_2', 'route_1'])
+    const sorted = await fetch(origin + '/__vault/items?sort=name&direction=asc').then((response) => response.json())
+    assert.deepEqual(sorted.items.map((item) => item.vaultId), ['route_1', 'route_2', 'route_3'])
+
+    const invalidSort = await fetch(origin + '/__vault/items?sort=level')
+    assert.equal(invalidSort.status, 400)
+    assert.match((await invalidSort.json()).error, /Unsupported vault sort/)
+    const invalidDirection = await fetch(origin + '/__vault/items?direction=forward')
+    assert.equal(invalidDirection.status, 400)
+    assert.match((await invalidDirection.json()).error, /Unsupported vault sort direction/)
+    assert.equal((await fetch(origin + '/__vault/items?sort=')).status, 400)
 
     const removed = await fetch(`${origin}/__vault/items/${entry(1).vaultId}?reason=withdraw`, { method: 'DELETE' })
     assert.equal(removed.status, 200)

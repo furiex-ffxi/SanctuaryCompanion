@@ -8,6 +8,13 @@ import { getVirtualRange } from '../domain/virtualList';
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 8;
+const SORT_DIRECTION_LABELS = {
+  dateAdded: { asc: 'Oldest', desc: 'Newest' },
+  name: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
+  type: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
+  rarity: { asc: 'Lowest', desc: 'Highest' },
+  source: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
+};
 
 
 export function InfiniteStashPanel({
@@ -33,6 +40,8 @@ export function InfiniteStashPanel({
   const [selectedSlot, setSelectedSlot] = useState('All');
   const [selectedSet, setSelectedSet] = useState('All');
   const [selectedQuality, setSelectedQuality] = useState('All');
+  const [sort, setSort] = useState('dateAdded');
+  const [direction, setDirection] = useState('desc');
   const [backupMessage, setBackupMessage] = useState(null);
   const [listScrollTop, setListScrollTop] = useState(0);
   const [listViewportHeight, setListViewportHeight] = useState(600);
@@ -56,10 +65,12 @@ export function InfiniteStashPanel({
         setName: selectedSet,
         quality: selectedQuality,
         q: searchQuery,
+        sort,
+        direction,
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, onQuery]);
+  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, sort, direction, onQuery]);
 
   useEffect(() => () => {
     clearTimeout(backupTimerRef.current);
@@ -231,6 +242,24 @@ export function InfiniteStashPanel({
               <option value="7">Unique</option><option value="5">Set</option><option value="6">Rare</option>
               <option value="4">Magic</option><option value="2">Normal</option>
             </select>
+          </div>
+          <div className="filter-group vault-sort-controls">
+            <label htmlFor="infinite-vault-sort">Sort by:</label>
+            <select id="infinite-vault-sort" className="d2r-select" value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="dateAdded">Date added</option>
+              <option value="name">Item name</option>
+              <option value="type">Base type</option>
+              <option value="rarity">Rarity</option>
+              <option value="source">Source save</option>
+            </select>
+            <button
+              type="button"
+              className="btn-d2r btn-secondary vault-sort-direction"
+              aria-label={'Sort direction: ' + SORT_DIRECTION_LABELS[sort][direction]}
+              onClick={() => setDirection((current) => current === 'asc' ? 'desc' : 'asc')}
+            >
+              {SORT_DIRECTION_LABELS[sort][direction]}
+            </button>
           </div>
         </div>
       </div>

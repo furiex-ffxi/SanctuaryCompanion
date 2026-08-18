@@ -55,31 +55,45 @@ export function readVaultJournal(journalPath) {
 
 function insertEntry(db, entry, status, updatedAt) {
   const projection = projectVaultEntry(entry)
+  const supportsSortKeys = db.prepare("SELECT 1 FROM pragma_table_info('vault_items') WHERE name = 'display_name_sort'").get()
+  const columns = [
+    ['vault_id', 'vaultId'],
+    ['stashed_at', 'stashedAt'],
+    ['source_save', 'sourceSave'],
+    ['display_name', 'displayName'],
+    ['type_code', 'typeCode'],
+    ['type_name', 'typeName'],
+    ['slot', 'slot'],
+    ['category', 'category'],
+    ['quality', 'quality'],
+    ['set_name', 'setName'],
+    ['search_text', 'searchText'],
+    ['item_json', 'itemJson'],
+    ['status', 'status'],
+    ['updated_at', 'updatedAt'],
+  ]
+  if (supportsSortKeys) {
+    columns.splice(3, 0, ['source_save_sort', 'sourceSaveSort'])
+    columns.splice(5, 0, ['display_name_sort', 'displayNameSort'])
+    columns.splice(8, 0, ['type_name_sort', 'typeNameSort'])
+  }
+  const columnSql = columns.map(([column]) => column).join(', ')
+  const valueSql = columns.map(([, parameter]) => '@' + parameter).join(', ')
+  const updateSql = columns.slice(1).map(([column]) => column + ' = excluded.' + column).join(', ')
   db.prepare(`
-    INSERT INTO vault_items (
-      vault_id, stashed_at, source_save, display_name, type_code, type_name,
-      slot, category, quality, set_name, search_text, item_json, status, updated_at
-    ) VALUES (
-      @vaultId, @stashedAt, @sourceSave, @displayName, @typeCode, @typeName,
-      @slot, @category, @quality, @setName, @searchText, @itemJson, @status, @updatedAt
-    )
-    ON CONFLICT(vault_id) DO UPDATE SET
-      stashed_at = excluded.stashed_at,
-      source_save = excluded.source_save,
-      display_name = excluded.display_name,
-      type_code = excluded.type_code,
-      type_name = excluded.type_name,
-      slot = excluded.slot,
-      category = excluded.category,
-      quality = excluded.quality,
-      set_name = excluded.set_name,
-      search_text = excluded.search_text,
-      item_json = excluded.item_json,
-      status = excluded.status,
-      updated_at = excluded.updated_at
-  `).run({ ...projection, vaultId: entry.vaultId, stashedAt: entry.stashedAt, sourceSave: entry.sourceSave, itemJson: JSON.stringify(normalizeVaultItem(entry.itemData)), status, updatedAt })
+    INSERT INTO vault_items (${columnSql})
+    VALUES (${valueSql})
+    ON CONFLICT(vault_id) DO UPDATE SET ${updateSql}
+  `).run({
+    ...projection,
+    vaultId: entry.vaultId,
+    stashedAt: entry.stashedAt,
+    sourceSave: entry.sourceSave,
+    itemJson: JSON.stringify(normalizeVaultItem(entry.itemData)),
+    status,
+    updatedAt,
+  })
 }
-
 function applyIntent(db, intent, status = null) {
   const applied = db.prepare('SELECT 1 FROM applied_operations WHERE operation_id = ?').get(intent.operationId)
   if (applied) return

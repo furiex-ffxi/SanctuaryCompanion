@@ -5,9 +5,18 @@ import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
 import { normalizeVaultItem } from './itemImageResolver.js'
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 4
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
+const DEFAULT_SORT = 'dateAdded'
+const DEFAULT_DIRECTION = 'desc'
+const SORTS = Object.freeze({
+  dateAdded: { expression: 'stashed_at', cursorKey: 'stashed_at', nullable: false },
+  name: { expression: 'display_name_sort', cursorKey: 'display_name_sort', nullable: false },
+  type: { expression: 'type_name_sort', cursorKey: 'type_name_sort', nullable: true },
+  rarity: { expression: 'quality', cursorKey: 'quality', nullable: true },
+  source: { expression: 'source_save_sort', cursorKey: 'source_save_sort', nullable: false },
+})
 
 function timestampForPath(date = new Date()) {
   return date.toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 23)
@@ -17,18 +26,35 @@ function operationId() {
   return crypto.randomUUID()
 }
 
-function cursorSignature(options = {}) {
-  const filters = {
+function normalizeListOptions(options = {}) {
+  const sort = options.sort ?? DEFAULT_SORT
+  const direction = options.direction ?? DEFAULT_DIRECTION
+  if (!Object.hasOwn(SORTS, sort)) {
+    const error = new Error('Unsupported vault sort: ' + sort)
+    error.statusCode = 400
+    throw error
+  }
+  if (!['asc', 'desc'].includes(direction)) {
+    const error = new Error('Unsupported vault sort direction: ' + direction)
+    error.statusCode = 400
+    throw error
+  }
+  return {
     q: options.q?.trim().toLowerCase() || '',
     slot: options.slot || 'All',
     category: options.category || 'All',
     setName: options.setName || 'All',
     quality: options.quality || 'All',
+    sort,
+    direction,
   }
-  return crypto.createHash('sha256').update(JSON.stringify(filters)).digest('base64url')
 }
 
-function decodeCursor(cursor, signature) {
+function signCursor(payload, secret) {
+  return crypto.createHmac('sha256', secret).update(JSON.stringify(payload)).digest('base64url')
+}
+
+function decodeCursor(cursor, query, secret) {
   if (!cursor) return null
   let decoded
   try {
@@ -38,7 +64,21 @@ function decodeCursor(cursor, signature) {
     error.statusCode = 400
     throw error
   }
-  if (typeof decoded.stashedAt !== 'string' || !decoded.stashedAt || typeof decoded.vaultId !== 'string' || !decoded.vaultId.trim() || decoded.signature !== signature) {
+  const { signature, ...payload } = decoded || {}
+  const expectedSignature = signCursor(payload, secret)
+  const contextMatches = payload.sort === query.sort
+    && payload.direction === query.direction
+    && payload.q === query.q
+    && payload.slot === query.slot
+    && payload.category === query.category
+    && payload.setName === query.setName
+    && payload.quality === query.quality
+  const actualSignature = typeof signature === 'string' ? Buffer.from(signature) : null
+  const expectedSignatureBytes = Buffer.from(expectedSignature)
+  const validSignature = actualSignature?.length === expectedSignatureBytes.length
+    && crypto.timingSafeEqual(actualSignature, expectedSignatureBytes)
+  if (typeof payload.vaultId !== 'string' || !payload.vaultId.trim()
+    || !Object.hasOwn(payload, 'sortValue') || !contextMatches || !validSignature) {
     const error = new Error('Invalid or mismatched vault pagination cursor')
     error.statusCode = 400
     throw error
@@ -46,8 +86,13 @@ function decodeCursor(cursor, signature) {
   return decoded
 }
 
-function encodeCursor(row, signature) {
-  return Buffer.from(JSON.stringify({ stashedAt: row.stashed_at, vaultId: row.vault_id, signature })).toString('base64url')
+function encodeCursor(row, query, secret) {
+  const payload = {
+    ...query,
+    sortValue: row[SORTS[query.sort].cursorKey],
+    vaultId: row.vault_id,
+  }
+  return Buffer.from(JSON.stringify({ ...payload, signature: signCursor(payload, secret) })).toString('base64url')
 }
 
 function hydrateRow(row) {
@@ -74,6 +119,7 @@ export class VaultRepository {
     this.backupsRoot = path.join(savesDir, 'backups', 'vault')
     this.now = now
     this.epoch = null
+    this.cursorSecret = null
     fs.mkdirSync(path.dirname(this.databasePath), { recursive: true })
     this.db = new Database(this.databasePath)
     this.db.pragma('journal_mode = WAL')
@@ -99,9 +145,12 @@ export class VaultRepository {
         vault_id TEXT PRIMARY KEY,
         stashed_at TEXT NOT NULL,
         source_save TEXT NOT NULL,
+        source_save_sort TEXT,
         display_name TEXT NOT NULL,
+        display_name_sort TEXT,
         type_code TEXT,
         type_name TEXT,
+        type_name_sort TEXT,
         slot TEXT,
         category TEXT,
         quality INTEGER,
@@ -127,25 +176,108 @@ export class VaultRepository {
     `)
     const currentVersion = this.db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get().version
     if (currentVersion === 0) {
-      this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
-        .run(SCHEMA_VERSION, this.now().toISOString())
-    } else if (currentVersion < SCHEMA_VERSION) {
-      this.#createCheckpointSync()
-      const rows = this.db.prepare('SELECT vault_id, item_json FROM vault_items').all()
-      const update = this.db.prepare(`
-        UPDATE vault_items SET display_name = @displayName, type_code = @typeCode,
-          type_name = @typeName, slot = @slot, category = @category, quality = @quality,
-          set_name = @setName, search_text = @searchText WHERE vault_id = @vaultId
-      `)
       this.db.transaction(() => {
-        for (const row of rows) update.run({ ...projectVaultEntry({ itemData: JSON.parse(row.item_json) }), vaultId: row.vault_id })
+        this.#replaceSortIndexes()
+        this.#ensureCursorSecret()
         this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
           .run(SCHEMA_VERSION, this.now().toISOString())
       })()
+    } else if (currentVersion < SCHEMA_VERSION) {
+      this.#createCheckpointSync(currentVersion)
+      this.db.transaction(() => {
+        this.#addSortColumns()
+        if (currentVersion < 2) {
+          this.#reprojectRows()
+          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (2, ?)')
+            .run(this.now().toISOString())
+        }
+        if (currentVersion < 3) {
+          this.#replaceSortIndexes()
+          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?)')
+            .run(this.now().toISOString())
+        }
+        if (currentVersion < 4) {
+          if (currentVersion >= 2) this.#reprojectRows()
+          this.#replaceSortIndexes()
+          this.#ensureCursorSecret()
+          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (4, ?)')
+            .run(this.now().toISOString())
+        }
+      })()
+      // Keep the pre-upgrade checkpoint, but never append post-upgrade item
+      // operations to an epoch whose checkpoint has an older schema.
+      this.epoch = null
+    }
+
+    const secret = this.db.prepare("SELECT value FROM vault_metadata WHERE key = 'cursor_hmac_secret'").get()
+    if (!secret) {
+      this.#createCheckpointSync(currentVersion || SCHEMA_VERSION)
+      this.db.transaction(() => this.#ensureCursorSecret())()
+      this.epoch = null
+    } else {
+      this.cursorSecret = secret.value
     }
   }
 
-  #createCheckpointSync() {
+  #addSortColumns() {
+    const columns = new Set(this.db.pragma('table_info(vault_items)').map(({ name }) => name))
+    if (!columns.has('source_save_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN source_save_sort TEXT')
+    if (!columns.has('display_name_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN display_name_sort TEXT')
+    if (!columns.has('type_name_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN type_name_sort TEXT')
+  }
+
+  #reprojectRows() {
+    const rows = this.db.prepare('SELECT vault_id, source_save, item_json FROM vault_items').all()
+    const update = this.db.prepare(`
+      UPDATE vault_items SET display_name = @displayName, display_name_sort = @displayNameSort,
+        type_code = @typeCode, type_name = @typeName, type_name_sort = @typeNameSort,
+        source_save_sort = @sourceSaveSort, slot = @slot, category = @category,
+        quality = @quality, set_name = @setName, search_text = @searchText
+      WHERE vault_id = @vaultId
+    `)
+    for (const row of rows) {
+      update.run({
+        ...projectVaultEntry({ sourceSave: row.source_save, itemData: JSON.parse(row.item_json) }),
+        vaultId: row.vault_id,
+      })
+    }
+  }
+
+  #ensureCursorSecret() {
+    let secret = this.db.prepare("SELECT value FROM vault_metadata WHERE key = 'cursor_hmac_secret'").get()?.value
+    if (!secret) {
+      secret = crypto.randomBytes(32).toString('base64url')
+      this.db.prepare('INSERT INTO vault_metadata(key, value) VALUES (?, ?)')
+        .run('cursor_hmac_secret', secret)
+    }
+    this.cursorSecret = secret
+  }
+
+  #replaceSortIndexes() {
+    this.db.exec(`
+      DROP INDEX IF EXISTS vault_items_sort_date;
+      DROP INDEX IF EXISTS vault_items_sort_name;
+      DROP INDEX IF EXISTS vault_items_sort_type;
+      DROP INDEX IF EXISTS vault_items_sort_rarity;
+      DROP INDEX IF EXISTS vault_items_sort_source;
+      DROP INDEX IF EXISTS vault_items_sort_type_asc;
+      DROP INDEX IF EXISTS vault_items_sort_type_desc;
+      DROP INDEX IF EXISTS vault_items_sort_rarity_asc;
+      DROP INDEX IF EXISTS vault_items_sort_rarity_desc;
+
+      CREATE INDEX vault_items_sort_name ON vault_items(status, display_name_sort, vault_id);
+      CREATE INDEX vault_items_sort_source ON vault_items(status, source_save_sort, vault_id);
+      CREATE INDEX vault_items_sort_type_asc
+        ON vault_items(status, (type_name_sort IS NULL) ASC, type_name_sort ASC, vault_id ASC);
+      CREATE INDEX vault_items_sort_type_desc
+        ON vault_items(status, (type_name_sort IS NULL) ASC, type_name_sort DESC, vault_id DESC);
+      CREATE INDEX vault_items_sort_rarity_asc
+        ON vault_items(status, (quality IS NULL) ASC, quality ASC, vault_id ASC);
+      CREATE INDEX vault_items_sort_rarity_desc
+        ON vault_items(status, (quality IS NULL) ASC, quality DESC, vault_id DESC);
+    `)
+  }
+  #createCheckpointSync(databaseSchemaVersion = SCHEMA_VERSION) {
     if (this.epoch) return this.epoch
     const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
     const directory = path.join(this.backupsRoot, epochId)
@@ -156,7 +288,7 @@ export class VaultRepository {
     fs.closeSync(fs.openSync(journalPath, 'a'))
     const manifest = {
       formatVersion: 1, epochId, createdAt: this.now().toISOString(),
-      databaseSchemaVersion: SCHEMA_VERSION - 1,
+      databaseSchemaVersion,
       checkpointFile: 'checkpoint.sqlite3', journalFile: 'transactions.jsonl', startingSequence: 1,
     }
     fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
@@ -255,18 +387,23 @@ export class VaultRepository {
     const projection = projectVaultEntry(entry)
     this.db.prepare(`
       INSERT INTO vault_items (
-        vault_id, stashed_at, source_save, display_name, type_code, type_name,
-        slot, category, quality, set_name, search_text, item_json, status, updated_at
+        vault_id, stashed_at, source_save, source_save_sort, display_name,
+        display_name_sort, type_code, type_name, type_name_sort, slot, category,
+        quality, set_name, search_text, item_json, status, updated_at
       ) VALUES (
-        @vaultId, @stashedAt, @sourceSave, @displayName, @typeCode, @typeName,
-        @slot, @category, @quality, @setName, @searchText, @itemJson, @status, @updatedAt
+        @vaultId, @stashedAt, @sourceSave, @sourceSaveSort, @displayName,
+        @displayNameSort, @typeCode, @typeName, @typeNameSort, @slot, @category,
+        @quality, @setName, @searchText, @itemJson, @status, @updatedAt
       )
       ON CONFLICT(vault_id) DO UPDATE SET
         stashed_at = excluded.stashed_at,
         source_save = excluded.source_save,
+        source_save_sort = excluded.source_save_sort,
         display_name = excluded.display_name,
+        display_name_sort = excluded.display_name_sort,
         type_code = excluded.type_code,
         type_name = excluded.type_name,
+        type_name_sort = excluded.type_name_sort,
         slot = excluded.slot,
         category = excluded.category,
         quality = excluded.quality,
@@ -288,37 +425,51 @@ export class VaultRepository {
 
   list(options = {}) {
     const limit = Math.min(Math.max(Number(options.limit) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
-    const signature = cursorSignature(options)
-    const cursor = decodeCursor(options.cursor, signature)
+    const query = normalizeListOptions(options)
+    const sort = SORTS[query.sort]
+    const cursor = decodeCursor(options.cursor, query, this.cursorSecret)
     const conditions = ["status = 'active'"]
     const parameters = {}
 
-    if (options.q?.trim()) {
+    if (query.q) {
       conditions.push("search_text LIKE @query ESCAPE '\\'")
-      parameters.query = `%${options.q.trim().toLowerCase().replace(/[\\%_]/g, '\\$&')}%`
+      parameters.query = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`
     }
     for (const [option, column] of [['slot', 'slot'], ['category', 'category'], ['setName', 'set_name']]) {
-      if (options[option] && options[option] !== 'All') {
+      if (query[option] !== 'All') {
         conditions.push(`${column} = @${option}`)
-        parameters[option] = options[option]
+        parameters[option] = query[option]
       }
     }
-    if (options.quality && options.quality !== 'All') {
+    if (query.quality !== 'All') {
       conditions.push('quality = @quality')
-      parameters.quality = Number(options.quality)
+      parameters.quality = Number(query.quality)
     }
     const filterWhere = conditions.join(' AND ')
     const count = this.db.prepare(`SELECT COUNT(*) AS count FROM vault_items WHERE ${filterWhere}`).get(parameters).count
     if (cursor) {
-      conditions.push('(stashed_at < @cursorTime OR (stashed_at = @cursorTime AND vault_id < @cursorId))')
-      parameters.cursorTime = cursor.stashedAt
+      const comparison = query.direction === 'asc' ? '>' : '<'
+      if (cursor.sortValue === null) {
+        if (!sort.nullable) {
+          const error = new Error('Invalid or mismatched vault pagination cursor')
+          error.statusCode = 400
+          throw error
+        }
+        conditions.push(`(${sort.expression} IS NULL AND vault_id ${comparison} @cursorId)`)
+      } else {
+        const nullTransition = sort.nullable ? `${sort.expression} IS NULL OR ` : ''
+        conditions.push(`(${nullTransition}${sort.expression} ${comparison} @cursorValue OR (${sort.expression} = @cursorValue AND vault_id ${comparison} @cursorId))`)
+        parameters.cursorValue = cursor.sortValue
+      }
       parameters.cursorId = cursor.vaultId
     }
     parameters.fetchLimit = limit + 1
+    const directionSql = query.direction.toUpperCase()
+    const nullOrdering = sort.nullable ? `${sort.expression} IS NULL ASC, ` : ''
     const rows = this.db.prepare(`
       SELECT * FROM vault_items
       WHERE ${conditions.join(' AND ')}
-      ORDER BY stashed_at DESC, vault_id DESC
+      ORDER BY ${nullOrdering}${sort.expression} ${directionSql}, vault_id ${directionSql}
       LIMIT @fetchLimit
     `).all(parameters)
     const hasMore = rows.length > limit
@@ -326,7 +477,7 @@ export class VaultRepository {
     return {
       items: pageRows.map(hydrateRow),
       total: count,
-      nextCursor: hasMore ? encodeCursor(pageRows.at(-1), signature) : null,
+      nextCursor: hasMore ? encodeCursor(pageRows.at(-1), query, this.cursorSecret) : null,
     }
   }
 

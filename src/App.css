@@ -1251,6 +1251,11 @@ header {
   font-family: 'Cinzel', serif;
 }
 
+.vault-sort-direction {
+  min-width: 76px;
+  padding: 6px 10px;
+}
+
 .d2r-select {
   background: #0e0a07;
   border: 1px solid var(--color-border-dim);
