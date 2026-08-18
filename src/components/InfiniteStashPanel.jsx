@@ -298,7 +298,7 @@ export function InfiniteStashPanel({
                   <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
                   <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
-                  <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6 }}>
+                  <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {entry.status === 'pending_withdraw' ? (
                       <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>🔄 Recover</button>
                     ) : (
