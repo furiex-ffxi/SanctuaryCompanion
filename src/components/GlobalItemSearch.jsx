@@ -1,7 +1,142 @@
-import React,{useEffect,useRef,useState}from'react';
-export function GlobalItemSearch({sharedFile='ModernSharedStashSoftCoreV2.d2i',onSelect}){
- const[q,setQ]=useState(''),[data,setData]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[active,setActive]=useState(0),seq=useRef(0),rows=data?Object.values(data.groups).flatMap(g=>g.results):[];
- useEffect(()=>{if(q.trim().length<2){setData(null);setError('');return}const c=new AbortController(),id=++seq.current,t=setTimeout(async()=>{setBusy(true);try{const p=new URLSearchParams({q:q.trim(),sharedFile,limit:'10'}),r=await fetch(`/__item_search?${p}`,{signal:c.signal}),body=await r.json();if(!r.ok)throw Error(body.error);if(seq.current===id){setData(body);setActive(0)}}catch(e){if(e.name!=='AbortError'&&seq.current===id)setError(e.message)}finally{if(seq.current===id)setBusy(false)}},250);return()=>{clearTimeout(t);c.abort()}},[q,sharedFile]);
- const pick=r=>{onSelect(r);setQ('');setData(null)},key=e=>{if(!rows.length)return;if(e.key==='ArrowDown'){e.preventDefault();setActive((active+1)%rows.length)}else if(e.key==='ArrowUp'){e.preventDefault();setActive((active-1+rows.length)%rows.length)}else if(e.key==='Enter'){e.preventDefault();pick(rows[active])}else if(e.key==='Escape'){setQ('');setData(null)}};
- return <div className="global-item-search"><input className="header-control global-search-input" aria-label="Search all items" placeholder="Search all items…" value={q} onChange={e=>setQ(e.target.value)} onKeyDown={key}/>{q.trim().length>=2&&<div className="global-search-menu">{busy&&<div>Searching…</div>}{error&&<div className="search-error">{error}</div>}{data&&rows.length===0&&<div>No matching items</div>}{rows.map((r,i)=><button key={JSON.stringify(r.identity)} className={i===active?'active':''} onMouseEnter={()=>setActive(i)} onClick={()=>pick(r)} title={`${r.preview.typeName||''} — ${r.location}`}><span>{r.preview.displayName}{r.preview.socketCount > 0 ? ` (${r.preview.socketCount} sockets)` : ""}</span><small className="search-match-reason">{r.match.field}: {r.match.text}</small><small>{r.sourceKind==='character'?'Character':r.sourceKind==='sharedStash'?'Shared Stash':'Infinite Stash'} · {r.characterName||r.filename} · {r.location}{r.pageIndex!=null?` · Tab ${r.pageIndex+1}`:''}</small></button>)}</div>}</div>
+import React, { useId, useState } from 'react';
+import { useGlobalItemSearchResults } from '../hooks/useGlobalItemSearchResults.js';
+
+const sourceLabel = sourceKind => ({
+  character: 'Character',
+  sharedStash: 'Shared Stash',
+}[sourceKind] || 'Infinite Stash');
+
+function SearchOption({ id, result, selected, onHover, onSelect }) {
+  const sockets = result.preview.socketCount > 0
+    ? ' (' + result.preview.socketCount + ' sockets)'
+    : '';
+  const tab = result.pageIndex != null
+    ? ' · Tab ' + (result.pageIndex + 1)
+    : '';
+
+  return (
+    <div
+      id={id}
+      className={'global-search-option' + (selected ? ' active' : '')}
+      role="option"
+      aria-selected={selected}
+      onMouseEnter={onHover}
+      onMouseDown={event => event.preventDefault()}
+      onClick={onSelect}
+      title={(result.preview.typeName || '') + ' — ' + result.location}
+    >
+      <span>{result.preview.displayName}{sockets}</span>
+      <small className="search-match-reason">
+        {result.match.field}: {result.match.text}
+      </small>
+      <small>
+        {sourceLabel(result.sourceKind)}
+        {' · '}
+        {result.characterName || result.filename}
+        {' · '}
+        {result.location}
+        {tab}
+      </small>
+    </div>
+  );
+}
+
+export function GlobalItemSearch({
+  sharedFile = 'ModernSharedStashSoftCoreV2.d2i',
+  onSelect,
+}) {
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const listboxId = useId();
+  const open = query.trim().length >= 2;
+  const { data, busy, error } = useGlobalItemSearchResults(query, sharedFile);
+  const rows = data
+    ? Object.values(data.groups).flatMap(group => group.results)
+    : [];
+
+  const close = () => {
+    setQuery('');
+    setActiveIndex(0);
+  };
+
+  const select = result => {
+    onSelect(result);
+    close();
+  };
+
+  const handleChange = event => {
+    setQuery(event.target.value);
+    setActiveIndex(0);
+  };
+
+  const handleKeyDown = event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (!rows.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((activeIndex + 1) % rows.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((activeIndex - 1 + rows.length) % rows.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      select(rows[activeIndex]);
+    }
+  };
+
+  const activeOptionId = open && rows.length
+    ? listboxId + '-option-' + activeIndex
+    : undefined;
+
+  return (
+    <div className="global-item-search">
+      <input
+        className="header-control global-search-input"
+        aria-label="Search all items"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={activeOptionId}
+        placeholder="Search all items…"
+        value={query}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+      />
+      {open && (
+        <div className="global-search-menu">
+          {busy && <div role="status">Searching…</div>}
+          {error && (
+            <div className="search-error" role="alert">
+              {error}
+            </div>
+          )}
+          {data && rows.length === 0 && (
+            <div role="status">No matching items</div>
+          )}
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label="Item search results"
+          >
+            {rows.map((result, index) => (
+              <SearchOption
+                key={JSON.stringify(result.identity)}
+                id={listboxId + '-option-' + index}
+                result={result}
+                selected={index === activeIndex}
+                onHover={() => setActiveIndex(index)}
+                onSelect={() => select(result)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
