@@ -39,6 +39,9 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     })
     assert.equal(blocked.status, 423)
     assert.equal(repository.list().total, 0)
+    const lockedRead = await fetch(`${origin}/__vault/count`)
+    assert.equal(lockedRead.status, 200)
+    assert.deepEqual(await lockedRead.json(), { total: 0 })
 
     locked = false
     for (let index = 1; index <= 3; index++) {
@@ -53,6 +56,9 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     assert.ok(firstPage.nextCursor)
     assert.deepEqual(firstPage.items.map((item) => item.vaultId), ['route_3', 'route_2'])
     assert.ok(repository.epoch)
+
+    const count = await fetch(`${origin}/__vault/count`).then((response) => response.json())
+    assert.deepEqual(count, { total: 3 })
 
     const defaults = await fetch(origin + '/__vault/items').then((response) => response.json())
     assert.deepEqual(defaults.items.map((item) => item.vaultId), ['route_3', 'route_2', 'route_1'])
@@ -70,6 +76,7 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     const removed = await fetch(`${origin}/__vault/items/${entry(1).vaultId}?reason=withdraw`, { method: 'DELETE' })
     assert.equal(removed.status, 200)
     assert.equal(repository.get(entry(1).vaultId, { includeInactive: true }).status, 'withdrawn')
+    assert.deepEqual(await fetch(`${origin}/__vault/count`).then((response) => response.json()), { total: 2 })
   } finally {
     await new Promise((resolve) => httpServer.close(resolve))
     fs.rmSync(savesDir, { recursive: true, force: true })

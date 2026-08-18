@@ -486,6 +486,10 @@ export class VaultRepository {
     return { slots: distinct('slot'), sets: distinct('set_name'), categories: distinct('category') }
   }
 
+  count() {
+    return this.db.prepare("SELECT COUNT(*) AS count FROM vault_items WHERE status = 'active'").get().count
+  }
+
   get(vaultId, { includeInactive = false } = {}) {
     const row = this.db.prepare(`SELECT * FROM vault_items WHERE vault_id = ?${includeInactive ? '' : " AND status = 'active'"}`).get(vaultId)
     return row ? hydrateRow(row) : null
