@@ -1,11 +1,15 @@
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || `Vault request failed (${response.status})`)
+  if (!response.ok) {
+    const error = new Error(data.error || 'Vault request failed (' + response.status + ')')
+    error.status = response.status
+    throw error
+  }
   return data
 }
 
 export const InfiniteStashAdapter = {
-  async list(filters = {}, { cursor = null, limit = 100 } = {}) {
+  async list(filters = {}, { cursor = null, limit = 100, sort = filters.sort, direction = filters.direction } = {}) {
     const params = new URLSearchParams({ limit: String(limit) })
     if (cursor) params.set('cursor', cursor)
     if (filters.q?.trim()) params.set('q', filters.q.trim())
@@ -13,6 +17,8 @@ export const InfiniteStashAdapter = {
     if (filters.category && filters.category !== 'All') params.set('category', filters.category)
     if (filters.setName && filters.setName !== 'All') params.set('set', filters.setName)
     if (filters.quality && filters.quality !== 'All') params.set('quality', filters.quality)
+    params.set('sort', sort || 'dateAdded')
+    params.set('direction', direction || 'desc')
     return parseResponse(await fetch(`/__vault/items?${params}`))
   },
   async facets() { return parseResponse(await fetch('/__vault/facets')) },

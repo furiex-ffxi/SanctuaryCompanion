@@ -71,6 +71,8 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
           q: url.searchParams.get('q'), slot: url.searchParams.get('slot'),
           category: url.searchParams.get('category'), setName: url.searchParams.get('set'),
           quality: url.searchParams.get('quality'),
+          sort: url.searchParams.has('sort') ? url.searchParams.get('sort') : undefined,
+          direction: url.searchParams.has('direction') ? url.searchParams.get('direction') : undefined,
         }))
       }
       if (req.method === 'GET' && url.pathname === '/__vault/facets') return sendJson(res, 200, vault.facets())
