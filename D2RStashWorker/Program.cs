@@ -752,11 +752,19 @@ namespace D2RStashWorker
         }
         private static object SerializeItem(Item i, uint version, int altPositionId, string parentCode = "")
         {
-            byte[] itemBytes = new byte[2048];
-            var bitWriter = new D2SSharp.IO.BitWriter(itemBytes);
-            i.Write(ref bitWriter, D2SSharp.Data.TxtFileExternalData.Default, version);
-            int itemByteLen = bitWriter.BytesWritten;
-            byte[] exactItemBytes = itemBytes.AsSpan(0, itemByteLen).ToArray();
+            byte[] itemBytes = System.Buffers.ArrayPool<byte>.Shared.Rent(2048);
+            string rawBytesHex;
+            try
+            {
+                var bitWriter = new D2SSharp.IO.BitWriter(itemBytes);
+                i.Write(ref bitWriter, D2SSharp.Data.TxtFileExternalData.Default, version);
+                int itemByteLen = bitWriter.BytesWritten;
+                rawBytesHex = Convert.ToHexString(itemBytes.AsSpan(0, itemByteLen));
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<byte>.Shared.Return(itemBytes);
+            }
 
             string? uniqueName = null;
             string? setName = null;
@@ -841,7 +849,7 @@ namespace D2RStashWorker
                 item_level = (int)i.ItemLevel,
                 level_requirement_source = requirement.Source,
                 equippable = requirement.Equippable,
-                rawBytesHex = Convert.ToHexString(exactItemBytes),
+                rawBytesHex = rawBytesHex,
                 magic_attributes = SerializeStats(itemStats, version),
                 runeword_attributes = SerializeStats(i.RunewordStats ?? [], version),
                 set_attributes = i.SetBonusStats.Select(stats => SerializeStats(stats, version)).ToArray(),
