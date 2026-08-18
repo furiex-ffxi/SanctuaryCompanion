@@ -2,8 +2,9 @@ import React from 'react';
 import { getItemDisplayName, getItemSocketCount } from './ItemSprite';
 import { getItemTypeDisplayName, getItemDetails, formatStat, groupItemStats } from '../domain/entities/ItemDisplay.js';
 import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
+import { compareItemStat, getRollRange } from '../domain/entities/ItemRollComparison.js';
 
-export const ItemTooltip = ({ item }) => {
+export const ItemTooltip = ({ item, comparisonItems = [] }) => {
   if (!item) return null;
   const name = getItemDisplayName(item);
   const typeName = getItemTypeDisplayName(item);
@@ -23,7 +24,9 @@ export const ItemTooltip = ({ item }) => {
   const rawAttrs = attributeSources.find((attributes) => Array.isArray(attributes)) || [];
 
   const rawVisible = rawAttrs.filter(a => a.visible !== false);
-  const attrs = groupItemStats(rawVisible);
+  const attrs = comparisonItems.length > 0 || rawVisible.some(getRollRange)
+    ? rawVisible
+    : groupItemStats(rawVisible);
 
   // Extract set attributes if available on set items
   const setAttrs = (item.set_attributes || []).flat().filter(Boolean);
@@ -54,7 +57,25 @@ export const ItemTooltip = ({ item }) => {
         )}
         {attrs.map((a, i) => {
           const desc = formatStat(a);
-          return <div key={i} className="tooltip-stat-item">{desc}</div>;
+          const range = getRollRange(a);
+          const comparison = compareItemStat(a, comparisonItems);
+          return (
+            <div key={i} className="tooltip-stat-item">
+              <span>{desc}</span>
+              {range && (
+                <small className="tooltip-roll-range">
+                  Roll {range.min}–{range.max} · {range.percent}%
+                </small>
+              )}
+              {!range && comparison && (
+                <small className={comparison.isBest ? 'tooltip-roll-best' : 'tooltip-roll-comparison'}>
+                  {comparison.isBest
+                    ? `Best of ${comparison.compared} matches`
+                    : `${comparison.difference} below best of ${comparison.compared}`}
+                </small>
+              )}
+            </div>
+          );
         })}
         {setAttrs.length > 0 && (
           <div className="tooltip-set-bonuses">

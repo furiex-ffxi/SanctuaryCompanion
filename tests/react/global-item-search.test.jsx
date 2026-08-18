@@ -14,7 +14,16 @@ function result(...displayNames) {
       characters: {
         results: displayNames.map(displayName => ({
           identity: { itemSeed: displayName },
-          preview: { displayName, typeName: 'Test item', socketCount: 0 },
+          preview: {
+            displayName,
+            typeName: 'Test item',
+            socketCount: 0,
+            item: {
+              type: 'rin',
+              type_name: displayName,
+              displayed_combined_magic_attributes: [{ id: 39, values: [displayName.length] }],
+            },
+          },
           match: { field: 'name', text: displayName },
           sourceKind: 'character',
           characterName: 'TestHero',
@@ -212,5 +221,21 @@ describe('GlobalItemSearch', () => {
     await act(async () => newSource.resolve());
     expect(fetchMock.mock.calls[1][0]).toContain('sharedFile=New.d2i');
     expect(screen.getByText('New Stash Skull')).toBeInTheDocument();
+  });
+
+  test('shows comparison summaries and a detailed tooltip for search results', async () => {
+    vi.useFakeTimers();
+    const response = deferredResponse(result('Short Ring', 'Longest Ring'));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(response.promise));
+
+    render(<GlobalItemSearch onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ring' } });
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await act(async () => response.resolve());
+
+    expect(screen.getAllByText('1/1 best')).toHaveLength(1);
+    expect(screen.getAllByText('0/1 best')).toHaveLength(1);
+    fireEvent.mouseEnter(screen.getAllByRole('option')[1], { clientX: 20, clientY: 20 });
+    expect(screen.getByText('Best of 2 matches')).toBeInTheDocument();
   });
 });

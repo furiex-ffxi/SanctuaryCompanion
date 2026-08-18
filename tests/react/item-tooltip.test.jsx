@@ -38,4 +38,18 @@ describe('ItemTooltip', () => {
 
     expect(screen.getAllByText('Fire Resist +29%')).toHaveLength(1);
   });
+
+  test('shows authoritative roll ranges when the parsed stat supplies them', () => {
+    render(<ItemTooltip item={{
+      type: 'vgl',
+      displayed_combined_magic_attributes: [{
+        id: 39,
+        values: [28],
+        description: 'Fire Resist +28%',
+        roll_range: { min: 21, max: 30 },
+      }],
+    }} />);
+
+    expect(screen.getByText('Roll 21–30 · 78%')).toBeInTheDocument();
+  });
 });

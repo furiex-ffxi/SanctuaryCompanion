@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ItemTooltip } from './ItemTooltip';
 import { calculateTooltipPosition } from '../utils/tooltipPosition';
 
-export function TooltipTrigger({ item, children, ...props }) {
+export function TooltipTrigger({ item, comparisonItems, children, ...props }) {
   const [active, setActive] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
@@ -34,13 +34,13 @@ export function TooltipTrigger({ item, children, ...props }) {
     >
       {children}
       {active && item && (
-        <PortalTooltip item={item} pos={pos} />
+        <PortalTooltip item={item} comparisonItems={comparisonItems} pos={pos} />
       )}
     </div>
   );
 }
 
-function PortalTooltip({ item, pos }) {
+function PortalTooltip({ item, comparisonItems, pos }) {
   const tooltipRef = useRef(null);
 
   useLayoutEffect(() => {
@@ -73,7 +73,7 @@ function PortalTooltip({ item, pos }) {
         top: '-9999px'
       }}
     >
-      <ItemTooltip item={item} />
+      <ItemTooltip item={item} comparisonItems={comparisonItems} />
     </div>,
     document.body
   );
