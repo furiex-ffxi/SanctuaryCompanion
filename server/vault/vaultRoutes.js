@@ -90,6 +90,7 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
         result.items = await enqueue(() => rehydrateVaultEntries(vault, result.items, rehydrateItem))
         return sendJson(res, 200, result)
       }
+      if (req.method === 'GET' && url.pathname === '/__vault/count') return sendJson(res, 200, { total: vault.count() })
       if (req.method === 'GET' && url.pathname === '/__vault/facets') return sendJson(res, 200, vault.facets())
       if (req.method === 'GET' && url.pathname === '/__vault/export') {
         const filename = `sanctuary_infinite_stash_${new Date().toISOString().slice(0, 10)}.json`

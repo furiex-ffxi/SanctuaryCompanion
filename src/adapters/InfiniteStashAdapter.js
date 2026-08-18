@@ -21,6 +21,7 @@ export const InfiniteStashAdapter = {
     params.set('direction', direction || 'desc')
     return parseResponse(await fetch(`/__vault/items?${params}`))
   },
+  async count() { return parseResponse(await fetch('/__vault/count')) },
   async facets() { return parseResponse(await fetch('/__vault/facets')) },
   async add(entry) {
     return parseResponse(await fetch('/__vault/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))

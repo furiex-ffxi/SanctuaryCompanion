@@ -29,6 +29,8 @@ export function useCharacterCompanion() {
   const [loadError, setLoadError]   = useState(null);
   const [vaultItems, setVaultItems] = useState([]);
   const [vaultTotal, setVaultTotal] = useState(0);
+  const [vaultCount, setVaultCount] = useState(null);
+  const [vaultCountError, setVaultCountError] = useState(null);
   const [vaultNextCursor, setVaultNextCursor] = useState(null);
   const [vaultFacets, setVaultFacets] = useState({ slots: [], sets: [], categories: [] });
   const [vaultLoading, setVaultLoading] = useState(false);
@@ -36,6 +38,7 @@ export function useCharacterCompanion() {
   const transferInFlight = useRef(new Set());
   const vaultFiltersRef = useRef({});
   const vaultRequestRef = useRef(0);
+  const vaultCountRequestRef = useRef(0);
   const vaultLoadingRef = useRef(false);
   const vaultMountedRef = useRef(true);
   const sharedRequestRef = useRef(0);
@@ -86,11 +89,28 @@ export function useCharacterCompanion() {
     return facets;
   }, []);
 
+  const refreshVaultCount = useCallback(async () => {
+    const requestId = ++vaultCountRequestRef.current;
+    setVaultCountError(null);
+    try {
+      const { total } = await InfiniteStashAdapter.count();
+      if (!vaultMountedRef.current || requestId !== vaultCountRequestRef.current) return total;
+      setVaultCount(total);
+      return total;
+    } catch (err) {
+      if (vaultMountedRef.current && requestId === vaultCountRequestRef.current) {
+        setVaultCount(null);
+        setVaultCountError(err.message);
+      }
+      throw err;
+    }
+  }, []);
+
   const refreshVault = useCallback(async () => {
     const result = await queryVault(vaultFiltersRef.current);
-    await refreshVaultFacets();
+    await Promise.all([refreshVaultFacets(), refreshVaultCount()]);
     return result;
-  }, [queryVault, refreshVaultFacets]);
+  }, [queryVault, refreshVaultFacets, refreshVaultCount]);
 
   const loadMoreVault = useCallback(() => {
     if (!vaultNextCursor || vaultLoading || vaultLoadingRef.current) return Promise.resolve();
@@ -113,6 +133,13 @@ export function useCharacterCompanion() {
       console.error('Failed to load Infinite Stash:', err);
     });
   }, [refreshVaultFacets]);
+
+  useEffect(() => {
+    refreshVaultCount().catch((err) => {
+      console.error('Failed to load Infinite Stash count:', err);
+    });
+    return () => { vaultCountRequestRef.current += 1; };
+  }, [refreshVaultCount]);
 
   useEffect(() => {
     vaultMountedRef.current = true;
@@ -418,7 +445,9 @@ export function useCharacterCompanion() {
 
   // HMR Hot Reload handling in Dev mode
   useEffect(() => {
-    if (typeof import.meta.hot === 'undefined') return;
+    if (typeof import.meta.hot === 'undefined'
+      || typeof import.meta.hot.on !== 'function'
+      || typeof import.meta.hot.off !== 'function') return;
     const handler = (payload) => {
       if (payload.file !== activeFile) return;
       setCharData(payload.char);
@@ -484,6 +513,8 @@ export function useCharacterCompanion() {
     loadError,
     vaultItems,
     vaultTotal,
+    vaultCount,
+    vaultCountError,
     vaultNextCursor,
     vaultFacets,
     vaultLoading,

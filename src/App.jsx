@@ -71,6 +71,8 @@ function MainContent() {
     STORAGE_META,
     vaultItems,
     vaultTotal,
+    vaultCount,
+    vaultCountError,
     vaultNextCursor,
     vaultFacets,
     vaultLoading,
@@ -203,8 +205,9 @@ function MainContent() {
             <button
               className={`main-nav-btn ${mainTab === 'stash' ? 'active' : ''}`}
               onClick={() => handleNavClick('stash')}
+              title={vaultCountError ? `Could not load Infinite Stash count: ${vaultCountError}` : undefined}
             >
-              Infinite Stash ({vaultTotal})
+              Infinite Stash ({vaultCount ?? (vaultCountError ? '?' : '…')})
             </button>
           </nav>
           {loadError && <div className="error-banner" role="alert">{loadError}</div>}
