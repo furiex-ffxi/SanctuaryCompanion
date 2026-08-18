@@ -14,11 +14,13 @@ export const ItemTooltip = ({ item }) => {
   const itemLevel = getItemLevel(item);
   const itemDetails = getItemDetails(item).filter((detail) => !detail.startsWith('Item Level:'));
 
-  const rawAttrs = item.displayed_combined_magic_attributes
-    || item.displayed_magic_attributes
-    || item.combined_magic_attributes
-    || item.magic_attributes
-    || [];
+  const attributeSources = [
+    item.displayed_combined_magic_attributes,
+    item.displayed_magic_attributes,
+    item.combined_magic_attributes,
+    item.magic_attributes,
+  ];
+  const rawAttrs = attributeSources.find((attributes) => Array.isArray(attributes)) || [];
 
   const rawVisible = rawAttrs.filter(a => a.visible !== false);
   const attrs = groupItemStats(rawVisible);

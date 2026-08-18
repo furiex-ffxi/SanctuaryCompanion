@@ -75,3 +75,100 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     fs.rmSync(savesDir, { recursive: true, force: true })
   }
 })
+
+test('rehydrates a legacy vault page through the worker contract and journals it once', async () => {
+  const savesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctuary-vault-rehydrate-'))
+  const repository = new VaultRepository({ savesDir })
+  let handler
+  const httpServer = http.createServer((req, res) => handler(req, res, () => {
+    res.writeHead(404)
+    res.end()
+  }))
+  await repository.add({
+    vaultId: 'legacy-ring',
+    stashedAt: '2026-01-01T00:00:00.000Z',
+    sourceSave: 'Legacy.d2s',
+    itemData: {
+      type: 'rin',
+      type_name: 'Ring',
+      rawBytesHex: '4a4dbeef',
+      displayed_combined_magic_attributes: [{
+        id: 57,
+        values: [52, 52, 125],
+        description: '%+d poison damage over 25 seconds',
+      }],
+    },
+  })
+  let calls = 0
+  const rehydrateItem = async (item) => {
+    calls++
+    return {
+      ...item,
+      stat_display_version: 1,
+      item_format: 105,
+      displayed_combined_magic_attributes: [{
+        id: 57,
+        values: [25, 25, 5],
+        description: 'Adds 25 poison damage over 5 seconds',
+      }],
+    }
+  }
+  registerVaultRoutes({ middlewares: { use(callback) { handler = callback } }, httpServer }, {
+    savesDir,
+    repository,
+    processCheck: () => false,
+    rehydrateItem,
+  })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const origin = 'http://127.0.0.1:' + httpServer.address().port
+
+  try {
+    const first = await fetch(origin + '/__vault/items').then((response) => response.json())
+    assert.equal(first.items[0].itemData.displayed_combined_magic_attributes[0].description, 'Adds 25 poison damage over 5 seconds')
+    assert.equal(repository.get('legacy-ring').itemData.stat_display_version, 1)
+    assert.equal(calls, 1)
+
+    await fetch(origin + '/__vault/items').then((response) => response.json())
+    assert.equal(calls, 1)
+    const journal = fs.readFileSync(repository.epoch.journalPath, 'utf8')
+    assert.match(journal, /"operation":"metadata_update"/)
+  } finally {
+    await new Promise((resolve) => httpServer.close(resolve))
+    fs.rmSync(savesDir, { recursive: true, force: true })
+  }
+})
+
+test('aborts a legacy import before SQLite mutation when worker rehydration fails', async () => {
+  const savesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sanctuary-vault-import-rehydrate-'))
+  const repository = new VaultRepository({ savesDir })
+  let handler
+  const httpServer = http.createServer((req, res) => handler(req, res, () => {
+    res.writeHead(404)
+    res.end()
+  }))
+  registerVaultRoutes({ middlewares: { use(callback) { handler = callback } }, httpServer }, {
+    savesDir,
+    repository,
+    processCheck: () => false,
+    rehydrateItem: async () => { throw new Error('invalid raw item') },
+  })
+  await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
+  const origin = 'http://127.0.0.1:' + httpServer.address().port
+
+  try {
+    const response = await fetch(origin + '/__vault/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([{
+        vaultId: 'bad-import',
+        itemData: { type: 'rin', rawBytesHex: 'bad0' },
+      }]),
+    })
+    assert.equal(response.status, 500)
+    assert.match((await response.json()).error, /invalid raw item/)
+    assert.equal(repository.list().total, 0)
+  } finally {
+    await new Promise((resolve) => httpServer.close(resolve))
+    fs.rmSync(savesDir, { recursive: true, force: true })
+  }
+})
