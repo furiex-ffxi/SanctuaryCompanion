@@ -24,6 +24,30 @@ export class D2SParserAdapter {
     return await res.json();
   }
 
+  static async parseBuffer(buffer) {
+    const res = await fetch('/__d2s_parse_buffer', {
+      method: 'POST',
+      body: buffer,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText);
+    }
+    return await res.json();
+  }
+
+  static async parseSharedStashBuffer(buffer) {
+    const res = await fetch('/__d2i_parse_buffer', {
+      method: 'POST',
+      body: buffer,
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText);
+    }
+    return await res.json();
+  }
+
   static async removeItemFromSharedStash(filename, item) {
     const res = await fetch('/__d2i_remove_item', {
       method: 'POST',

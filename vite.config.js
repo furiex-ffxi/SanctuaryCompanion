@@ -111,6 +111,48 @@ function d2sWatcherPlugin() {
         }
       })
 
+      // Parse uploaded .d2s buffer
+      server.middlewares.use('/__d2s_parse_buffer', (req, res) => {
+        if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', async () => {
+          const buffer = Buffer.concat(chunks);
+          const tempPath = path.join(require('os').tmpdir(), `temp_d2s_${crypto.randomUUID()}.d2s`);
+          try {
+            fs.writeFileSync(tempPath, buffer);
+            const data = await parseD2S(tempPath);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+          } catch (err) {
+            res.writeHead(500); res.end(err.message);
+          } finally {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          }
+        });
+      });
+
+      // Parse uploaded .d2i buffer
+      server.middlewares.use('/__d2i_parse_buffer', (req, res) => {
+        if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', async () => {
+          const buffer = Buffer.concat(chunks);
+          const tempPath = path.join(require('os').tmpdir(), `temp_d2i_${crypto.randomUUID()}.d2i`);
+          try {
+            fs.writeFileSync(tempPath, buffer);
+            const data = await parseD2I(tempPath);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(data));
+          } catch (err) {
+            res.writeHead(500); res.end(err.message);
+          } finally {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          }
+        });
+      });
+
       // Endpoint to remove item from .d2i shared stash file when depositing to Vault
       server.middlewares.use('/__d2i_remove_item', (req, res) => {
         if (req.method !== 'POST') {
