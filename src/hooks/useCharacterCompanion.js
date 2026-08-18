@@ -66,7 +66,7 @@ export function useCharacterCompanion() {
     try {
       const result = await InfiniteStashAdapter.list(filters, { cursor, limit: 100 });
       if (!vaultMountedRef.current || requestId !== vaultRequestRef.current) return result;
-      setVaultItems((current) => append ? [...current, ...result.items].slice(0, 500) : result.items);
+      setVaultItems((current) => append ? [...current, ...result.items] : result.items);
       setVaultTotal(result.total);
       setVaultNextCursor(result.nextCursor);
       return result;
