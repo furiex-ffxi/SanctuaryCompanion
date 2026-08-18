@@ -44,6 +44,7 @@ namespace D2RStashWorker
         private static Dictionary<string, string[]> _itemGfx = new();
         private static Dictionary<int, int> _prefixLevelRequirements = new();
         private static Dictionary<int, int> _suffixLevelRequirements = new();
+        private static Dictionary<int, string> _skillNames = new();
         public const string ItemDataSource = "blizzhackers/d2data@477bcf63e964f39f4c774e588a79fd598ae472de";
         private static readonly HashSet<string> _accessoryCodes = new(StringComparer.OrdinalIgnoreCase) { "rin", "amu", "jew", "cm1", "cm2", "cm3" };
         public static bool IsAccessoryCode(string code) => _accessoryCodes.Contains(code.Trim());
@@ -100,6 +101,29 @@ namespace D2RStashWorker
             { 199, "Metamorphosis" }, { 200, "Ground" }, { 201, "Temper" }, { 202, "Hearth" },
             { 203, "Cure" }, { 204, "Bulwark" }
         };
+
+        private static void LoadSkillNames()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.skill_names.tsv");
+            using var reader = stream == null ? null : new StreamReader(stream);
+            if (reader == null) throw new InvalidDataException("Pinned skill-name snapshot is missing.");
+            reader.ReadLine();
+            while (!reader.EndOfStream)
+            {
+                var parts = (reader.ReadLine() ?? "").Split((char)9);
+                if (parts.Length >= 2 && int.TryParse(parts[0], out var id) && !string.IsNullOrWhiteSpace(parts[1]))
+                    _skillNames[id] = parts[1].Trim();
+            }
+        }
+
+        public static string GetSkillName(int id)
+        {
+            // The game data uses an internal monster-skill token for the
+            // Hellfire Torch proc; use the player-facing item wording.
+            if (id == 197) return "Firestorm";
+            return _skillNames.TryGetValue(id, out var name) ? name : "Skill #" + id;
+        }
 
         private static void LoadAffixRequirementData()
         {
@@ -175,6 +199,7 @@ namespace D2RStashWorker
             {
                 LoadItemImageData();
                 LoadAffixRequirementData();
+                LoadSkillNames();
                 var assembly = Assembly.GetExecutingAssembly();
                 using (var stream = assembly.GetManifestResourceStream("D2RStashWorker.Data.uniqueitems.txt"))
                 {
@@ -510,32 +535,152 @@ namespace D2RStashWorker
             return stat.Value >> info.ValShift;
         }
 
+        private static string Signed(long value) => value >= 0 ? "+" + value : value.ToString();
+
         private static string ToUiStatDescription(Stat stat, uint version)
         {
+            var value = ToUiStatValue(stat, version);
             if (stat.Id == StatId.AddSkillTab)
             {
                 var tab = SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer;
-                var displayValue = ToUiStatValue(stat, version);
-                return "+" + displayValue + " to " + tab + " Skills";
+                return Signed(value) + " to " + tab + " Skills";
             }
-            var percent = stat.Id is StatId.FireResist or StatId.ColdResist or StatId.LightningResist or StatId.PoisonResist
+            if (stat.Id == StatId.AddClassSkills)
+            {
+                var className = stat.Layer switch
+                {
+                    0 => "Amazon", 1 => "Sorceress", 2 => "Necromancer", 3 => "Paladin",
+                    4 => "Barbarian", 5 => "Druid", 6 => "Assassin", 7 => "Warlock",
+                    _ => "Class #" + stat.Layer
+                };
+                return Signed(value) + " to " + className + " Skill Levels";
+            }
+            if (stat.Id is StatId.SingleSkill or StatId.NonClassSkill)
+                return Signed(value) + " to " + D2Data.GetSkillName(stat.Layer);
+
+            var triggerPhrase = stat.Id switch
+            {
+                StatId.SkillOnAttack => "on attack",
+                StatId.SkillOnKill => "after each Kill",
+                StatId.SkillOnDeath => "when you die",
+                StatId.SkillOnHit => "on striking",
+                StatId.SkillOnLevelUp => "when you Level-Up",
+                StatId.SkillOnGetHit => "when struck",
+                _ => null
+            };
+            if (triggerPhrase != null)
+            {
+                var skillId = stat.Layer >> 6;
+                var level = stat.Layer & 0x3F;
+                return value + "% Chance to cast level " + level + " " + D2Data.GetSkillName(skillId) + " " + triggerPhrase;
+            }
+            if (stat.Id == StatId.ItemChargedSkill)
+            {
+                var skillId = stat.Layer >> 6;
+                var level = stat.Layer & 0x3F;
+                var current = value & 0xFF;
+                var maximum = value >> 8;
+                return "Level " + level + " " + D2Data.GetSkillName(skillId) + " (" + current + "/" + maximum + " Charges)";
+            }
+            if (stat.Id is StatId.Knockback or StatId.SlainMonstersRestInPeace or StatId.PreventMonsterHeal
+                or StatId.HalfFreezeDuration or StatId.Indestructible or StatId.CannotBeFrozen)
+                return ToFriendlyStatName(stat.Id);
+            if (stat.Id == StatId.ReplenishDurability)
+                return "Repairs " + (value / 100.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " durability per second";
+            if (stat.Id == StatId.ReplenishQuantity)
+                return "Replenishes quantity by " + (value / 100.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " per second";
+
+            var percent = stat.Id is StatId.ArmorPercent or StatId.DamagePercent
+                or StatId.FireResist or StatId.ColdResist or StatId.LightningResist or StatId.PoisonResist
                 or StatId.MaxFireResist or StatId.MaxColdResist or StatId.MaxLightningResist or StatId.MaxPoisonResist
-                or StatId.MagicFind or StatId.GoldFind or StatId.FasterCastRate or StatId.FasterHitRecovery or StatId.FasterRunWalk or StatId.IncreasedAttackSpeed or StatId.FasterBlockRate;
-            var displayStatValue = ToUiStatValue(stat, version);
-            return (displayStatValue >= 0 ? "+" : "") + displayStatValue + (percent ? "%" : "") + " " + ToFriendlyStatName(stat.Id);
+                or StatId.MagicFind or StatId.GoldFind or StatId.FasterCastRate or StatId.FasterHitRecovery
+                or StatId.FasterRunWalk or StatId.IncreasedAttackSpeed or StatId.FasterBlockRate
+                or StatId.LifeSteal or StatId.ManaSteal or StatId.OpenWounds or StatId.CrushingBlow
+                or StatId.DeadlyStrike or StatId.RequirementPercent or StatId.DamageTakenGoesToMana;
+            return Signed(value) + (percent ? "%" : "") + " " + ToFriendlyStatName(stat.Id);
         }
 
-        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> stats, uint version) =>
-            stats.Select(stat => (object)new
+        private static object SerializedStat(Stat stat, long[] values, string description) => new
+        {
+            id = (uint)stat.Id,
+            name = ToUiStatName(stat.Id),
+            label = stat.Id == StatId.AddSkillTab ? (SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer) : ToFriendlyStatName(stat.Id),
+            layer = stat.Layer,
+            values,
+            skill_tab_name = stat.Id == StatId.AddSkillTab ? ToSkillTabName(stat.Layer) : null,
+            description
+        };
+
+        private static object[] SerializeStats(System.Collections.Generic.IEnumerable<Stat> source, uint version)
+        {
+            var stats = source.ToList();
+            var result = new System.Collections.Generic.List<object>();
+            for (var index = 0; index < stats.Count; index++)
             {
-                id = (uint)stat.Id,
-                name = ToUiStatName(stat.Id),
-                label = stat.Id == StatId.AddSkillTab ? (SkillTabName(stat.Layer) ?? "Skill Tab " + stat.Layer) : ToFriendlyStatName(stat.Id),
-                layer = stat.Layer,
-                values = new[] { ToUiStatValue(stat, version) },
-                skill_tab_name = stat.Id == StatId.AddSkillTab ? ToSkillTabName(stat.Layer) : null,
-                description = ToUiStatDescription(stat, version)
-            }).ToArray();
+                var stat = stats[index];
+                long Value(Stat value) => ToUiStatValue(value, version);
+                bool NextIs(StatId id, int offset = 1) => index + offset < stats.Count && stats[index + offset].Id == id;
+
+                if (stat.Id == StatId.PoisonCount) continue;
+                if (stat.Id == StatId.MaxDamagePercent && NextIs(StatId.MinDamagePercent))
+                {
+                    var maximum = Value(stat);
+                    var minimum = Value(stats[index + 1]);
+                    if (minimum == maximum)
+                    {
+                        result.Add(SerializedStat(stat, new[] { minimum, maximum }, Signed(minimum) + "% Enhanced Damage"));
+                    }
+                    else
+                    {
+                        result.Add(SerializedStat(stat, new[] { maximum }, Signed(maximum) + "% Enhanced Maximum Damage"));
+                        result.Add(SerializedStat(stats[index + 1], new[] { minimum }, Signed(minimum) + "% Enhanced Minimum Damage"));
+                    }
+                    index++;
+                    continue;
+                }
+
+                var damageKind = stat.Id switch
+                {
+                    StatId.FireMinDamage => "fire",
+                    StatId.LightningMinDamage => "lightning",
+                    StatId.MagicMinDamage => "magic",
+                    StatId.ColdMinDamage => "cold",
+                    _ => null
+                };
+                var expectedMaximum = stat.Id switch
+                {
+                    StatId.FireMinDamage => StatId.FireMaxDamage,
+                    StatId.LightningMinDamage => StatId.LightningMaxDamage,
+                    StatId.MagicMinDamage => StatId.MagicMaxDamage,
+                    StatId.ColdMinDamage => StatId.ColdMaxDamage,
+                    _ => StatId.Terminator
+                };
+                if (damageKind != null && NextIs(expectedMaximum))
+                {
+                    var minimum = Value(stat);
+                    var maximum = Value(stats[index + 1]);
+                    result.Add(SerializedStat(stat, new[] { minimum, maximum }, "Adds " + minimum + "-" + maximum + " " + damageKind + " damage"));
+                    index++;
+                    if (stat.Id == StatId.ColdMinDamage && NextIs(StatId.ColdLength)) index++;
+                    continue;
+                }
+                if (stat.Id == StatId.PoisonMinDamage && NextIs(StatId.PoisonMaxDamage) && NextIs(StatId.PoisonLength, 2))
+                {
+                    var length = Value(stats[index + 2]);
+                    var minimum = Value(stat) * length / 256;
+                    var maximum = Value(stats[index + 1]) * length / 256;
+                    var seconds = length / 25.0;
+                    var duration = seconds.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                    var damage = minimum == maximum ? minimum.ToString() : minimum + "-" + maximum;
+                    result.Add(SerializedStat(stat, new[] { minimum, maximum, (long)Math.Round(seconds) }, "Adds " + damage + " poison damage over " + duration + " seconds"));
+                    index += 2;
+                    continue;
+                }
+
+                result.Add(SerializedStat(stat, new[] { Value(stat) }, ToUiStatDescription(stat, version)));
+            }
+            return result.ToArray();
+        }
 
         private static (int Requirement, string Source) GetAffixRequirement(Item item)
         {
@@ -666,6 +811,8 @@ namespace D2RStashWorker
             return new
             {
                 id = i.ItemSeed,
+                stat_display_version = 1,
+                item_format = version,
                 type = i.ItemCodeString,
                 type_name = D2Data.GetBaseName(i.ItemCodeString),
                 advanced_stash_stack_size = i.AdvancedStashStackSize,
@@ -716,6 +863,8 @@ namespace D2RStashWorker
             return new
             {
                 id = serialized.id,
+                stat_display_version = serialized.stat_display_version,
+                item_format = serialized.item_format,
                 type = serialized.type,
                 type_name = serialized.type_name,
                 advanced_stash_stack_size = serialized.advanced_stash_stack_size,
@@ -762,6 +911,7 @@ namespace D2RStashWorker
                 Console.Error.WriteLine("Save Remove: D2RStashWorker remove_save <source> <target> <itemSeed>");
                 Console.Error.WriteLine("Save Add: D2RStashWorker add_save <source> <target> <itemHexBytes> <x> <y>");
                 Console.Error.WriteLine("Save Parse: D2RStashWorker parse_save <source>");
+                Console.Error.WriteLine("Item Parse: D2RStashWorker parse_item <itemHex> [version]");
                 Environment.Exit(1);
             }
 
@@ -770,6 +920,18 @@ namespace D2RStashWorker
 
             try
             {
+                if (mode == "parse_item")
+                {
+                    byte[] itemBytes = Convert.FromHexString(sourceFile);
+                    uint itemVersion = 105;
+                    if (args.Length >= 3 && !uint.TryParse(args[2], out itemVersion))
+                        throw new InvalidDataException("Invalid item format version.");
+                    var reader = new D2SSharp.IO.BitReader(itemBytes);
+                    var item = Item.Read(ref reader, D2SSharp.Data.TxtFileExternalData.Default, itemVersion);
+                    Console.WriteLine(JsonSerializer.Serialize(SerializeItem(item, itemVersion, 0)));
+                    return;
+                }
+
                 byte[] bytes = File.ReadAllBytes(sourceFile);
 
                 if (mode == "parse_save")

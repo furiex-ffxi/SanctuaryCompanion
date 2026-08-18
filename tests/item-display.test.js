@@ -15,10 +15,28 @@ test('removes parser classification suffixes from every item base name', () => {
   assert.equal(getItemTypeDisplayName({ type: 'rin', type_name: 'Ring (raw-1)' }), 'Ring');
 });
 
-test('formats worker stats with familiar Diablo II wording', () => {
+test('formats raw legacy stats conservatively when no worker description exists', () => {
   assert.equal(formatStat({ id: 39, values: [35], name: 'fireresist' }), '+35 Fire Resist');
   assert.equal(formatStat({ id: 80, values: [25] }), '+25 Better Chance of Getting Magic Items');
   assert.equal(formatStat({ id: 999, values: [2], name: 'item_some_bonus' }), 'Some bonus: 2');
+});
+
+test('keeps valid D2SSharp descriptions authoritative for every special stat path', () => {
+  const cases = [
+    { id: 188, name: 'item_addskill_tab', layer: 8, values: [2], description: 'Canonical skill tab wording' },
+    { id: 83, name: 'item_addclassskills', layer: 1, values: [2], description: 'Canonical class skill wording' },
+    { id: 107, name: 'item_singleskill', layer: 59, values: [1], description: 'Canonical single skill wording' },
+  ];
+  for (const attribute of cases) assert.equal(formatStat(attribute), attribute.description);
+});
+
+test('repairs only known malformed legacy skill descriptions', () => {
+  assert.equal(formatStat({
+    id: 83,
+    name: 'item_addclassskills',
+    values: [1, 2],
+    description: '+2 %+d to Sorceress Skill Levels',
+  }), '+2 to Sorceress Skill Levels');
 });
 
 test('decodes packed skill-tree layers instead of treating them as random tree ids', () => {

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <None Include="Data\item-data-source.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Data\skill-data-source.json" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Data\runes.txt" />
     <EmbeddedResource Include="Data\setitems.txt" />
     <EmbeddedResource Include="Data\uniqueitems.txt" />
@@ -22,6 +23,7 @@
     <EmbeddedResource Include="Data\item_images.tsv" />
     <EmbeddedResource Include="Data\item_gfx.tsv" />
     <EmbeddedResource Include="Data\affix-level-requirements.tsv" />
+    <EmbeddedResource Include="Data\skill_names.tsv" />
   </ItemGroup>
 
   <Target Name="RequirePinnedD2SSharp" BeforeTargets="Restore">

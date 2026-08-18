@@ -61,6 +61,9 @@ export function getItemTypeDisplayName(item = {}) {
 export function formatStat(attribute = {}) {
   const numericId = Number(attribute?.id);
   const values = Array.isArray(attribute.values) ? attribute.values.map(Number) : [];
+  const description = clean(attribute.description);
+  const malformedLegacyDescription = /%[+]?d|^(?:AddSkillTab|AddClassSkills|SingleSkill|NonClassSkill):/i.test(description);
+  if (description && !malformedLegacyDescription) return description;
   const rawValue = values[0];
 
   // Scale fixed-point life/mana/stamina
@@ -125,7 +128,6 @@ export function formatStat(attribute = {}) {
     }
   }
 
-  if (clean(attribute.description)) return clean(attribute.description);
 
   const value = values.length === 1 ? values[0] : values.join(', ');
   const entry = statLabels[numericId];

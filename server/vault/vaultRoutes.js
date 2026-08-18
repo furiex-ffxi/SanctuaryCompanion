@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
 import { VaultRepository } from './VaultRepository.js'
+import { mapWithConcurrency, needsVaultItemRehydration, rehydrateVaultItem } from './vaultItemRehydrator.js'
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024
 
@@ -41,7 +42,19 @@ export function isD2Running() {
   }
 }
 
-export function registerVaultRoutes(server, { savesDir, repository, processCheck = isD2Running } = {}) {
+export async function rehydrateVaultEntries(vault, entries, rehydrateItem = rehydrateVaultItem) {
+  const stale = entries.filter((entry) => needsVaultItemRehydration(entry.itemData))
+  if (stale.length === 0) return entries
+  const parsedItems = await mapWithConcurrency(stale, (entry) => rehydrateItem(entry.itemData), 4)
+  const refreshed = new Map()
+  for (let index = 0; index < stale.length; index++) {
+    const updated = await vault.update({ ...stale[index], itemData: parsedItems[index] })
+    refreshed.set(updated.vaultId, updated)
+  }
+  return entries.map((entry) => refreshed.get(entry.vaultId) || entry)
+}
+
+export function registerVaultRoutes(server, { savesDir, repository, processCheck = isD2Running, rehydrateItem = rehydrateVaultItem } = {}) {
   const vault = repository || new VaultRepository({ savesDir })
   const migration = vault.migrateLegacyJson()
   if (migration.migrated) console.log(`Migrated ${migration.count} Infinite Stash items to SQLite`)
@@ -66,14 +79,16 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
 
     try {
       if (req.method === 'GET' && url.pathname === '/__vault/items') {
-        return sendJson(res, 200, vault.list({
+        const result = vault.list({
           limit: url.searchParams.get('limit'), cursor: url.searchParams.get('cursor'),
           q: url.searchParams.get('q'), slot: url.searchParams.get('slot'),
           category: url.searchParams.get('category'), setName: url.searchParams.get('set'),
           quality: url.searchParams.get('quality'),
           sort: url.searchParams.has('sort') ? url.searchParams.get('sort') : undefined,
           direction: url.searchParams.has('direction') ? url.searchParams.get('direction') : undefined,
-        }))
+        })
+        result.items = await enqueue(() => rehydrateVaultEntries(vault, result.items, rehydrateItem))
+        return sendJson(res, 200, result)
       }
       if (req.method === 'GET' && url.pathname === '/__vault/facets') return sendJson(res, 200, vault.facets())
       if (req.method === 'GET' && url.pathname === '/__vault/export') {
@@ -83,12 +98,20 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
       }
       if (req.method === 'POST' && url.pathname === '/__vault/items') {
         const entry = await readJsonBody(req)
-        const item = await enqueue(async () => { requireUnlocked(); return vault.add(entry) })
+        const item = await enqueue(async () => {
+          requireUnlocked()
+          if (needsVaultItemRehydration(entry.itemData)) entry.itemData = await rehydrateItem(entry.itemData)
+          return vault.add(entry)
+        })
         return sendJson(res, 201, { success: true, item })
       }
       if (req.method === 'PUT' && url.pathname === '/__vault/items') {
         const entry = await readJsonBody(req)
-        const item = await enqueue(async () => { requireUnlocked(); return vault.update(entry) })
+        const item = await enqueue(async () => {
+          requireUnlocked()
+          if (needsVaultItemRehydration(entry.itemData)) entry.itemData = await rehydrateItem(entry.itemData)
+          return vault.update(entry)
+        })
         if (!item) return sendJson(res, 404, { success: false, error: 'Vault item not found' })
         return sendJson(res, 200, { success: true, item })
       }
@@ -101,7 +124,16 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
       }
       if (req.method === 'POST' && url.pathname === '/__vault/import') {
         const entries = await readJsonBody(req)
-        const result = await enqueue(async () => { requireUnlocked(); return vault.importEntries(entries) })
+        const result = await enqueue(async () => {
+          requireUnlocked()
+          if (!Array.isArray(entries)) return vault.importEntries(entries)
+          const normalized = await mapWithConcurrency(entries, async (entry) => (
+            needsVaultItemRehydration(entry?.itemData)
+              ? { ...entry, itemData: await rehydrateItem(entry.itemData) }
+              : entry
+          ), 4)
+          return vault.importEntries(normalized)
+        })
         return sendJson(res, 200, { success: true, ...result })
       }
       if (req.method === 'POST' && url.pathname === '/__vault/backup') {

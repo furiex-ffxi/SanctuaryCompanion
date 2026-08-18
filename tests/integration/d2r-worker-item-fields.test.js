@@ -52,6 +52,26 @@ function assertFriendlySkillDescriptions(value, sourceName) {
     if (item.name === 'SingleSkill') expect(item.description, sourceName).not.toMatch(/^SingleSkill:/);
   });
 }
+function assertCanonicalStatDisplays(value, sourceName) {
+  walk(value, (item) => {
+    if (!Array.isArray(item.displayed_combined_magic_attributes)) return;
+    expect(item.stat_display_version, sourceName + ': stat display version').toBe(1);
+    expect(item.item_format, sourceName + ': item format').toBeGreaterThan(0);
+    for (const stat of item.displayed_combined_magic_attributes) {
+      expect(stat.description, sourceName + ': stat ' + stat.id).toEqual(expect.any(String));
+      expect(stat.description, sourceName + ': stat ' + stat.id).not.toMatch(/%[+]?d|^(?:AddSkillTab|AddClassSkills|SingleSkill|NonClassSkill):/i);
+      if ([48, 50, 52, 54, 57].includes(Number(stat.id))) {
+        expect(stat.values.length, sourceName + ': paired stat ' + stat.id).toBeGreaterThan(1);
+      }
+      if (Number(stat.id) === 17 && !/Maximum Damage/.test(stat.description)) {
+        expect(stat.values.length, sourceName + ': grouped enhanced damage').toBeGreaterThan(1);
+      }
+      if (Number(stat.id) === 17 && stat.values.length === 1) expect(stat.description).toMatch(/Enhanced Maximum Damage/);
+      if (Number(stat.id) === 18) expect(stat.description).toMatch(/Enhanced Minimum Damage/);
+    }
+  });
+}
+
 function assertArmorDetails(parsed, sourceName) {
   const armor = parsed.items.find((item) => item.type === 'uar');
   expect(armor, `${sourceName}: Sacred Armor fixture`).toBeDefined();
@@ -82,17 +102,20 @@ describe('D2R worker integration contract', () => {
           expect(verification.validChecksum, name).toBe(true);
           expect(verification.declaredFileSize, name).toBe(verification.actualFileSize);
           const parsed = parse(await runWorker(['parse_save', roundTrip]));
-          assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name);
+          assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name); assertCanonicalStatDisplays(parsed, name);
           for (const field of ['contained_items', 'merc_items', 'corpse_items', 'iron_golem_item']) expect(Object.hasOwn(parsed, field), `${name}: ${field}`).toBe(true);
           if (name === 'Roka.d2s') assertArmorDetails(parsed, name);
         } else {
           const parsed = parse(await runWorker(['parse_stash', roundTrip]));
-          assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name);
+          assertImageKeys(parsed, name); assertLevelFields(parsed, name); assertFriendlySkillDescriptions(parsed, name); assertCanonicalStatDisplays(parsed, name);
         }
       }
 
       const saveSource = path.join(tempRoot, 'ChaosSC.d2s');
       const saveItem = parse(await runWorker(['parse_save', saveSource])).items[0];
+      const reparsedItem = parse(await runWorker(['parse_item', saveItem.rawBytesHex, String(saveItem.item_format)]));
+      expect(reparsedItem.stat_display_version).toBe(1);
+      expect(reparsedItem.displayed_combined_magic_attributes).toEqual(saveItem.displayed_combined_magic_attributes);
       const saveRemoved = `${saveSource}.removed`; const saveRestored = `${saveSource}.restored`;
       await runWorker(['remove_save', saveSource, saveRemoved, String(saveItem.id)]);
       await runWorker(['add_save', saveRemoved, saveRestored, saveItem.rawBytesHex, '0', '0']);

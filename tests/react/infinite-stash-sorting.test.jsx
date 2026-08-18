@@ -115,4 +115,30 @@ describe('Infinite Stash sorting', () => {
     }));
     expect(screen.getByRole('button', { name: 'Sort direction: Lowest' })).toBeInTheDocument();
   });
+
+  test('renders canonical rehydrated stat wording through the Infinite Stash tooltip path', async () => {
+    render(<InfiniteStashPanel {...props({
+      vaultTotal: 1,
+      vaultItems: [{
+        vaultId: 'legacy-rehydrated',
+        stashedAt: '2026-01-01T00:00:00.000Z',
+        sourceSave: 'Legacy.d2s',
+        itemData: {
+          type: 'rin',
+          type_name: 'Ring',
+          quality: 6,
+          stat_display_version: 1,
+          displayed_combined_magic_attributes: [{
+            id: 57,
+            values: [25, 50, 5],
+            description: 'Adds 25-50 poison damage over 5 seconds',
+          }],
+        },
+      }],
+    })} />);
+
+    fireEvent.mouseEnter(document.querySelector('.stash-item-row'), { clientX: 20, clientY: 20 });
+    expect(await screen.findByText('Adds 25-50 poison damage over 5 seconds')).toBeInTheDocument();
+    expect(screen.queryByText(/poisonmindam|%[+]d/i)).not.toBeInTheDocument();
+  });
 });
