@@ -94,6 +94,7 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
           quality: url.searchParams.get('quality'),
           sort: url.searchParams.has('sort') ? url.searchParams.get('sort') : undefined,
           direction: url.searchParams.has('direction') ? url.searchParams.get('direction') : undefined,
+          status: url.searchParams.get('status') || 'active'
         })
         result.items = await enqueue(() => rehydrateVaultEntries(vault, result.items, rehydrateItem))
         return sendJson(res, 200, result)
@@ -121,6 +122,19 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
           if (needsVaultItemRehydration(entry.itemData)) entry.itemData = await rehydrateItem(entry.itemData)
           return vault.update(entry)
         })
+        if (!item) return sendJson(res, 404, { success: false, error: 'Vault item not found' })
+        return sendJson(res, 200, { success: true, item })
+      }
+      if (req.method === 'POST' && url.pathname.match(/^\/__vault\/items\/[^/]+\/intent$/)) {
+        const vaultId = decodeURIComponent(url.pathname.split('/')[3])
+        const reason = url.searchParams.get('reason') || 'withdraw'
+        const item = await enqueue(async () => { requireUnlocked(); return vault.markPendingWithdraw(vaultId, { reason }) })
+        if (!item) return sendJson(res, 404, { success: false, error: 'Vault item not found' })
+        return sendJson(res, 200, { success: true, item })
+      }
+      if (req.method === 'POST' && url.pathname.match(/^\/__vault\/items\/[^/]+\/recover$/)) {
+        const vaultId = decodeURIComponent(url.pathname.split('/')[3])
+        const item = await enqueue(async () => { requireUnlocked(); return vault.recover(vaultId) })
         if (!item) return sendJson(res, 404, { success: false, error: 'Vault item not found' })
         return sendJson(res, 200, { success: true, item })
       }

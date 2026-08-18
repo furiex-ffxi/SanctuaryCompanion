@@ -334,37 +334,49 @@ export function useCharacterCompanion() {
         return;
       }
 
+      if (!activeFile) {
+        emitToast('Select a character save before withdrawing an item.', 'error');
+        return;
+      }
+
       const backup = await triggerSaveBackup();
       if (!backup?.success) {
         emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
         return;
       }
 
-      if (!activeFile) {
-        emitToast('Select a character save before withdrawing an item.', 'error');
+      // 1. Intent phase
+      try {
+        await InfiniteStashAdapter.markPendingWithdraw(vaultId, 'withdraw');
+      } catch (err) {
+        emitToast(`Withdraw intent failed: ${err.message}`, 'error');
         return;
       }
+
+      let actionSuccess = false;
       try {
         const res = await D2SParserAdapter.addItemToSave(activeFile, itemData);
         if (!res.success || !res.char) throw new Error(res.error || 'D2SSharp did not confirm item placement');
         setCharData(res.char);
+        actionSuccess = true;
       } catch (err) {
         console.error('Failed to add item to save file:', err);
-        emitToast(`Withdrawal failed; the item remains in the vault. ${err.message}`, 'error');
-        return;
+        emitToast(`Withdrawal failed; the item is pending recovery in the Vault. ${err.message}`, 'error');
+        // Do not revert intent automatically; favor recoverable duplicate.
       }
 
-      // Remove from Vault
-      try {
-        await removeItemFromVault(vaultId, 'withdraw');
-      } catch (err) {
-        emitToast(`Item was written to the save, but vault history update failed: ${err.message}`, 'error');
-        return;
+      if (actionSuccess) {
+        try {
+          await removeItemFromVault(vaultId, 'withdraw');
+          emitToast(`"${itemData.type_name || itemData.type}" → Personal Stash`, 'success');
+        } catch (err) {
+          emitToast(`Item was written to the save, but vault history update failed: ${err.message}`, 'error');
+        }
+      } else {
+        await refreshVault(); // Refresh to remove the item from the active UI view
       }
-
-      emitToast(`"${itemData.type_name || itemData.type}" â†’ Personal Stash`, 'success');
     },
-    [activeFile, triggerSaveBackup, isGameRunning, removeItemFromVault]
+    [activeFile, triggerSaveBackup, isGameRunning, removeItemFromVault, refreshVault]
   );
 
   // Withdraw item from Infinite Stash Vault into Shared Stash (.d2i)
@@ -385,7 +397,16 @@ export function useCharacterCompanion() {
         return;
       }
 
+      // 1. Intent phase
+      try {
+        await InfiniteStashAdapter.markPendingWithdraw(vaultId, 'withdraw');
+      } catch (err) {
+        emitToast(`Withdraw intent failed: ${err.message}`, 'error');
+        return;
+      }
+
       let targetTabIdx = 0;
+      let actionSuccess = false;
       try {
         const res = await D2SParserAdapter.addItemToSharedStash(sharedStashFile, itemData);
         if (!res.success) {
@@ -395,23 +416,36 @@ export function useCharacterCompanion() {
           setSharedStash(res.stash);
           targetTabIdx = res.targetTabIdx ?? 0;
         }
+        actionSuccess = true;
       } catch (err) {
-        emitToast('Failed to write to Shared Stash: ' + err.message, 'error');
-        return;
+        emitToast('Failed to write to Shared Stash; item is pending recovery. ' + err.message, 'error');
+        // Do not revert automatically.
       }
 
-      // Remove from Vault
-      try {
-        await removeItemFromVault(vaultId, 'withdraw');
-      } catch (err) {
-        emitToast(`Item was written to Shared Stash, but vault history update failed: ${err.message}`, 'error');
-        return;
+      // 3. Commit: Remove from Vault
+      if (actionSuccess) {
+        try {
+          await removeItemFromVault(vaultId, 'withdraw');
+          emitToast(`"${itemData.type_name || itemData.type}" → Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
+        } catch (err) {
+          emitToast(`Item was written to Shared Stash, but vault history update failed: ${err.message}`, 'error');
+        }
+      } else {
+        await refreshVault();
       }
-
-      emitToast(`"${itemData.type_name || itemData.type}" â†’ Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
     },
-    [triggerSaveBackup, isGameRunning, removeItemFromVault, sharedStashFile, sharedStashLoadedFile]
+    [triggerSaveBackup, isGameRunning, removeItemFromVault, sharedStashFile, sharedStashLoadedFile, refreshVault]
   );
+
+  const recoverItemFromVault = useCallback(async (vaultId) => {
+    try {
+      await InfiniteStashAdapter.recover(vaultId);
+      await refreshVault();
+      emitToast('Item recovered successfully', 'success');
+    } catch (err) {
+      emitToast(`Failed to recover item: ${err.message}`, 'error');
+    }
+  }, [refreshVault]);
 
   // Fetch list of files
   useEffect(() => {
@@ -526,6 +560,7 @@ export function useCharacterCompanion() {
     depositItemToVault,
     withdrawItemFromVault,
     withdrawItemToSharedStash,
+    recoverItemFromVault,
     triggerSaveBackup,
     sharedStash,
     setSharedStash,

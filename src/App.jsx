@@ -84,6 +84,7 @@ function MainContent() {
     depositItemToVault,
     withdrawItemFromVault,
     withdrawItemToSharedStash,
+    recoverItemFromVault,
     triggerSaveBackup,
     sharedStash,
     sharedStashLoading,
@@ -284,6 +285,7 @@ function MainContent() {
           isGameRunning={isGameRunning}
           onWithdraw={withdrawItemFromVault}
           onWithdrawShared={withdrawItemToSharedStash}
+          onRecover={recoverItemFromVault}
           highlightIdentity={searchHighlight}
           searchQuery={vaultSearchQuery}
           onSearchQueryChange={setVaultSearchQuery}

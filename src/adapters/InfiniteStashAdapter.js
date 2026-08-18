@@ -17,6 +17,7 @@ export const InfiniteStashAdapter = {
     if (filters.category && filters.category !== 'All') params.set('category', filters.category)
     if (filters.setName && filters.setName !== 'All') params.set('set', filters.setName)
     if (filters.quality && filters.quality !== 'All') params.set('quality', filters.quality)
+    if (filters.status && filters.status !== 'active') params.set('status', filters.status)
     params.set('sort', sort || 'dateAdded')
     params.set('direction', direction || 'desc')
     return parseResponse(await fetch(`/__vault/items?${params}`))
@@ -28,6 +29,12 @@ export const InfiniteStashAdapter = {
   },
   async update(entry) {
     return parseResponse(await fetch('/__vault/items', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))
+  },
+  async markPendingWithdraw(vaultId, reason = 'withdraw') {
+    return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}/intent?reason=${encodeURIComponent(reason)}`, { method: 'POST' }))
+  },
+  async recover(vaultId) {
+    return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}/recover`, { method: 'POST' }))
   },
   async remove(vaultId, reason = 'delete') {
     return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}?reason=${encodeURIComponent(reason)}`, { method: 'DELETE' }))

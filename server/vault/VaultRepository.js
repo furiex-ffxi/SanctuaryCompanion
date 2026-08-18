@@ -428,8 +428,9 @@ export class VaultRepository {
     const query = normalizeListOptions(options)
     const sort = SORTS[query.sort]
     const cursor = decodeCursor(options.cursor, query, this.cursorSecret)
-    const conditions = ["status = 'active'"]
-    const parameters = {}
+    const status = options.status || 'active'
+    const conditions = ["status = @status"]
+    const parameters = { status }
 
     if (query.q) {
       conditions.push("search_text LIKE @query ESCAPE '\\'")
@@ -540,8 +541,38 @@ export class VaultRepository {
     return this.get(entry.vaultId, { includeInactive: true })
   }
 
-  async retire(vaultId, { reason = 'delete', id = operationId() } = {}) {
+  async markPendingWithdraw(vaultId, { reason = 'withdraw', id = operationId() } = {}) {
     const entry = this.get(vaultId)
+    if (!entry) return null
+    if (entry.status !== 'active') throw new Error(`Cannot withdraw item in status: ${entry.status}`)
+    await this.ensureCheckpoint()
+    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'pending_withdraw', entry })
+    const apply = this.db.transaction(() => {
+      this.db.prepare('UPDATE vault_items SET status = ?, updated_at = ? WHERE vault_id = ?').run('pending_withdraw', this.now().toISOString(), vaultId)
+      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'pending_withdraw', this.now().toISOString())
+    })
+    apply()
+    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'pending_withdraw' })
+    return this.get(vaultId, { includeInactive: true })
+  }
+
+  async recover(vaultId, { id = operationId() } = {}) {
+    const entry = this.get(vaultId, { includeInactive: true })
+    if (!entry) return null
+    if (entry.status !== 'pending_withdraw') throw new Error(`Cannot recover item in status: ${entry.status}`)
+    await this.ensureCheckpoint()
+    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'recover', entry })
+    const apply = this.db.transaction(() => {
+      this.db.prepare('UPDATE vault_items SET status = ?, updated_at = ? WHERE vault_id = ?').run('active', this.now().toISOString(), vaultId)
+      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'recover', this.now().toISOString())
+    })
+    apply()
+    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'recover' })
+    return this.get(vaultId)
+  }
+
+  async retire(vaultId, { reason = 'delete', id = operationId() } = {}) {
+    const entry = this.get(vaultId, { includeInactive: true })
     if (!entry) return null
     await this.ensureCheckpoint()
     this.#appendJournal({ operationId: id, phase: 'intent', operation: reason, entry })
@@ -552,7 +583,7 @@ export class VaultRepository {
     })
     apply()
     this.#appendJournal({ operationId: id, phase: 'commit', operation: reason })
-    return entry
+    return this.get(vaultId, { includeInactive: true })
   }
 
   async importEntries(entries) {

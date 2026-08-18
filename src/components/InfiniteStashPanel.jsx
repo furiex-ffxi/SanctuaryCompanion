@@ -32,6 +32,7 @@ export function InfiniteStashPanel({
   isGameRunning,
   onWithdraw,
   onWithdrawShared,
+  onRecover,
   highlightIdentity,
   searchQuery = '',
   onSearchQueryChange = () => {},
@@ -40,6 +41,7 @@ export function InfiniteStashPanel({
   const [selectedSlot, setSelectedSlot] = useState('All');
   const [selectedSet, setSelectedSet] = useState('All');
   const [selectedQuality, setSelectedQuality] = useState('All');
+  const [status, setStatus] = useState('active');
   const [sort, setSort] = useState('dateAdded');
   const [direction, setDirection] = useState('desc');
   const [backupMessage, setBackupMessage] = useState(null);
@@ -67,10 +69,11 @@ export function InfiniteStashPanel({
         q: searchQuery,
         sort,
         direction,
+        status,
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, sort, direction, onQuery]);
+  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, sort, direction, status, onQuery]);
 
   useEffect(() => () => {
     clearTimeout(backupTimerRef.current);
@@ -243,6 +246,13 @@ export function InfiniteStashPanel({
               <option value="4">Magic</option><option value="2">Normal</option>
             </select>
           </div>
+          <div className="filter-group">
+            <label htmlFor="infinite-vault-status">Status:</label>
+            <select id="infinite-vault-status" className="d2r-select" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="active">Active Items</option>
+              <option value="pending_withdraw">Pending Recovery</option>
+            </select>
+          </div>
           <div className="filter-group vault-sort-controls">
             <label htmlFor="infinite-vault-sort">Sort by:</label>
             <select id="infinite-vault-sort" className="d2r-select" value={sort} onChange={(event) => setSort(event.target.value)}>
@@ -289,8 +299,14 @@ export function InfiniteStashPanel({
                   <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn-d2r btn-secondary" onClick={() => onWithdraw?.(entry.vaultId, item)}>👤 Personal Stash</button>
-                    <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
+                    {entry.status === 'pending_withdraw' ? (
+                      <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>🔄 Recover</button>
+                    ) : (
+                      <>
+                        <button className="btn-d2r btn-secondary" onClick={() => onWithdraw?.(entry.vaultId, item)}>👤 Personal Stash</button>
+                        <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
+                      </>
+                    )}
                     <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑️</button>
                   </div>
                 </TooltipTrigger>
