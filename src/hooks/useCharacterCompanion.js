@@ -198,7 +198,7 @@ export function useCharacterCompanion() {
     } finally {
       if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashLoading(false);
     }
-  }, [updateSharedStashFile]);
+  }, []);
 
   useEffect(() => {
     refreshSharedStash(DEFAULT_SHARED_STASH_FILE);
