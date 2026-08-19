@@ -23,10 +23,12 @@ describe('TerrorZoneScheduler', () => {
     global.fetch = vi.fn((url) => {
       if (url.includes('tz-2023-localized.json')) {
         return Promise.resolve({
+          ok: true,
           json: () => Promise.resolve(mockSchedule)
         });
       }
       return Promise.resolve({
+        ok: true,
         json: () => Promise.resolve({ success: true })
       });
     });
