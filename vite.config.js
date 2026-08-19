@@ -5,9 +5,11 @@ import chokidar from 'chokidar'
 import fs from 'fs'
 import path from 'path'
 import crypto from 'node:crypto'
+import { exec } from 'child_process'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 import { repairMfTimerProfile } from './server/mfTimerRepair.js'
+import { setWindowsTime } from './server/timeJumper.js'
 import { safeSavePath } from './server/savePath.js'
 import { rejectWhileD2RRunning } from './server/processLock.js'
 
@@ -591,7 +593,6 @@ function d2sWatcherPlugin() {
         })
       })
 
-      // Endpoint to change system time for Terror Zone pinning
       server.middlewares.use('/__d2r_set_time', (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
         let body = '';
@@ -599,7 +600,6 @@ function d2sWatcherPlugin() {
         req.on('end', async () => {
           try {
             const { datetime, restore } = JSON.parse(body);
-            const { setWindowsTime } = await import('./server/timeJumper.js');
             await setWindowsTime({ datetime, restore });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));

@@ -1,54 +1,59 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 
 export function TerrorZoneScheduler({ onClose, addToast }) {
-  const [schedule, setSchedule] = useState([]);
-  const [uniqueZones, setUniqueZones] = useState([]);
   const [selectedZone, setSelectedZone] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showRestoreHelp, setShowRestoreHelp] = useState(false);
-  const [repairing, setRepairing] = useState(false);
+  const [tzMaxTime, setTzMaxTime] = useState(() => parseInt(localStorage.getItem('tz_max_time') || '0', 10));
   const [mfTimerDir, setMfTimerDir] = useState(() => localStorage.getItem('mf_timer_dir') || '');
 
-  useEffect(() => {
-    fetch('/data/tz-2023-localized.json')
-      .then(r => r.json())
-      .then(data => {
-        setSchedule(data);
-        const zones = [...new Set(data.map(item => item.zone.enUS))].sort();
-        setUniqueZones(zones);
-        if (zones.length > 0) setSelectedZone(zones[0]);
-      })
-      .catch(err => {
-        console.error('Failed to load TZ schedule', err);
-        addToast('Failed to load Terror Zone schedule', 'error');
-      });
-  }, [addToast]);
+  const { data: schedule, isLoading } = useQuery({
+    queryKey: ['tzSchedule'],
+    queryFn: async () => {
+      const res = await fetch('/data/tz-2023-localized.json');
+      if (!res.ok) throw new Error('Failed to load schedule');
+      return res.json();
+    }
+  });
 
-  const handleRepairMfTimer = async () => {
-    setRepairing(true);
-    try {
-      localStorage.setItem('mf_timer_dir', mfTimerDir.trim());
-      const res = await fetch('/__mf_timer_repair', {
+  const uniqueZones = React.useMemo(() => {
+    if (!schedule) return [];
+    return Array.from(new Set(schedule.map(item => item.zone.enUS))).sort();
+  }, [schedule]);
+
+  useEffect(() => {
+    if (uniqueZones.length > 0 && !selectedZone) {
+      setSelectedZone(uniqueZones[0]);
+    }
+  }, [uniqueZones, selectedZone]);
+
+  const handleMfTimerDirBlur = () => {
+    localStorage.setItem('mf_timer_dir', mfTimerDir);
+  };
+
+  const jumpMutation = useMutation({
+    mutationFn: async (targetDatetime) => {
+      const res = await fetch('/__d2r_set_time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ directory: mfTimerDir.trim() })
+        body: JSON.stringify({ datetime: targetDatetime })
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      if (data.repaired) {
-        addToast(`Repaired ${data.profile}: session time restored to ${Math.round(data.sessionTime)} seconds. Restart MF Timer to load it.`, 'success');
-      } else {
-        addToast(`${data.profile} does not have a negative session time.`, 'success');
-      }
-    } catch (err) {
-      addToast(`MF Timer repair failed: ${err.message}`, 'error');
-    } finally {
-      setRepairing(false);
+    },
+    onSuccess: (_, targetDatetime) => {
+      const targetTime = new Date(targetDatetime).getTime();
+      setTzMaxTime(targetTime);
+      localStorage.setItem('tz_max_time', targetTime.toString());
+      addToast(`System time changed! ${selectedZone} is now active.`, 'success');
+    },
+    onError: (err) => {
+      addToast(`Failed to change time: ${err.message}`, 'error');
     }
-  };
-  const handleRestoreTime = async () => {
-    setLoading(true);
-    try {
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
       const res = await fetch('/__d2r_set_time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,31 +61,48 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
-      addToast('System time restored. Please Save and Exit in D2R NOW.', 'success');
-      localStorage.removeItem('tz_max_time'); // reset max time tracking since they followed safety procedure
-      setUniqueZones([...uniqueZones]); // force re-render
-    } catch (err) {
-      console.error(err);
+    },
+    onSuccess: () => {
+      setTzMaxTime(0);
+      localStorage.removeItem('tz_max_time');
+      addToast('Clock restored and synced to present time.', 'success');
+      setShowRestoreHelp(false);
+    },
+    onError: (err) => {
       addToast(`Failed to restore time: ${err.message}`, 'error');
-    } finally {
-      setLoading(false);
     }
-  };
+  });
 
-  const handlePinZone = async () => {
-    if (!selectedZone) return;
-    
-    // Find the nearest future occurrence (or just any occurrence, since time is relative)
-    const now = new Date();
+  const repairMutation = useMutation({
+    mutationFn: async () => {
+      if (!mfTimerDir) throw new Error("Please enter your MF Timer folder path first.");
+      const res = await fetch('/__mf_timer_repair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mfTimerDir })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data) => {
+      addToast(`MF Timer Repaired! Found ${data.profileCount} profiles, modified ${data.modifiedCount} files.`, 'success');
+    },
+    onError: (err) => {
+      addToast(`Failed to repair MF Timer: ${err.message}`, 'error');
+    }
+  });
+
+  const handlePinZone = () => {
+    if (!schedule) return;
     let nextOccurrences = schedule.filter(item => item.zone.enUS === selectedZone);
     if (nextOccurrences.length === 0) {
       addToast('No schedule found for this zone.', 'error');
       return;
     }
     
-    // Pick the next occurrence after current system time AND any previously simulated future time
-    const lastMaxTime = parseInt(localStorage.getItem('tz_max_time') || '0', 10);
-    const minRequiredTime = Math.max(now.getTime(), lastMaxTime);
+    const now = Date.now();
+    const minRequiredTime = Math.max(now, tzMaxTime);
 
     let target = nextOccurrences.find(item => new Date(item.datetime).getTime() > minRequiredTime);
     if (!target) {
@@ -88,26 +110,10 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       return;
     }
 
-    const targetTime = new Date(target.datetime).getTime();
-    localStorage.setItem('tz_max_time', targetTime.toString());
-
-    setLoading(true);
-    try {
-      const res = await fetch('/__d2r_set_time', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datetime: target.datetime })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-      addToast(`System time changed! ${selectedZone} is now active.`, 'success');
-    } catch (err) {
-      console.error(err);
-      addToast(`Failed to change time: ${err.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
+    jumpMutation.mutate(target.datetime);
   };
+
+  const isWorking = jumpMutation.isPending || restoreMutation.isPending || repairMutation.isPending;
 
   return (
     <div className="modal-overlay">
@@ -115,7 +121,8 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
         <h3>Pin Terror Zone (Offline)</h3>
         <p className="tz-desc">
           This will change your Windows system clock to activate the selected Terror Zone in Single Player.
-          <strong> Note: UAC Prompt will appear.</strong>
+          <br/><br/>
+          <span style={{ color: '#ff4444', fontWeight: 'bold' }}>⚠️ Note: A UAC Prompt will appear.</span>
           <br/><br/>
           To protect your save files, we ensure the clock only moves FORWARD into the future.
           <br/><br/>
@@ -125,25 +132,32 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
         
         <div className="form-group">
           <label>MF Timer folder</label>
-          <input type="text" value={mfTimerDir} onChange={e => { const value = e.target.value; setMfTimerDir(value); localStorage.setItem('mf_timer_dir', value); }} placeholder="C:\\path\\to\\mf_timer" disabled={loading || repairing} />
-          <small>Saved automatically. Used to locate mf_config.ini and the active profile JSON.</small>
+          <input 
+            type="text" 
+            value={mfTimerDir} 
+            onChange={e => setMfTimerDir(e.target.value)} 
+            onBlur={handleMfTimerDirBlur}
+            placeholder="C:\\path\\to\\mf_timer" 
+            disabled={isWorking} 
+          />
+          <small>Saved on blur. Used to locate mf_config.ini and the active profile JSON.</small>
         </div>
 
         <div className="form-group">
           <label>Select Terror Zone</label>
-          <select value={selectedZone} onChange={e => setSelectedZone(e.target.value)} disabled={loading}>
-            {uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
+          <select value={selectedZone} onChange={e => setSelectedZone(e.target.value)} disabled={isWorking || isLoading}>
+            {isLoading ? <option>Loading schedule...</option> : uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
           </select>
         </div>
 
-        <div className="modal-actions" style={{ marginTop: 20, alignItems: 'center' }}>
-          {localStorage.getItem('tz_max_time') && new Date().getTime() < parseInt(localStorage.getItem('tz_max_time'), 10) && (
+        <div className="modal-actions" style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+          {tzMaxTime > Date.now() && (
             <button 
               className="btn-d2r btn-secondary" 
               style={{ marginRight: 'auto', borderColor: '#800' }}
               onClick={() => {
+                setTzMaxTime(0);
                 localStorage.removeItem('tz_max_time');
-                setUniqueZones([...uniqueZones]); // force re-render
                 addToast('Safety tracker reset! You can now jump from your current time.', 'success');
               }}
               title="Click this if you manually changed your Windows clock back to normal and want to start jumping from today again."
@@ -153,16 +167,16 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           )}
 
           <div className="tz-action-buttons">
-            <button className="btn-d2r btn-secondary" onClick={handleRepairMfTimer} disabled={loading || repairing}>
-              {repairing ? 'Repairing...' : 'Repair MF Timer'}
+            <button className="btn-d2r btn-secondary" onClick={() => repairMutation.mutate()} disabled={isWorking}>
+              {repairMutation.isPending ? 'Repairing...' : 'Repair MF Timer'}
             </button>
-            <button className="btn-d2r" onClick={handlePinZone} disabled={loading || !selectedZone}>
-              {loading ? 'Changing...' : 'Jump to Zone'}
+            <button className="btn-d2r" onClick={handlePinZone} disabled={isWorking || !selectedZone || isLoading}>
+              {jumpMutation.isPending ? 'Changing...' : 'Jump to Zone'}
             </button>
             <button className="btn-d2r btn-secondary" onClick={() => setShowRestoreHelp(!showRestoreHelp)}>
               How to restore time
             </button>
-            <button className="btn-d2r btn-secondary" onClick={onClose} disabled={loading}>
+            <button className="btn-d2r btn-secondary" onClick={onClose} disabled={isWorking}>
               Close
             </button>
           </div>
@@ -170,7 +184,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
 
         {showRestoreHelp && (
           <div className="tz-restore-help">
-            <h4>⚠️ Safely Returning to Present Time</h4>
+            <h4>🔄 Safely Returning to Present Time</h4>
             <ol>
               <li>Close MF Timer before the jump, then reopen it once the clock is forward.</li>
               <li>Before restoring the clock, close MF Timer again. After restoring it, use Repair MF Timer if needed, then reopen it.</li>
@@ -181,8 +195,8 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
             <p>
               By saving <em>after</em> restoring the clock, you force D2R to create a brand-new save file with the present timestamp, avoiding any rollback issues.
             </p>
-            <button className="btn-d2r" style={{backgroundColor: '#800000'}} onClick={handleRestoreTime} disabled={loading}>
-              {loading ? 'Restoring...' : 'Restore Windows Clock to Present'}
+            <button className="btn-d2r" style={{backgroundColor: '#800000'}} onClick={() => restoreMutation.mutate()} disabled={isWorking}>
+              {restoreMutation.isPending ? 'Restoring...' : 'Restore Windows Clock to Present'}
             </button>
           </div>
         )}
@@ -239,16 +253,6 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           color: #999;
           font-size: 0.78em;
           line-height: 1.35;
-        }        .form-group select {
-          width: 100%;
-          padding: 8px;
-          margin-top: 8px;
-          background: #333;
-          color: #fff;
-          border: 1px solid #555;
-        }
-        .modal-actions {
-          margin-top: 20px;
         }
         .tz-action-buttons {
           display: grid;

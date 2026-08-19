@@ -29,6 +29,15 @@ describe('timeJumper', () => {
     assert.ok(executedScript.includes("Set-Date -Date ([datetime]''2026-08-19T10:00:00.000Z'')"));
   });
 
+  it('should reject when datetime is invalid', async () => {
+    try {
+      await setWindowsTime({ datetime: "2026-08-19''); Remove-Item -Recurse C:\; #" }, () => {});
+      assert.fail('Should have thrown an error');
+    } catch (err) {
+      assert.equal(err.message, 'Invalid datetime parameter');
+    }
+  });
+
   it('should reject when datetime is missing and restore is false', async () => {
     try {
       await setWindowsTime({ }, () => {});

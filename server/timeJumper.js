@@ -4,10 +4,15 @@ export function setWindowsTime({ datetime, restore }, execFn = exec) {
   return new Promise((resolve, reject) => {
     let script;
     if (restore) {
-      script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Start-Service W32Time -ErrorAction SilentlyContinue; W32tm /resync /force'"`;
+      script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-Command Start-Service W32Time -ErrorAction SilentlyContinue; W32tm /resync /force'"`;
     } else {
       if (!datetime) return reject(new Error('Missing datetime parameter'));
-      script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Stop-Service W32Time -ErrorAction SilentlyContinue; Set-Date -Date ([datetime]''${datetime}'')'"`;
+      const parsedDate = new Date(datetime);
+      if (isNaN(parsedDate.getTime())) {
+        return reject(new Error('Invalid datetime parameter'));
+      }
+      const safeDatetime = parsedDate.toISOString();
+      script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-Command Stop-Service W32Time -ErrorAction SilentlyContinue; Set-Date -Date ([datetime]''${safeDatetime}'')'"`;
     }
 
     execFn(script, (err) => {
