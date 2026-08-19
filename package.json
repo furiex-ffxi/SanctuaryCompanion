@@ -20,6 +20,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "better-sqlite3": "^13.0.3",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",

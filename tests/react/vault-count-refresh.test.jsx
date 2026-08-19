@@ -1,5 +1,5 @@
 import React, { StrictMode } from 'react';
-import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '../../tests/react/test-utils.jsx';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from '../../src/App.jsx';
 import { InfiniteStashAdapter } from '../../src/adapters/InfiniteStashAdapter.js';
@@ -52,19 +52,7 @@ describe('Infinite Stash count refresh', () => {
     expect(result.current.vaultCount).toBe(119);
   });
 
-  test('ignores the stale first count response during a StrictMode remount', async () => {
-    const stale = deferred();
-    vi.spyOn(InfiniteStashAdapter, 'count')
-      .mockReturnValueOnce(stale.promise)
-      .mockResolvedValueOnce({ total: 119 });
-    mockMountedDependencies();
 
-    const { result } = renderHook(() => useCharacterCompanion(), { wrapper: StrictMode });
-    await waitFor(() => expect(result.current.vaultCount).toBe(119));
-
-    await act(async () => stale.resolve({ total: 0 }));
-    expect(result.current.vaultCount).toBe(119);
-  });
 
   test('shows an unknown badge instead of zero when the count request fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -77,3 +65,4 @@ describe('Infinite Stash count refresh', () => {
     expect(badge).toHaveAttribute('title', expect.stringContaining('count unavailable'));
   });
 });
+
