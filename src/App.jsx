@@ -49,25 +49,17 @@ export default function App() {
   );
 }
 
+import { useUIStore } from './stores/useUIStore';
+
 function MainContent() {
   const {
     charData,
-    isSwapped,
-    setIsSwapped,
-    activeTab,
-    setActiveTab,
-    mainTab,
-    setMainTab,
     saveFiles,
-    activeFile,
-    setActiveFile,
     syncedAt,
     syncing,
     loadError,
     refreshFromServer,
     handleFileUpload,
-    activeStats,
-    storageItems,
     STORAGE_META,
     vaultItems,
     vaultTotal,
@@ -91,22 +83,40 @@ function MainContent() {
     sharedStashError,
     refreshSharedStash,
     setSharedStash,
-    sharedStashFile,
-    setSharedStashFile,
     sharedStashLoadedFile,
     setSharedStashLoadedFile,
     setSharedStashError,
-    sharedStashTab,
-    setSharedStashTab,
-    difficulty,
-    setDifficulty,
     isGameRunning,
   } = useCharacterCompanion();
 
+  const mainTab = useUIStore((state) => state.mainTab);
+  const setMainTab = useUIStore((state) => state.setMainTab);
+  const activeTab = useUIStore((state) => state.activeTab);
+  const setActiveTab = useUIStore((state) => state.setActiveTab);
+  const activeFile = useUIStore((state) => state.activeFile);
+  const setActiveFile = useUIStore((state) => state.setActiveFile);
+  const sharedStashFile = useUIStore((state) => state.sharedStashFile);
+  const setSharedStashFile = useUIStore((state) => state.setSharedStashFile);
+  const sharedStashTab = useUIStore((state) => state.sharedStashTab);
+  const setSharedStashTab = useUIStore((state) => state.setSharedStashTab);
+  const vaultSearchQuery = useUIStore((state) => state.vaultSearchQuery);
+  const setVaultSearchQuery = useUIStore((state) => state.setVaultSearchQuery);
+  const setIsSwapped = useUIStore((state) => state.setIsSwapped);
+
   const { toasts, addToast, dismissToast } = useToasts();
   const [searchHighlight, setSearchHighlight] = React.useState(null);
-  const [vaultSearchQuery, setVaultSearchQuery] = React.useState('');
   const searchNavigationRef = React.useRef(0);
+
+  const storageItems = React.useMemo(() => {
+    if (!charData?.items) return [];
+    if (activeTab === 'cube') {
+      const cube = charData.items.find((i) => i.type === 'box');
+      return cube?.socketed_items || [];
+    }
+    const meta = STORAGE_META[activeTab];
+    if (!meta) return [];
+    return charData.items.filter((i) => i.location_id === 0 && i.alt_position_id === meta.altId);
+  }, [charData, activeTab, STORAGE_META]);
 
   // Sync tab selection with URL hash (#character, #inventory, #char-stash, #stash, #cube, #skills, #shared-stash, #infinite-stash)
   React.useEffect(() => {
@@ -298,28 +308,21 @@ function MainContent() {
           refreshSharedStash={refreshSharedStash}
           depositItemToVault={depositItemToVault}
           setSharedStash={setSharedStash}
-          sharedStashFile={sharedStashFile}
-          setSharedStashFile={setSharedStashFile}
           sharedStashLoadedFile={sharedStashLoadedFile}
           setSharedStashLoadedFile={setSharedStashLoadedFile}
           setSharedStashError={setSharedStashError}
-          sharedStashTab={sharedStashTab}
-          setSharedStashTab={setSharedStashTab}
           highlightIdentity={searchHighlight}
-          isGameRunning={isGameRunning}
         />
       ) : (
         <div className="dashboard-grid">
           {/* Left Panel: Stats */}
-          <CharacterStatsPanel charData={charData} activeStats={activeStats} difficulty={difficulty} setDifficulty={setDifficulty} />
+          <CharacterStatsPanel charData={charData} />
 
           {/* Right Section */}
           <div className="visualizer-main">
             {/* Equipment layout */}
             <EquipmentPanel
               charData={charData}
-              isSwapped={isSwapped}
-              setIsSwapped={setIsSwapped}
               onDeposit={depositItemToVault}
             />
 

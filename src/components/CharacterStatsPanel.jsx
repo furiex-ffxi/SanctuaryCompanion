@@ -1,9 +1,17 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useUIStore } from '../stores/useUIStore';
+import { calculateCharacterStats } from '../domain/entities/Character';
 
 const resColor = (v) => (v < 0 ? '#ff4444' : v >= 75 ? '#00ff00' : '#ffffff');
 const fmtGold = (n) => (n || 0).toLocaleString();
 
-export function CharacterStatsPanel({ charData, activeStats, difficulty, setDifficulty }) {
+export function CharacterStatsPanel({ charData }) {
+  const isSwapped = useUIStore((state) => state.isSwapped);
+  const difficulty = useUIStore((state) => state.difficulty);
+  const setDifficulty = useUIStore((state) => state.setDifficulty);
+  
+  const activeStats = useMemo(() => calculateCharacterStats(charData, isSwapped, difficulty), [charData, isSwapped, difficulty]);
+
   const attrs = charData?.attributes || {};
   const level = attrs.level || charData?.header?.level || 1;
   const charClass = charData?.header?.class || 'Sorceress';
