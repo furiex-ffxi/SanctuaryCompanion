@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
-import { calculateCharacterStats } from '../domain/entities/Character';
 import { STORAGE_META } from '../domain/entities/Item';
 
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
+
+import { useUIStore } from '../stores/useUIStore';
 
 const DEFAULT_SHARED_STASH_FILE = 'ModernSharedStashSoftCoreV2.d2i';
 
@@ -17,13 +18,14 @@ function isSharedStashBasename(filename) {
 }
 
 export function useCharacterCompanion() {
+  const activeFile = useUIStore((state) => state.activeFile);
+  const setActiveFile = useUIStore((state) => state.setActiveFile);
+  const sharedStashFile = useUIStore((state) => state.sharedStashFile);
+  const setSharedStashFile = useUIStore((state) => state.setSharedStashFile);
+  const activeTab = useUIStore((state) => state.activeTab);
+
   const [charData, setCharData]     = useState(null);
-  const [isSwapped, setIsSwapped]   = useState(false);
-  const [activeTab, setActiveTab]   = useState('inventory');
-  const [mainTab, setMainTab]       = useState('character'); // 'character' | 'stash'
-  const [difficulty, setDifficulty] = useState('hell'); // 'normal' | 'nightmare' | 'hell'
   const [saveFiles, setSaveFiles]   = useState([]);
-  const [activeFile, setActiveFile] = useState(null);
   const [syncedAt, setSyncedAt]     = useState(null);
   const [syncing, setSyncing]       = useState(false);
   const [loadError, setLoadError]   = useState(null);
@@ -44,14 +46,7 @@ export function useCharacterCompanion() {
   const sharedRequestRef = useRef(0);
   const facetsRequestRef = useRef(0);
   const [sharedStash, setSharedStash] = useState(null);
-  const [sharedStashFile, setSharedStashFile] = useState(DEFAULT_SHARED_STASH_FILE);
   const [sharedStashLoadedFile, setSharedStashLoadedFile] = useState(null);
-  const sharedStashFileRef = useRef(DEFAULT_SHARED_STASH_FILE);
-  const updateSharedStashFile = useCallback((filename) => {
-    sharedStashFileRef.current = filename;
-    setSharedStashFile(filename);
-  }, []);
-  const [sharedStashTab, setSharedStashTab] = useState(0);
   const [sharedStashLoading, setSharedStashLoading] = useState(false);
   const [sharedStashError, setSharedStashError] = useState(null);
   const [isGameRunning, setIsGameRunning] = useState(false);
@@ -67,7 +62,9 @@ export function useCharacterCompanion() {
       const result = await InfiniteStashAdapter.list(filters, { cursor, limit: 100 });
       if (!vaultMountedRef.current || requestId !== vaultRequestRef.current) return result;
       setVaultItems((current) => append ? [...current, ...result.items] : result.items);
-      setVaultTotal(result.total);
+      if (result.total !== undefined) {
+        setVaultTotal(result.total);
+      }
       setVaultNextCursor(result.nextCursor);
       return result;
     } catch (err) {
@@ -170,9 +167,14 @@ export function useCharacterCompanion() {
 
   // Refresh shared stash file from server (.d2i)
   const refreshSharedStash = useCallback(async (filename) => {
-    const requestedFile = filename ?? sharedStashFileRef.current;
+    const requestedFile = filename ?? useUIStore.getState().sharedStashFile;
     const requestId = ++sharedRequestRef.current;
-    updateSharedStashFile(requestedFile);
+    
+    // Only update the store if a specific filename was passed
+    if (filename !== undefined) {
+      useUIStore.getState().setSharedStashFile(requestedFile);
+    }
+    
     setSharedStashLoading(true);
     setSharedStashError(null);
     if (!isSharedStashBasename(requestedFile)) {
@@ -196,7 +198,7 @@ export function useCharacterCompanion() {
     } finally {
       if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashLoading(false);
     }
-  }, [updateSharedStashFile]);
+  }, []);
 
   useEffect(() => {
     refreshSharedStash(DEFAULT_SHARED_STASH_FILE);
@@ -453,11 +455,13 @@ export function useCharacterCompanion() {
       .then((files) => {
         if (!vaultMountedRef.current) return;
         setSaveFiles(files);
+        // If the store already has a valid activeFile, keep it
+        if (activeFile && files.includes(activeFile)) return;
         const preferred = files.find((f) => f.toLowerCase().includes('furisorc')) || files[0];
         if (preferred) setActiveFile(preferred);
       })
       .catch(() => {});
-  }, []);
+  }, [activeFile, setActiveFile]);
 
   // Refresh active file from server
   const refreshFromServer = useCallback(async (file) => {
@@ -513,8 +517,6 @@ export function useCharacterCompanion() {
     }
   };
 
-  const activeStats = useMemo(() => calculateCharacterStats(charData, isSwapped, difficulty), [charData, isSwapped, difficulty]);
-
   const storageItems = useMemo(() => {
     if (!charData?.items) return [];
     if (activeTab === 'cube') {
@@ -528,20 +530,11 @@ export function useCharacterCompanion() {
 
   return {
     charData,
-    isSwapped,
-    setIsSwapped,
-    activeTab,
-    setActiveTab,
-    mainTab,
-    setMainTab,
     saveFiles,
-    activeFile,
-    setActiveFile,
     syncedAt,
     syncing,
     refreshFromServer,
     handleFileUpload,
-    activeStats,
     storageItems,
     STORAGE_META,
     loadError,
@@ -564,17 +557,12 @@ export function useCharacterCompanion() {
     triggerSaveBackup,
     sharedStash,
     setSharedStash,
-    sharedStashFile,
-    setSharedStashFile: updateSharedStashFile,
     sharedStashLoadedFile,
+    setSharedStashLoadedFile,
     setSharedStashError,
-    sharedStashTab,
-    setSharedStashTab,
     sharedStashLoading,
     sharedStashError,
     refreshSharedStash,
-    difficulty,
-    setDifficulty,
     isGameRunning,
   };
 }

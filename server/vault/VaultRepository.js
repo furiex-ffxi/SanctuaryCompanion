@@ -447,7 +447,10 @@ export class VaultRepository {
       parameters.quality = Number(query.quality)
     }
     const filterWhere = conditions.join(' AND ')
-    const count = this.db.prepare(`SELECT COUNT(*) AS count FROM vault_items WHERE ${filterWhere}`).get(parameters).count
+    let count;
+    if (!cursor) {
+      count = this.db.prepare(`SELECT COUNT(*) AS count FROM vault_items WHERE ${filterWhere}`).get(parameters).count
+    }
     if (cursor) {
       const comparison = query.direction === 'asc' ? '>' : '<'
       if (cursor.sortValue === null) {
@@ -459,7 +462,7 @@ export class VaultRepository {
         conditions.push(`(${sort.expression} IS NULL AND vault_id ${comparison} @cursorId)`)
       } else {
         const nullTransition = sort.nullable ? `${sort.expression} IS NULL OR ` : ''
-        conditions.push(`(${nullTransition}${sort.expression} ${comparison} @cursorValue OR (${sort.expression} = @cursorValue AND vault_id ${comparison} @cursorId))`)
+        conditions.push(`(${nullTransition}(${sort.expression}, vault_id) ${comparison} (@cursorValue, @cursorId))`)
         parameters.cursorValue = cursor.sortValue
       }
       parameters.cursorId = cursor.vaultId

@@ -4,7 +4,12 @@ import { ItemTooltip } from './ItemTooltip';
 import { TooltipTrigger } from './TooltipTrigger';
 import { SLOT_META } from '../domain/entities/Item';
 
-export function EquipmentPanel({ charData, isSwapped, setIsSwapped, onDeposit }) {
+import { useUIStore } from '../stores/useUIStore';
+
+export function EquipmentPanel({ charData, onDeposit }) {
+  const isSwapped = useUIStore((state) => state.isSwapped);
+  const setIsSwapped = useUIStore((state) => state.setIsSwapped);
+
   const getItemInSlot = (slotId) =>
     charData?.items?.find((i) => i.location_id === 1 && i.equipped_id === slotId) ?? null;
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { StorageGrid } from './StorageGrid';
 import { AdvancedStashPanel } from './AdvancedStashPanel';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
+import { useUIStore } from '../stores/useUIStore';
 
 export function SharedStashPanel({
   sharedStash,
@@ -10,15 +11,15 @@ export function SharedStashPanel({
   refreshSharedStash,
   depositItemToVault,
   setSharedStash,
-  sharedStashFile,
-  setSharedStashFile,
   sharedStashLoadedFile,
   setSharedStashLoadedFile,
   setSharedStashError,
-  sharedStashTab,
-  setSharedStashTab,
   highlightIdentity,
 }) {
+  const sharedStashFile = useUIStore((state) => state.sharedStashFile);
+  const setSharedStashFile = useUIStore((state) => state.setSharedStashFile);
+  const sharedStashTab = useUIStore((state) => state.sharedStashTab);
+  const setSharedStashTab = useUIStore((state) => state.setSharedStashTab);
   const pages = sharedStash?.pages || [];
   const activePageIdx = Math.min(sharedStashTab ?? 0, Math.max(pages.length - 1, 0));
   const activePage = pages[activePageIdx] || pages[0];
@@ -78,7 +79,7 @@ export function SharedStashPanel({
             <button
               className={`header-control btn-d2r btn-refresh ${sharedStashLoading ? 'spinning' : ''}`}
               onClick={() => refreshSharedStash(sharedStashFile)}
-              disabled={sharedStashLoading}
+              disabled={sharedStashLoading || !sharedStashFile}
             >
               {sharedStashLoading ? '↻ Loading…' : '↻ Refresh .d2i'}
             </button>
