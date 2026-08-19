@@ -88,6 +88,9 @@ export function projectVaultEntry(entry) {
     getSearchableItemAttributes(item).join(' '),
   ].filter(Boolean).join(' ').toLowerCase()
 
+  const itemLevel = item.level_req ?? item.level_requirement ?? item.level ?? item.item_level
+  const level = Number.isInteger(itemLevel) && itemLevel > 0 ? itemLevel : null
+
   return {
     displayName,
     displayNameSort: unicodeSortKey(displayName),
@@ -98,6 +101,7 @@ export function projectVaultEntry(entry) {
     slot,
     category: getVaultCategory(item, slot),
     quality,
+    level,
     socketCount: getItemSocketCount(item),
     setName: normalizeText(item.set_name) || null,
     searchText,

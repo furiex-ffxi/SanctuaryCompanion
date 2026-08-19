@@ -314,10 +314,10 @@ test('rotates the migration epoch so recovery replays onto the upgraded schema',
   let mutationEpoch
   try {
     assert.equal(migrated.epoch, null)
-    assert.equal(migrated.db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 4)
+    assert.equal(migrated.db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 6)
     await migrated.add(entry(996))
     mutationEpoch = migrated.epoch
-    assert.equal(JSON.parse(fs.readFileSync(path.join(mutationEpoch.directory, 'manifest.json'), 'utf8')).databaseSchemaVersion, 4)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(mutationEpoch.directory, 'manifest.json'), 'utf8')).databaseSchemaVersion, 6)
   } finally {
     migrated.close()
   }
@@ -327,7 +327,7 @@ test('rotates the migration epoch so recovery replays onto the upgraded schema',
   assert.equal(result.activeCount, 2)
   const recovered = new Database(recoveredPath, { readonly: true })
   try {
-    assert.equal(recovered.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 4)
+    assert.equal(recovered.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 6)
     const indexes = new Set(recovered.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map(({ name }) => name))
     assert.equal(indexes.has('vault_items_sort_type_asc'), true)
     assert.equal(indexes.has('vault_items_sort_rarity_desc'), true)
@@ -495,7 +495,7 @@ test('checkpoints and reprojects existing schema-v1 rows exactly once', async ()
   const backupsBefore = fs.readdirSync(path.join(savesDir, 'backups', 'vault')).length
   const migrated = new VaultRepository({ savesDir, databasePath })
   try {
-    assert.equal(migrated.db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 4)
+    assert.equal(migrated.db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get().version, 6)
     const indexes = new Set(migrated.db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map(({ name }) => name))
     for (const name of ['vault_items_sort_name', 'vault_items_sort_source', 'vault_items_sort_type_asc', 'vault_items_sort_type_desc', 'vault_items_sort_rarity_asc', 'vault_items_sort_rarity_desc']) {
       assert.equal(indexes.has(name), true)

@@ -65,7 +65,7 @@ test('vault routes paginate mutations and enforce the server process lock', asyn
     const sorted = await fetch(origin + '/__vault/items?sort=name&direction=asc').then((response) => response.json())
     assert.deepEqual(sorted.items.map((item) => item.vaultId), ['route_1', 'route_2', 'route_3'])
 
-    const invalidSort = await fetch(origin + '/__vault/items?sort=level')
+    const invalidSort = await fetch(origin + '/__vault/items?sort=invalid_sort')
     assert.equal(invalidSort.status, 400)
     assert.match((await invalidSort.json()).error, /Unsupported vault sort/)
     const invalidDirection = await fetch(origin + '/__vault/items?direction=forward')
