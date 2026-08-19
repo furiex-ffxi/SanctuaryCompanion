@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { eq, and, desc, asc, sql } from 'drizzle-orm'
 import * as schema from './schema.js'
 
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 6
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
 const DEFAULT_SORT = 'dateAdded'
@@ -20,6 +20,7 @@ const SORTS = Object.freeze({
   type: { column: 'typeNameSort', nullable: true },
   rarity: { column: 'quality', nullable: true },
   source: { column: 'sourceSaveSort', nullable: false },
+  level: { column: 'level', nullable: true },
 })
 
 function timestampForPath(date = new Date()) {
@@ -49,6 +50,8 @@ function normalizeListOptions(options = {}) {
     category: options.category || 'All',
     setName: options.setName || 'All',
     quality: options.quality || 'All',
+    minLevel: options.minLevel ? Number(options.minLevel) : null,
+    maxLevel: options.maxLevel ? Number(options.maxLevel) : null,
     sort,
     direction,
   }
@@ -77,6 +80,8 @@ function decodeCursor(cursor, query, secret) {
     && payload.category === query.category
     && payload.setName === query.setName
     && payload.quality === query.quality
+    && payload.minLevel === query.minLevel
+    && payload.maxLevel === query.maxLevel
   const actualSignature = typeof signature === 'string' ? Buffer.from(signature) : null
   const expectedSignatureBytes = Buffer.from(expectedSignature)
   const validSignature = actualSignature?.length === expectedSignatureBytes.length
@@ -124,7 +129,8 @@ export class VaultRepository {
     this.now = now
     this.epoch = null
     this.cursorSecret = null
-    fs.mkdirSync(path.dirname(this.databasePath), { recursive: true })
+    const dbDir = path.dirname(this.databasePath)
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true })
     this.db = new Database(this.databasePath)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('synchronous = FULL')
@@ -159,6 +165,7 @@ export class VaultRepository {
         slot TEXT,
         category TEXT,
         quality INTEGER,
+        level INTEGER,
         set_name TEXT,
         search_text TEXT NOT NULL,
         item_json TEXT NOT NULL CHECK (json_valid(item_json)),
@@ -193,6 +200,8 @@ export class VaultRepository {
       this.#createCheckpointSync(currentVersion)
       this.db.transaction(() => {
         this.#addSortColumns()
+        if (currentVersion < 5) this.#addLevelColumn()
+
         if (currentVersion < 2) {
           this.#reprojectRows()
           this.orm.insert(schema.schemaMigrations).values({ version: 2, appliedAt: this.now().toISOString() }).run()
@@ -206,6 +215,15 @@ export class VaultRepository {
           this.#replaceSortIndexes()
           this.#ensureCursorSecret()
           this.orm.insert(schema.schemaMigrations).values({ version: 4, appliedAt: this.now().toISOString() }).run()
+        }
+        if (currentVersion < 5) {
+          if (currentVersion >= 2) this.#reprojectRows()
+          this.#replaceSortIndexes()
+          this.orm.insert(schema.schemaMigrations).values({ version: 5, appliedAt: this.now().toISOString() }).run()
+        }
+        if (currentVersion < 6) {
+          if (currentVersion >= 2) this.#reprojectRows()
+          this.orm.insert(schema.schemaMigrations).values({ version: 6, appliedAt: this.now().toISOString() }).run()
         }
       })()
       this.epoch = null
@@ -226,6 +244,14 @@ export class VaultRepository {
     if (!columns.has('source_save_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN source_save_sort TEXT')
     if (!columns.has('display_name_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN display_name_sort TEXT')
     if (!columns.has('type_name_sort')) this.db.exec('ALTER TABLE vault_items ADD COLUMN type_name_sort TEXT')
+  }
+
+  #addLevelColumn() {
+    const columns = new Set(this.db.pragma('table_info(vault_items)').map(({ name }) => name))
+    if (!columns.has('level')) {
+      this.db.exec('ALTER TABLE vault_items ADD COLUMN level INTEGER')
+    }
+    this.db.exec('CREATE INDEX IF NOT EXISTS vault_items_level ON vault_items(status, level)')
   }
 
   #reprojectRows() {
@@ -258,6 +284,8 @@ export class VaultRepository {
       DROP INDEX IF EXISTS vault_items_sort_type_desc;
       DROP INDEX IF EXISTS vault_items_sort_rarity_asc;
       DROP INDEX IF EXISTS vault_items_sort_rarity_desc;
+      DROP INDEX IF EXISTS vault_items_sort_level_asc;
+      DROP INDEX IF EXISTS vault_items_sort_level_desc;
 
       CREATE INDEX vault_items_sort_name ON vault_items(status, display_name_sort, vault_id);
       CREATE INDEX vault_items_sort_source ON vault_items(status, source_save_sort, vault_id);
@@ -269,6 +297,10 @@ export class VaultRepository {
         ON vault_items(status, (quality IS NULL) ASC, quality ASC, vault_id ASC);
       CREATE INDEX vault_items_sort_rarity_desc
         ON vault_items(status, (quality IS NULL) ASC, quality DESC, vault_id DESC);
+      CREATE INDEX vault_items_sort_level_asc
+        ON vault_items(status, (level IS NULL) ASC, level ASC, vault_id ASC);
+      CREATE INDEX vault_items_sort_level_desc
+        ON vault_items(status, (level IS NULL) ASC, level DESC, vault_id DESC);
     `)
   }
 
@@ -431,6 +463,8 @@ export class VaultRepository {
     if (query.category !== 'All') conditions.push(eq(schema.vaultItems.category, query.category))
     if (query.setName !== 'All') conditions.push(eq(schema.vaultItems.setName, query.setName))
     if (query.quality !== 'All') conditions.push(eq(schema.vaultItems.quality, Number(query.quality)))
+    if (query.minLevel !== null) conditions.push(sql`${schema.vaultItems.level} >= ${query.minLevel}`)
+    if (query.maxLevel !== null) conditions.push(sql`${schema.vaultItems.level} <= ${query.maxLevel}`)
 
     let countTotal;
     if (!cursor) {

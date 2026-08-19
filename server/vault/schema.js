@@ -23,6 +23,7 @@ export const vaultItems = sqliteTable('vault_items', {
   slot: text('slot'),
   category: text('category'),
   quality: integer('quality'),
+  level: integer('level'),
   setName: text('set_name'),
   searchText: text('search_text').notNull(),
   itemJson: text('item_json').notNull(),
@@ -33,6 +34,7 @@ export const vaultItems = sqliteTable('vault_items', {
   slotIdx: index('vault_items_slot').on(table.status, table.slot),
   categoryIdx: index('vault_items_category').on(table.status, table.category),
   qualityIdx: index('vault_items_quality').on(table.status, table.quality),
+  levelIdx: index('vault_items_level').on(table.status, table.level),
   setNameIdx: index('vault_items_set_name').on(table.status, table.setName)
 }));
 

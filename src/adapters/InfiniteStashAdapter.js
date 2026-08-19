@@ -17,6 +17,8 @@ export const InfiniteStashAdapter = {
     if (filters.category && filters.category !== 'All') params.set('category', filters.category)
     if (filters.setName && filters.setName !== 'All') params.set('set', filters.setName)
     if (filters.quality && filters.quality !== 'All') params.set('quality', filters.quality)
+    if (filters.minLevel != null) params.set('minLevel', filters.minLevel)
+    if (filters.maxLevel != null) params.set('maxLevel', filters.maxLevel)
     if (filters.status && filters.status !== 'active') params.set('status', filters.status)
     params.set('sort', sort || 'dateAdded')
     params.set('direction', direction || 'desc')

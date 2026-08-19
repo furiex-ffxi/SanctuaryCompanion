@@ -41,6 +41,8 @@ export function InfiniteStashPanel({
   const [selectedSlot, setSelectedSlot] = useState('All');
   const [selectedSet, setSelectedSet] = useState('All');
   const [selectedQuality, setSelectedQuality] = useState('All');
+  const [minLevel, setMinLevel] = useState('');
+  const [maxLevel, setMaxLevel] = useState('');
   const [status, setStatus] = useState('active');
   const [sort, setSort] = useState('dateAdded');
   const [direction, setDirection] = useState('desc');
@@ -66,6 +68,8 @@ export function InfiniteStashPanel({
         slot: selectedSlot,
         setName: selectedSet,
         quality: selectedQuality,
+        minLevel: minLevel || null,
+        maxLevel: maxLevel || null,
         q: searchQuery,
         sort,
         direction,
@@ -73,7 +77,7 @@ export function InfiniteStashPanel({
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, searchQuery, sort, direction, status, onQuery]);
+  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, minLevel, maxLevel, searchQuery, sort, direction, status, onQuery]);
 
   useEffect(() => () => {
     clearTimeout(backupTimerRef.current);
@@ -177,6 +181,8 @@ export function InfiniteStashPanel({
     setSelectedSlot('All');
     setSelectedSet('All');
     setSelectedQuality('All');
+    setMinLevel('');
+    setMaxLevel('');
     onSearchQueryChange('');
   };
 
@@ -245,6 +251,14 @@ export function InfiniteStashPanel({
               <option value="7">Unique</option><option value="5">Set</option><option value="6">Rare</option>
               <option value="4">Magic</option><option value="2">Normal</option>
             </select>
+          </div>
+          <div className="filter-group">
+            <label htmlFor="infinite-vault-min-level">Level:</label>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <input id="infinite-vault-min-level" className="d2r-input" type="number" placeholder="Min" style={{ width: '64px', padding: '8px 4px' }} value={minLevel} onChange={(e) => setMinLevel(e.target.value)} />
+              <span>-</span>
+              <input className="d2r-input" type="number" placeholder="Max" style={{ width: '64px', padding: '8px 4px' }} value={maxLevel} onChange={(e) => setMaxLevel(e.target.value)} />
+            </div>
           </div>
           <div className="filter-group">
             <label htmlFor="infinite-vault-status">Status:</label>
