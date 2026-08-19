@@ -596,28 +596,13 @@ function d2sWatcherPlugin() {
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
         let body = '';
         req.on('data', chunk => { body += chunk });
-        req.on('end', () => {
+        req.on('end', async () => {
           try {
             const { datetime, restore } = JSON.parse(body);
-            const { exec } = require('child_process');
-            
-            let script;
-            if (restore) {
-              script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Start-Service W32Time -ErrorAction SilentlyContinue; W32tm /resync /force'"`;
-            } else {
-              if (!datetime) throw new Error('Missing datetime parameter');
-              script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Stop-Service W32Time -ErrorAction SilentlyContinue; Set-Date -Date ([datetime]''${datetime}'')'"`;
-            }
-            
-            exec(script, (err) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: err.message }));
-              } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true }));
-              }
-            });
+            const { setWindowsTime } = await import('./server/timeJumper.js');
+            await setWindowsTime({ datetime, restore });
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
           } catch (err) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: err.message }));
