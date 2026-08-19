@@ -15,7 +15,7 @@
 - Ensure production process checks (`tasklist /FI "IMAGENAME eq D2R.exe"`) remain active in the dev-server status endpoint (`/__d2r_status`) and all save-mutating endpoints to prevent corruption while Diablo II Resurrected is running.
 
 ## 4. Infinite Stash Persistence
-- **SQLite Authority**: `infinite_stash_vault.sqlite3` is the authoritative Infinite Stash store. Do not reintroduce whole-vault JSON or `localStorage` persistence. JSON remains an import/export and legacy-migration format only.
+- **SQLite & Drizzle ORM Authority**: `infinite_stash_vault.sqlite3` is the authoritative Infinite Stash store. Use `drizzle-orm` and `better-sqlite3` for schema definition and querying. Do not reintroduce whole-vault JSON or `localStorage` persistence. JSON remains an import/export and legacy-migration format only.
 - **Checkpoint and Journal**: The first vault mutation in each server session must create one SQLite checkpoint under `backups/vault/<epoch>/`. Later mutations append checksummed intent/commit records to that epoch's `transactions.jsonl`; do not copy the database for every operation.
 - **Safe Ordering**: Deposit intent and item data must be durable before D2SSharp removes an item from its source. A withdrawal must remain active in SQLite until D2SSharp confirms placement. Ambiguous failures must favor a recoverable duplicate over item loss.
 - **Replay Safety**: Recovery must replay into a new database, validate SQLite integrity plus journal sequence/checksums, apply operations idempotently, and preserve incomplete operations as `recovery_needed`. Never overwrite a live database automatically.
@@ -31,3 +31,8 @@
 - After writing or modifying code, always run the most relevant automated tests before reporting completion.
 - For changes spanning multiple layers, run each affected test suite (for example, React/UI tests, JavaScript unit tests, worker integration tests, and build validation as applicable).
 - If a required test cannot run or fails, report the exact command and result; never claim the change is complete without disclosing the validation status.
+
+## 7. Frontend Architecture & Testing
+- **Zustand**: Use `zustand` for managing global client UI state (e.g., active tabs, selected files, global search query).
+- **TanStack Query**: Use `@tanstack/react-query` for server state fetching, caching, and mutations. Avoid custom `useEffect` data fetching and manual concurrent request deduplication.
+- **React Testing**: All React UI tests must import `render`, `renderHook`, and `screen` from `tests/react/test-utils.jsx` rather than `@testing-library/react` directly. This ensures components are wrapped in the required `QueryClientProvider` and use isolated caches.
