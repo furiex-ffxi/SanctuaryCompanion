@@ -5,17 +5,21 @@ import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
 import { normalizeVaultItem } from './itemImageResolver.js'
 
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { eq, and, desc, asc, sql } from 'drizzle-orm'
+import * as schema from './schema.js'
+
 const SCHEMA_VERSION = 4
 const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
 const DEFAULT_SORT = 'dateAdded'
 const DEFAULT_DIRECTION = 'desc'
 const SORTS = Object.freeze({
-  dateAdded: { expression: 'stashed_at', cursorKey: 'stashed_at', nullable: false },
-  name: { expression: 'display_name_sort', cursorKey: 'display_name_sort', nullable: false },
-  type: { expression: 'type_name_sort', cursorKey: 'type_name_sort', nullable: true },
-  rarity: { expression: 'quality', cursorKey: 'quality', nullable: true },
-  source: { expression: 'source_save_sort', cursorKey: 'source_save_sort', nullable: false },
+  dateAdded: { column: 'stashedAt', nullable: false },
+  name: { column: 'displayNameSort', nullable: false },
+  type: { column: 'typeNameSort', nullable: true },
+  rarity: { column: 'quality', nullable: true },
+  source: { column: 'sourceSaveSort', nullable: false },
 })
 
 function timestampForPath(date = new Date()) {
@@ -89,18 +93,18 @@ function decodeCursor(cursor, query, secret) {
 function encodeCursor(row, query, secret) {
   const payload = {
     ...query,
-    sortValue: row[SORTS[query.sort].cursorKey],
-    vaultId: row.vault_id,
+    sortValue: row[SORTS[query.sort].column],
+    vaultId: row.vaultId,
   }
   return Buffer.from(JSON.stringify({ ...payload, signature: signCursor(payload, secret) })).toString('base64url')
 }
 
 function hydrateRow(row) {
   return {
-    vaultId: row.vault_id,
-    stashedAt: row.stashed_at,
-    sourceSave: row.source_save,
-    itemData: normalizeVaultItem(JSON.parse(row.item_json)),
+    vaultId: row.vaultId,
+    stashedAt: row.stashedAt,
+    sourceSave: row.sourceSave,
+    itemData: normalizeVaultItem(JSON.parse(row.itemJson)),
     status: row.status,
   }
 }
@@ -109,7 +113,7 @@ function itemIdentity(entry) {
   const item = entry?.itemData
   const id = item?.id ?? item?.item_seed
   if (id === undefined || id === null || id === '') return null
-  return entry.sourceSave + String.fromCharCode(31) + id
+  return { sourceSave: entry.sourceSave, itemId: String(id) }
 }
 
 export class VaultRepository {
@@ -126,6 +130,7 @@ export class VaultRepository {
     this.db.pragma('synchronous = FULL')
     this.db.pragma('foreign_keys = ON')
     this.db.pragma('busy_timeout = 5000')
+    this.orm = drizzle(this.db, { schema })
     this.#initializeSchema()
   }
 
@@ -173,14 +178,16 @@ export class VaultRepository {
       CREATE INDEX IF NOT EXISTS vault_items_category ON vault_items(status, category);
       CREATE INDEX IF NOT EXISTS vault_items_quality ON vault_items(status, quality);
       CREATE INDEX IF NOT EXISTS vault_items_set_name ON vault_items(status, set_name);
+      CREATE INDEX IF NOT EXISTS vault_items_identity ON vault_items(source_save, CAST(json_extract(item_json, '$.id') AS TEXT), CAST(json_extract(item_json, '$.item_seed') AS TEXT));
     `)
-    const currentVersion = this.db.prepare('SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations').get().version
+    const currentVersionRow = this.orm.select({ version: sql`COALESCE(MAX(${schema.schemaMigrations.version}), 0)` }).from(schema.schemaMigrations).get()
+    const currentVersion = currentVersionRow ? Number(currentVersionRow.version) : 0;
+    
     if (currentVersion === 0) {
       this.db.transaction(() => {
         this.#replaceSortIndexes()
         this.#ensureCursorSecret()
-        this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)')
-          .run(SCHEMA_VERSION, this.now().toISOString())
+        this.orm.insert(schema.schemaMigrations).values({ version: SCHEMA_VERSION, appliedAt: this.now().toISOString() }).run()
       })()
     } else if (currentVersion < SCHEMA_VERSION) {
       this.#createCheckpointSync(currentVersion)
@@ -188,34 +195,29 @@ export class VaultRepository {
         this.#addSortColumns()
         if (currentVersion < 2) {
           this.#reprojectRows()
-          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (2, ?)')
-            .run(this.now().toISOString())
+          this.orm.insert(schema.schemaMigrations).values({ version: 2, appliedAt: this.now().toISOString() }).run()
         }
         if (currentVersion < 3) {
           this.#replaceSortIndexes()
-          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?)')
-            .run(this.now().toISOString())
+          this.orm.insert(schema.schemaMigrations).values({ version: 3, appliedAt: this.now().toISOString() }).run()
         }
         if (currentVersion < 4) {
           if (currentVersion >= 2) this.#reprojectRows()
           this.#replaceSortIndexes()
           this.#ensureCursorSecret()
-          this.db.prepare('INSERT INTO schema_migrations(version, applied_at) VALUES (4, ?)')
-            .run(this.now().toISOString())
+          this.orm.insert(schema.schemaMigrations).values({ version: 4, appliedAt: this.now().toISOString() }).run()
         }
       })()
-      // Keep the pre-upgrade checkpoint, but never append post-upgrade item
-      // operations to an epoch whose checkpoint has an older schema.
       this.epoch = null
     }
 
-    const secret = this.db.prepare("SELECT value FROM vault_metadata WHERE key = 'cursor_hmac_secret'").get()
-    if (!secret) {
+    const secretRow = this.orm.select({ value: schema.vaultMetadata.value }).from(schema.vaultMetadata).where(eq(schema.vaultMetadata.key, 'cursor_hmac_secret')).get()
+    if (!secretRow) {
       this.#createCheckpointSync(currentVersion || SCHEMA_VERSION)
       this.db.transaction(() => this.#ensureCursorSecret())()
       this.epoch = null
     } else {
-      this.cursorSecret = secret.value
+      this.cursorSecret = secretRow.value
     }
   }
 
@@ -228,29 +230,21 @@ export class VaultRepository {
 
   #reprojectRows() {
     const rows = this.db.prepare('SELECT vault_id, source_save, item_json FROM vault_items').all()
-    const update = this.db.prepare(`
-      UPDATE vault_items SET display_name = @displayName, display_name_sort = @displayNameSort,
-        type_code = @typeCode, type_name = @typeName, type_name_sort = @typeNameSort,
-        source_save_sort = @sourceSaveSort, slot = @slot, category = @category,
-        quality = @quality, set_name = @setName, search_text = @searchText
-      WHERE vault_id = @vaultId
-    `)
     for (const row of rows) {
-      update.run({
-        ...projectVaultEntry({ sourceSave: row.source_save, itemData: JSON.parse(row.item_json) }),
-        vaultId: row.vault_id,
-      })
+      const proj = projectVaultEntry({ sourceSave: row.source_save, itemData: JSON.parse(row.item_json) })
+      this.orm.update(schema.vaultItems).set(proj).where(eq(schema.vaultItems.vaultId, row.vault_id)).run()
     }
   }
 
   #ensureCursorSecret() {
-    let secret = this.db.prepare("SELECT value FROM vault_metadata WHERE key = 'cursor_hmac_secret'").get()?.value
-    if (!secret) {
-      secret = crypto.randomBytes(32).toString('base64url')
-      this.db.prepare('INSERT INTO vault_metadata(key, value) VALUES (?, ?)')
-        .run('cursor_hmac_secret', secret)
+    let secretRow = this.orm.select({ value: schema.vaultMetadata.value }).from(schema.vaultMetadata).where(eq(schema.vaultMetadata.key, 'cursor_hmac_secret')).get()
+    if (!secretRow) {
+      const secret = crypto.randomBytes(32).toString('base64url')
+      this.orm.insert(schema.vaultMetadata).values({ key: 'cursor_hmac_secret', value: secret }).run()
+      this.cursorSecret = secret
+    } else {
+      this.cursorSecret = secretRow.value
     }
-    this.cursorSecret = secret
   }
 
   #replaceSortIndexes() {
@@ -277,20 +271,27 @@ export class VaultRepository {
         ON vault_items(status, (quality IS NULL) ASC, quality DESC, vault_id DESC);
     `)
   }
-  #createCheckpointSync(databaseSchemaVersion = SCHEMA_VERSION) {
-    if (this.epoch) return this.epoch
-    const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
+
+  #createCheckpointManifest(epochId) {
     const directory = path.join(this.backupsRoot, epochId)
     fs.mkdirSync(directory, { recursive: true })
     const checkpointPath = path.join(directory, 'checkpoint.sqlite3')
-    this.db.prepare('VACUUM INTO ?').run(checkpointPath)
     const journalPath = path.join(directory, 'transactions.jsonl')
-    fs.closeSync(fs.openSync(journalPath, 'a'))
     const manifest = {
       formatVersion: 1, epochId, createdAt: this.now().toISOString(),
-      databaseSchemaVersion,
+      databaseSchemaVersion: SCHEMA_VERSION,
       checkpointFile: 'checkpoint.sqlite3', journalFile: 'transactions.jsonl', startingSequence: 1,
     }
+    return { directory, checkpointPath, journalPath, manifest }
+  }
+
+  #createCheckpointSync(databaseSchemaVersion = SCHEMA_VERSION) {
+    if (this.epoch) return this.epoch
+    const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
+    const { directory, checkpointPath, journalPath, manifest } = this.#createCheckpointManifest(epochId)
+    manifest.databaseSchemaVersion = databaseSchemaVersion
+    this.db.prepare('VACUUM INTO ?').run(checkpointPath)
+    fs.closeSync(fs.openSync(journalPath, 'a'))
     fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
     this.epoch = { epochId, directory, checkpointPath, journalPath, sequence: 0, previousHash: null }
     return this.epoch
@@ -301,7 +302,7 @@ export class VaultRepository {
   }
 
   migrateLegacyJson(legacyPath = path.join(this.savesDir, 'infinite_stash_vault.json')) {
-    const marker = this.db.prepare("SELECT value FROM vault_metadata WHERE key = 'legacy_json_migration'").get()
+    const marker = this.orm.select({ value: schema.vaultMetadata.value }).from(schema.vaultMetadata).where(eq(schema.vaultMetadata.key, 'legacy_json_migration')).get()
     if (marker || !fs.existsSync(legacyPath)) return { migrated: false, reason: marker ? 'already-migrated' : 'not-found' }
 
     const source = fs.readFileSync(legacyPath, 'utf8')
@@ -318,11 +319,12 @@ export class VaultRepository {
     const sourceHash = crypto.createHash('sha256').update(source).digest('hex')
     const migratedAt = this.now().toISOString()
     const migrate = this.db.transaction(() => {
-      if (this.db.prepare('SELECT COUNT(*) AS count FROM vault_items').get().count !== 0) {
+      const countRow = this.orm.select({ count: sql`COUNT(*)` }).from(schema.vaultItems).get()
+      if (Number(countRow.count) !== 0) {
         throw new Error('Refusing legacy migration into a non-empty vault database')
       }
       for (const entry of entries) this.#insertEntry(entry, 'active', migratedAt)
-      this.db.prepare('INSERT INTO vault_metadata(key, value) VALUES (?, ?)').run('legacy_json_migration', JSON.stringify({ migratedAt, count: entries.length, sourceHash }))
+      this.orm.insert(schema.vaultMetadata).values({ key: 'legacy_json_migration', value: JSON.stringify({ migratedAt, count: entries.length, sourceHash }) }).run()
     })
     migrate()
 
@@ -335,25 +337,21 @@ export class VaultRepository {
 
   async ensureCheckpoint() {
     if (this.epoch) return this.epoch
-    const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
-    const directory = path.join(this.backupsRoot, epochId)
-    fs.mkdirSync(directory, { recursive: true })
-    const checkpointPath = path.join(directory, 'checkpoint.sqlite3')
-    await this.db.backup(checkpointPath)
-    const journalPath = path.join(directory, 'transactions.jsonl')
-    fs.closeSync(fs.openSync(journalPath, 'a'))
-    const manifest = {
-      formatVersion: 1,
-      epochId,
-      createdAt: this.now().toISOString(),
-      databaseSchemaVersion: SCHEMA_VERSION,
-      checkpointFile: 'checkpoint.sqlite3',
-      journalFile: 'transactions.jsonl',
-      startingSequence: 1,
-    }
-    fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
-    this.epoch = { epochId, directory, checkpointPath, journalPath, sequence: 0, previousHash: null }
-    return this.epoch
+    if (this._checkpointPromise) return this._checkpointPromise
+    this._checkpointPromise = (async () => {
+      try {
+        const epochId = `${timestampForPath(this.now())}_${crypto.randomUUID().slice(0, 8)}`
+        const { directory, checkpointPath, journalPath, manifest } = this.#createCheckpointManifest(epochId)
+        await this.db.backup(checkpointPath)
+        fs.closeSync(fs.openSync(journalPath, 'a'))
+        fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8')
+        this.epoch = { epochId, directory, checkpointPath, journalPath, sequence: 0, previousHash: null }
+        return this.epoch
+      } finally {
+        this._checkpointPromise = null
+      }
+    })()
+    return this._checkpointPromise
   }
 
   async forceCheckpoint() {
@@ -385,34 +383,7 @@ export class VaultRepository {
 
   #insertEntry(entry, status = 'active', updatedAt = this.now().toISOString()) {
     const projection = projectVaultEntry(entry)
-    this.db.prepare(`
-      INSERT INTO vault_items (
-        vault_id, stashed_at, source_save, source_save_sort, display_name,
-        display_name_sort, type_code, type_name, type_name_sort, slot, category,
-        quality, set_name, search_text, item_json, status, updated_at
-      ) VALUES (
-        @vaultId, @stashedAt, @sourceSave, @sourceSaveSort, @displayName,
-        @displayNameSort, @typeCode, @typeName, @typeNameSort, @slot, @category,
-        @quality, @setName, @searchText, @itemJson, @status, @updatedAt
-      )
-      ON CONFLICT(vault_id) DO UPDATE SET
-        stashed_at = excluded.stashed_at,
-        source_save = excluded.source_save,
-        source_save_sort = excluded.source_save_sort,
-        display_name = excluded.display_name,
-        display_name_sort = excluded.display_name_sort,
-        type_code = excluded.type_code,
-        type_name = excluded.type_name,
-        type_name_sort = excluded.type_name_sort,
-        slot = excluded.slot,
-        category = excluded.category,
-        quality = excluded.quality,
-        set_name = excluded.set_name,
-        search_text = excluded.search_text,
-        item_json = excluded.item_json,
-        status = excluded.status,
-        updated_at = excluded.updated_at
-    `).run({
+    this.orm.insert(schema.vaultItems).values({
       ...projection,
       vaultId: entry.vaultId,
       stashedAt: entry.stashedAt,
@@ -420,173 +391,220 @@ export class VaultRepository {
       itemJson: JSON.stringify(normalizeVaultItem(entry.itemData)),
       status,
       updatedAt,
-    })
+    }).onConflictDoUpdate({
+      target: schema.vaultItems.vaultId,
+      set: {
+        stashedAt: sql`excluded.stashed_at`,
+        sourceSave: sql`excluded.source_save`,
+        sourceSaveSort: sql`excluded.source_save_sort`,
+        displayName: sql`excluded.display_name`,
+        displayNameSort: sql`excluded.display_name_sort`,
+        typeCode: sql`excluded.type_code`,
+        typeName: sql`excluded.type_name`,
+        typeNameSort: sql`excluded.type_name_sort`,
+        slot: sql`excluded.slot`,
+        category: sql`excluded.category`,
+        quality: sql`excluded.quality`,
+        setName: sql`excluded.set_name`,
+        searchText: sql`excluded.search_text`,
+        itemJson: sql`excluded.item_json`,
+        status: sql`excluded.status`,
+        updatedAt: sql`excluded.updated_at`
+      }
+    }).run()
   }
 
   list(options = {}) {
-    const limit = Math.min(Math.max(Number(options.limit) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
+    const limitNum = Math.min(Math.max(Number(options.limit) || DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE)
     const query = normalizeListOptions(options)
     const sort = SORTS[query.sort]
     const cursor = decodeCursor(options.cursor, query, this.cursorSecret)
     const status = options.status || 'active'
-    const conditions = ["status = @status"]
-    const parameters = { status }
+    
+    const conditions = [eq(schema.vaultItems.status, status)]
 
     if (query.q) {
-      conditions.push("search_text LIKE @query ESCAPE '\\'")
-      parameters.query = `%${query.q.replace(/[\\%_]/g, '\\$&')}%`
+      conditions.push(sql`${schema.vaultItems.searchText} LIKE ${'%' + query.q.replace(/[\\%_]/g, '\\$&') + '%'} ESCAPE '\\'`)
     }
-    for (const [option, column] of [['slot', 'slot'], ['category', 'category'], ['setName', 'set_name']]) {
-      if (query[option] !== 'All') {
-        conditions.push(`${column} = @${option}`)
-        parameters[option] = query[option]
-      }
-    }
-    if (query.quality !== 'All') {
-      conditions.push('quality = @quality')
-      parameters.quality = Number(query.quality)
-    }
-    const filterWhere = conditions.join(' AND ')
-    let count;
+    
+    if (query.slot !== 'All') conditions.push(eq(schema.vaultItems.slot, query.slot))
+    if (query.category !== 'All') conditions.push(eq(schema.vaultItems.category, query.category))
+    if (query.setName !== 'All') conditions.push(eq(schema.vaultItems.setName, query.setName))
+    if (query.quality !== 'All') conditions.push(eq(schema.vaultItems.quality, Number(query.quality)))
+
+    let countTotal;
     if (!cursor) {
-      count = this.db.prepare(`SELECT COUNT(*) AS count FROM vault_items WHERE ${filterWhere}`).get(parameters).count
+      const countRow = this.orm.select({ count: sql`COUNT(*)` }).from(schema.vaultItems).where(and(...conditions)).get()
+      countTotal = Number(countRow.count)
     }
+
     if (cursor) {
-      const comparison = query.direction === 'asc' ? '>' : '<'
+      const comparison = query.direction === 'asc' ? sql`>` : sql`<`
+      const sortColumn = schema.vaultItems[sort.column]
+      
       if (cursor.sortValue === null) {
         if (!sort.nullable) {
           const error = new Error('Invalid or mismatched vault pagination cursor')
           error.statusCode = 400
           throw error
         }
-        conditions.push(`(${sort.expression} IS NULL AND vault_id ${comparison} @cursorId)`)
+        conditions.push(sql`(${sortColumn} IS NULL AND ${schema.vaultItems.vaultId} ${comparison} ${cursor.vaultId})`)
       } else {
-        const nullTransition = sort.nullable ? `${sort.expression} IS NULL OR ` : ''
-        conditions.push(`(${nullTransition}(${sort.expression}, vault_id) ${comparison} (@cursorValue, @cursorId))`)
-        parameters.cursorValue = cursor.sortValue
+        const nullTransition = sort.nullable ? sql`${sortColumn} IS NULL OR ` : sql``
+        conditions.push(sql`(${nullTransition}(${sortColumn}, ${schema.vaultItems.vaultId}) ${comparison} (${cursor.sortValue}, ${cursor.vaultId}))`)
       }
-      parameters.cursorId = cursor.vaultId
     }
-    parameters.fetchLimit = limit + 1
-    const directionSql = query.direction.toUpperCase()
-    const nullOrdering = sort.nullable ? `${sort.expression} IS NULL ASC, ` : ''
-    const rows = this.db.prepare(`
-      SELECT * FROM vault_items
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY ${nullOrdering}${sort.expression} ${directionSql}, vault_id ${directionSql}
-      LIMIT @fetchLimit
-    `).all(parameters)
-    const hasMore = rows.length > limit
-    const pageRows = hasMore ? rows.slice(0, limit) : rows
+
+    const orderBy = [];
+    const sortColumn = schema.vaultItems[sort.column];
+    const directionFn = query.direction === 'asc' ? asc : desc;
+    
+    if (sort.nullable) {
+        orderBy.push(sql`${sortColumn} IS NULL ASC`);
+    }
+    orderBy.push(directionFn(sortColumn));
+    orderBy.push(directionFn(schema.vaultItems.vaultId));
+
+    const rows = this.orm.select().from(schema.vaultItems)
+      .where(and(...conditions))
+      .orderBy(...orderBy)
+      .limit(limitNum + 1)
+      .all()
+
+    const hasMore = rows.length > limitNum
+    const pageRows = hasMore ? rows.slice(0, limitNum) : rows
     return {
       items: pageRows.map(hydrateRow),
-      total: count,
+      total: countTotal,
       nextCursor: hasMore ? encodeCursor(pageRows.at(-1), query, this.cursorSecret) : null,
     }
   }
 
   facets() {
-    const distinct = (column) => this.db.prepare(`SELECT DISTINCT ${column} AS value FROM vault_items WHERE status = 'active' AND ${column} IS NOT NULL AND ${column} != '' ORDER BY ${column}`).all().map(({ value }) => value)
-    return { slots: distinct('slot'), sets: distinct('set_name'), categories: distinct('category') }
+    const slots = this.orm.selectDistinct({ value: schema.vaultItems.slot }).from(schema.vaultItems)
+      .where(and(eq(schema.vaultItems.status, 'active'), sql`${schema.vaultItems.slot} IS NOT NULL`, sql`${schema.vaultItems.slot} != ''`))
+      .orderBy(schema.vaultItems.slot).all().map(r => r.value)
+    const sets = this.orm.selectDistinct({ value: schema.vaultItems.setName }).from(schema.vaultItems)
+      .where(and(eq(schema.vaultItems.status, 'active'), sql`${schema.vaultItems.setName} IS NOT NULL`, sql`${schema.vaultItems.setName} != ''`))
+      .orderBy(schema.vaultItems.setName).all().map(r => r.value)
+    const categories = this.orm.selectDistinct({ value: schema.vaultItems.category }).from(schema.vaultItems)
+      .where(and(eq(schema.vaultItems.status, 'active'), sql`${schema.vaultItems.category} IS NOT NULL`, sql`${schema.vaultItems.category} != ''`))
+      .orderBy(schema.vaultItems.category).all().map(r => r.value)
+    
+    return { slots, sets, categories }
   }
 
   count() {
-    return this.db.prepare("SELECT COUNT(*) AS count FROM vault_items WHERE status = 'active'").get().count
+    return Number(this.orm.select({ count: sql`COUNT(*)` }).from(schema.vaultItems).where(eq(schema.vaultItems.status, 'active')).get().count)
   }
 
   get(vaultId, { includeInactive = false } = {}) {
-    const row = this.db.prepare(`SELECT * FROM vault_items WHERE vault_id = ?${includeInactive ? '' : " AND status = 'active'"}`).get(vaultId)
+    const conditions = [eq(schema.vaultItems.vaultId, vaultId)]
+    if (!includeInactive) conditions.push(eq(schema.vaultItems.status, 'active'))
+    const row = this.orm.select().from(schema.vaultItems).where(and(...conditions)).get()
     return row ? hydrateRow(row) : null
   }
-
 
   #findActiveByItemIdentity(entry) {
     const identity = itemIdentity(entry)
     if (!identity) return null
-    const separator = identity.indexOf(String.fromCharCode(31))
-    const sourceSave = identity.slice(0, separator)
-    const itemId = identity.slice(separator + 1)
-    const row = this.db.prepare("SELECT * FROM vault_items WHERE status IN ('active', 'pending_deposit', 'pending_withdraw') AND source_save = ? AND (CAST(json_extract(item_json, '$.id') AS TEXT) = ? OR CAST(json_extract(item_json, '$.item_seed') AS TEXT) = ?) LIMIT 1").get(sourceSave, itemId, itemId)
+    
+    const row = this.orm.select().from(schema.vaultItems).where(
+      and(
+        sql`${schema.vaultItems.status} IN ('active', 'pending_deposit', 'pending_withdraw')`,
+        eq(schema.vaultItems.sourceSave, identity.sourceSave),
+        sql`(CAST(json_extract(${schema.vaultItems.itemJson}, '$.id') AS TEXT) = ${identity.itemId} OR CAST(json_extract(${schema.vaultItems.itemJson}, '$.item_seed') AS TEXT) = ${identity.itemId})`
+      )
+    ).limit(1).get()
     return row ? hydrateRow(row) : null
   }
 
   async add(entry, { id = operationId() } = {}) {
     if (!entry?.vaultId || !entry?.itemData) throw new Error('Vault entry requires vaultId and itemData')
     await this.ensureCheckpoint()
-    if (this.get(entry.vaultId, { includeInactive: true })) throw new Error(`Vault item already exists: ${entry.vaultId}`)
-    if (this.#findActiveByItemIdentity(entry)) {
-      const error = new Error(`Item identity already exists in the vault: ${entry.sourceSave}`)
-      error.statusCode = 409
-      throw error
-    }
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'deposit', entry })
+    let added = null
     const apply = this.db.transaction(() => {
+      if (this.get(entry.vaultId, { includeInactive: true })) throw new Error(`Vault item already exists: ${entry.vaultId}`)
+      if (this.#findActiveByItemIdentity(entry)) {
+        const error = new Error(`Item identity already exists in the vault: ${entry.sourceSave}`)
+        error.statusCode = 409
+        throw error
+      }
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: 'deposit', entry })
       this.#insertEntry(entry)
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'deposit', this.now().toISOString())
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: 'deposit', appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: 'deposit' })
+      added = this.get(entry.vaultId)
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'deposit' })
-    return this.get(entry.vaultId)
+    return added
   }
 
   async update(entry, { id = operationId() } = {}) {
-    const current = this.get(entry?.vaultId, { includeInactive: true })
-    if (!current) return null
     await this.ensureCheckpoint()
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'metadata_update', entry })
+    let updated = null
     const apply = this.db.transaction(() => {
+      const current = this.get(entry?.vaultId, { includeInactive: true })
+      if (!current) return
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: 'metadata_update', entry })
       this.#insertEntry(entry, current.status)
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)')
-        .run(id, 'metadata_update', this.now().toISOString())
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: 'metadata_update', appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: 'metadata_update' })
+      updated = this.get(entry.vaultId, { includeInactive: true })
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'metadata_update' })
-    return this.get(entry.vaultId, { includeInactive: true })
+    return updated
   }
 
-  async markPendingWithdraw(vaultId, { reason = 'withdraw', id = operationId() } = {}) {
-    const entry = this.get(vaultId)
-    if (!entry) return null
-    if (entry.status !== 'active') throw new Error(`Cannot withdraw item in status: ${entry.status}`)
+  async markPendingWithdraw(vaultId, { id = operationId() } = {}) {
     await this.ensureCheckpoint()
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'pending_withdraw', entry })
+    let updated = null
     const apply = this.db.transaction(() => {
-      this.db.prepare('UPDATE vault_items SET status = ?, updated_at = ? WHERE vault_id = ?').run('pending_withdraw', this.now().toISOString(), vaultId)
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'pending_withdraw', this.now().toISOString())
+      const entry = this.get(vaultId, { includeInactive: true })
+      if (!entry) return
+      if (entry.status !== 'active') throw new Error(`Cannot withdraw item in status: ${entry.status}`)
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: 'pending_withdraw', entry })
+      this.orm.update(schema.vaultItems).set({ status: 'pending_withdraw', updatedAt: this.now().toISOString() }).where(eq(schema.vaultItems.vaultId, vaultId)).run()
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: 'pending_withdraw', appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: 'pending_withdraw' })
+      updated = this.get(vaultId, { includeInactive: true })
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'pending_withdraw' })
-    return this.get(vaultId, { includeInactive: true })
+    return updated
   }
 
   async recover(vaultId, { id = operationId() } = {}) {
-    const entry = this.get(vaultId, { includeInactive: true })
-    if (!entry) return null
-    if (entry.status !== 'pending_withdraw') throw new Error(`Cannot recover item in status: ${entry.status}`)
     await this.ensureCheckpoint()
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'recover', entry })
+    let updated = null
     const apply = this.db.transaction(() => {
-      this.db.prepare('UPDATE vault_items SET status = ?, updated_at = ? WHERE vault_id = ?').run('active', this.now().toISOString(), vaultId)
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'recover', this.now().toISOString())
+      const entry = this.get(vaultId, { includeInactive: true })
+      if (!entry) return
+      if (entry.status !== 'pending_withdraw') throw new Error(`Cannot recover item in status: ${entry.status}`)
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: 'recover', entry })
+      this.orm.update(schema.vaultItems).set({ status: 'active', updatedAt: this.now().toISOString() }).where(eq(schema.vaultItems.vaultId, vaultId)).run()
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: 'recover', appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: 'recover' })
+      updated = this.get(vaultId)
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'recover' })
-    return this.get(vaultId)
+    return updated
   }
 
   async retire(vaultId, { reason = 'delete', id = operationId() } = {}) {
-    const entry = this.get(vaultId, { includeInactive: true })
-    if (!entry) return null
     await this.ensureCheckpoint()
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: reason, entry })
-    const status = reason === 'withdraw' ? 'withdrawn' : 'deleted'
+    let updated = null
     const apply = this.db.transaction(() => {
-      this.db.prepare('UPDATE vault_items SET status = ?, updated_at = ? WHERE vault_id = ?').run(status, this.now().toISOString(), vaultId)
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, reason, this.now().toISOString())
+      const entry = this.get(vaultId, { includeInactive: true })
+      if (!entry) return
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: reason, entry })
+      const status = reason === 'withdraw' ? 'withdrawn' : 'deleted'
+      this.orm.update(schema.vaultItems).set({ status, updatedAt: this.now().toISOString() }).where(eq(schema.vaultItems.vaultId, vaultId)).run()
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: reason, appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: reason })
+      updated = this.get(vaultId, { includeInactive: true })
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: reason })
-    return this.get(vaultId, { includeInactive: true })
+    return updated
   }
 
   async importEntries(entries) {
@@ -599,27 +617,29 @@ export class VaultRepository {
     }))
     const ids = new Set()
     for (const entry of normalized) {
-      while (ids.has(entry.vaultId) || this.db.prepare('SELECT 1 FROM vault_items WHERE vault_id = ?').get(entry.vaultId)) entry.vaultId = `stash_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
+      while (ids.has(entry.vaultId) || this.orm.select({ vaultId: schema.vaultItems.vaultId }).from(schema.vaultItems).where(eq(schema.vaultItems.vaultId, entry.vaultId)).get()) {
+        entry.vaultId = `stash_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`
+      }
       ids.add(entry.vaultId)
     }
     await this.ensureCheckpoint()
     const id = operationId()
-    this.#appendJournal({ operationId: id, phase: 'intent', operation: 'import', entries: normalized })
     let addedCount = 0
     const apply = this.db.transaction(() => {
+      this.#appendJournal({ operationId: id, phase: 'intent', operation: 'import', entries: normalized })
       for (const entry of normalized) {
         this.#insertEntry(entry)
         addedCount++
       }
-      this.db.prepare('INSERT INTO applied_operations(operation_id, operation, applied_at) VALUES (?, ?, ?)').run(id, 'import', this.now().toISOString())
+      this.orm.insert(schema.appliedOperations).values({ operationId: id, operation: 'import', appliedAt: this.now().toISOString() }).run()
+      this.#appendJournal({ operationId: id, phase: 'commit', operation: 'import' })
     })
     apply()
-    this.#appendJournal({ operationId: id, phase: 'commit', operation: 'import' })
     return { addedCount }
   }
 
   exportEntries() {
-    return this.db.prepare("SELECT * FROM vault_items WHERE status = 'active' ORDER BY stashed_at DESC, vault_id DESC").all().map(hydrateRow)
+    return this.orm.select().from(schema.vaultItems).where(eq(schema.vaultItems.status, 'active')).orderBy(desc(schema.vaultItems.stashedAt), desc(schema.vaultItems.vaultId)).all().map(hydrateRow)
   }
 
   integrityCheck() {
