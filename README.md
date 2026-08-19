@@ -1,7 +1,6 @@
 # Sanctuary Companion
 
-Sanctuary Companion is a local React/Vite companion for Diablo II: Resurrected. It inspects character and shared-stash saves, moves items through the pinned D2SSharp worker, and provides a searchable Infinite Stash backed by SQLite.
-
+Sanctuary Companion is a local React/Vite companion for Diablo II: Resurrected. It inspects character and shared-stash saves, moves items through the pinned D2SSharp worker, and provides a searchable Infinite Stash backed by SQLite (via Drizzle ORM). The frontend UI is built with React, utilizing Zustand for local state and TanStack Query for remote data fetching.
 ## Development
 
 Install dependencies and start the local server:
@@ -58,7 +57,7 @@ The test uses D2R `.d2s`/`.d2i` fixtures only after copying them into a uniquely
 
 The Infinite Stash is stored in `infinite_stash_vault.sqlite3` in the D2R save directory. The first vault mutation after each dev-server start creates one SQLite checkpoint under `backups/vault/<epoch>/`; subsequent mutations append checksummed intent/commit records to that epoch's `transactions.jsonl`.
 
-Normal reads are cursor-paginated in batches of 100. Search, rarity, set, category, and slot filtering execute in SQLite; the browser no longer mirrors the complete vault in `localStorage`.
+Normal reads are cursor-paginated in batches of 100 and managed by TanStack Query in the React client. Search, rarity, set, category, and slot filtering execute in SQLite; the browser no longer mirrors the complete vault in `localStorage`.
 
 On first launch after upgrading, `infinite_stash_vault.json` is transactionally imported. The original JSON remains in place and an additional copy plus migration report is written under `backups/vault-legacy-migration_*`.
 
