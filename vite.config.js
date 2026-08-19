@@ -7,6 +7,7 @@ import path from 'path'
 import crypto from 'node:crypto'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
+import { repairMfTimerProfile } from './server/mfTimerRepair.js'
 import { safeSavePath } from './server/savePath.js'
 import { rejectWhileD2RRunning } from './server/processLock.js'
 
@@ -560,7 +561,7 @@ function d2sWatcherPlugin() {
         }
       })
 
-      // Also expose a listing endpoint so the UI can list available saves
+      // Expose a listing endpoint so the UI can list available saves
       server.middlewares.use('/__d2s_list', (_req, res) => {
         try {
           const files = fs.readdirSync(SAVES_DIR)
@@ -572,14 +573,64 @@ function d2sWatcherPlugin() {
         }
       })
 
+      // Repair an MF Timer profile after a system-clock jump.
+      server.middlewares.use('/__mf_timer_repair', (req, res) => {
+        if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', () => {
+          try {
+            const { directory } = JSON.parse(body || '{}')
+            const result = repairMfTimerProfile({ directory })
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, ...result }))
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: err.message }))
+          }
+        })
+      })
+
+      // Endpoint to change system time for Terror Zone pinning
+      server.middlewares.use('/__d2r_set_time', (req, res) => {
+        if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        let body = '';
+        req.on('data', chunk => { body += chunk });
+        req.on('end', () => {
+          try {
+            const { datetime, restore } = JSON.parse(body);
+            const { exec } = require('child_process');
+            
+            let script;
+            if (restore) {
+              script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Start-Service W32Time -ErrorAction SilentlyContinue; W32tm /resync /force'"`;
+            } else {
+              if (!datetime) throw new Error('Missing datetime parameter');
+              script = `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-Command Stop-Service W32Time -ErrorAction SilentlyContinue; Set-Date -Date ([datetime]''${datetime}'')'"`;
+            }
+            
+            exec(script, (err) => {
+              if (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+              } else {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+              }
+            });
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+          }
+        });
+      });
+
       // NOTE: File watcher disabled to avoid holding file handles/locks on .d2s files
       // while Diablo II Resurrected is running and saving character state.
       // Server updates can still be manually triggered via the Refresh button.
     }
   }
 }
-
-
 
 // https://vite.dev/config/
 export default defineConfig({

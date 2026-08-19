@@ -7,6 +7,7 @@ import { StorageGrid } from './components/StorageGrid';
 import { InfiniteStashPanel } from './components/InfiniteStashPanel';
 import { SharedStashPanel } from './components/SharedStashPanel';
 import { GlobalItemSearch } from './components/GlobalItemSearch';
+import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
 
 
@@ -105,6 +106,7 @@ function MainContent() {
 
   const { toasts, addToast, dismissToast } = useToasts();
   const [searchHighlight, setSearchHighlight] = React.useState(null);
+  const [showTZ, setShowTZ] = React.useState(false);
   const searchNavigationRef = React.useRef(0);
 
   const storageItems = React.useMemo(() => {
@@ -262,6 +264,14 @@ function MainContent() {
             </span>
           )}
 
+          <button 
+            className="header-control btn-d2r btn-secondary" 
+            title="Pin an offline Terror Zone"
+            onClick={() => setShowTZ(true)}
+          >
+            Terror Zone
+          </button>
+
           <button
             className={`header-control btn-d2r btn-refresh ${syncing ? 'spinning' : ''}`}
             title="Refresh from disk"
@@ -390,6 +400,13 @@ function MainContent() {
           </div>
         ))}
       </div>
+
+      {showTZ && (
+        <TerrorZoneScheduler 
+          onClose={() => setShowTZ(false)} 
+          addToast={addToast} 
+        />
+      )}
     </div>
   );
 }
