@@ -522,3 +522,53 @@ test('checkpoints and reprojects existing schema-v1 rows exactly once', async ()
     reopened.close()
   }
 })
+
+test('safely handles highly concurrent mutations without dropping data or crashing', async () => {
+  const savesDir = temporarySavesDirectory()
+  const repository = new VaultRepository({ savesDir })
+  try {
+    const promises = []
+    // Fire 20 adds simultaneously, simulating heavy API concurrency
+    for (let i = 0; i < 20; i++) {
+      promises.push(repository.add(entry(2000 + i)))
+    }
+    await Promise.all(promises)
+    assert.equal(repository.list().total, 20)
+    
+    // Check that there is only one epoch (all shared the same checkpoint promise if it fired simultaneously)
+    const epochDirs = fs.readdirSync(path.join(savesDir, 'backups', 'vault'))
+    // It might be 1 if they all hit ensureCheckpoint synchronously before any backup finished
+    assert.ok(epochDirs.length >= 1)
+    
+    const journalPath = repository.epoch.journalPath
+    const journal = readVaultJournal(journalPath)
+    // Both intents and commits should be cleanly sequenced
+    assert.ok(journal.records.length >= 2)
+    assert.equal(journal.unresolved.length, 0)
+  } finally {
+    repository.close()
+  }
+})
+
+test('atomic updates properly block concurrent duplicate operations', async () => {
+  const savesDir = temporarySavesDirectory()
+  const repository = new VaultRepository({ savesDir })
+  try {
+    await repository.add(entry(3000))
+    const vaultId = entry(3000).vaultId
+    
+    // Attempting to withdraw the same item twice simultaneously
+    const p1 = repository.markPendingWithdraw(vaultId)
+    const p2 = repository.markPendingWithdraw(vaultId)
+    
+    const results = await Promise.allSettled([p1, p2])
+    const fulfilled = results.filter(r => r.status === 'fulfilled')
+    const rejected = results.filter(r => r.status === 'rejected')
+    
+    assert.equal(fulfilled.length, 1)
+    assert.equal(rejected.length, 1)
+    assert.match(rejected[0].reason.message, /Cannot withdraw item in status: pending_withdraw/i)
+  } finally {
+    repository.close()
+  }
+})
