@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen } from '../../tests/react/test-utils.jsx';
 import { describe, expect, test } from 'vitest';
 import { ItemTooltip } from '../../src/components/ItemTooltip.jsx';
 
@@ -53,3 +53,4 @@ describe('ItemTooltip', () => {
     expect(screen.getByText('Roll 21–30 · 78%')).toBeInTheDocument();
   });
 });
+

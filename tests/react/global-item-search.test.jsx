@@ -4,7 +4,7 @@ import {
   fireEvent,
   render,
   screen,
-} from '@testing-library/react';
+} from '../../tests/react/test-utils.jsx';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { GlobalItemSearch } from '../../src/components/GlobalItemSearch.jsx';
 
@@ -239,3 +239,4 @@ describe('GlobalItemSearch', () => {
     expect(screen.getByText('Best of 2 matches')).toBeInTheDocument();
   });
 });
+

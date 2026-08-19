@@ -4,7 +4,7 @@ import {
   fireEvent,
   render,
   screen,
-} from '@testing-library/react';
+} from '../../tests/react/test-utils.jsx';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { InfiniteStashPanel } from '../../src/components/InfiniteStashPanel.jsx';
 import { InfiniteStashAdapter } from '../../src/adapters/InfiniteStashAdapter.js';
@@ -142,3 +142,4 @@ describe('Infinite Stash sorting', () => {
     expect(screen.queryByText(/poisonmindam|%[+]d/i)).not.toBeInTheDocument();
   });
 });
+

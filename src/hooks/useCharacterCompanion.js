@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { D2SParserAdapter } from '../adapters/D2SParserAdapter';
 import { STORAGE_META } from '../domain/entities/Item';
 
@@ -29,119 +30,114 @@ export function useCharacterCompanion() {
   const [syncedAt, setSyncedAt]     = useState(null);
   const [syncing, setSyncing]       = useState(false);
   const [loadError, setLoadError]   = useState(null);
-  const [vaultItems, setVaultItems] = useState([]);
-  const [vaultTotal, setVaultTotal] = useState(0);
-  const [vaultCount, setVaultCount] = useState(null);
-  const [vaultCountError, setVaultCountError] = useState(null);
-  const [vaultNextCursor, setVaultNextCursor] = useState(null);
-  const [vaultFacets, setVaultFacets] = useState({ slots: [], sets: [], categories: [] });
-  const [vaultLoading, setVaultLoading] = useState(false);
-  const [vaultError, setVaultError] = useState(null);
-  const transferInFlight = useRef(new Set());
-  const vaultFiltersRef = useRef({});
-  const vaultRequestRef = useRef(0);
-  const vaultCountRequestRef = useRef(0);
-  const vaultLoadingRef = useRef(false);
-  const vaultMountedRef = useRef(true);
-  const sharedRequestRef = useRef(0);
-  const facetsRequestRef = useRef(0);
-  const [sharedStash, setSharedStash] = useState(null);
-  const [sharedStashLoadedFile, setSharedStashLoadedFile] = useState(null);
-  const [sharedStashLoading, setSharedStashLoading] = useState(false);
-  const [sharedStashError, setSharedStashError] = useState(null);
-  const [isGameRunning, setIsGameRunning] = useState(false);
+  
+  const [vaultFilters, setVaultFilters] = useState(null);
 
-  const queryVault = useCallback(async (filters = {}, { append = false, cursor = null } = {}) => {
-    vaultFiltersRef.current = filters;
-    if (append && vaultLoadingRef.current) return null;
-    const requestId = ++vaultRequestRef.current;
-    vaultLoadingRef.current = true;
-    setVaultLoading(true);
-    setVaultError(null);
-    try {
-      const result = await InfiniteStashAdapter.list(filters, { cursor, limit: 100 });
-      if (!vaultMountedRef.current || requestId !== vaultRequestRef.current) return result;
-      setVaultItems((current) => append ? [...current, ...result.items] : result.items);
-      if (result.total !== undefined) {
-        setVaultTotal(result.total);
-      }
-      setVaultNextCursor(result.nextCursor);
-      return result;
-    } catch (err) {
-      if (vaultMountedRef.current && requestId === vaultRequestRef.current) setVaultError(err.message);
-      throw err;
-    } finally {
-      if (vaultMountedRef.current && requestId === vaultRequestRef.current) {
-        vaultLoadingRef.current = false;
-        setVaultLoading(false);
-      }
+  const {
+    data: vaultData,
+    fetchNextPage,
+    hasNextPage,
+    isFetching: vaultLoading,
+    error: vaultErrorObj,
+  } = useInfiniteQuery({
+    queryKey: ['vault', vaultFilters],
+    queryFn: ({ pageParam = null }) => InfiniteStashAdapter.list(vaultFilters || {}, { cursor: pageParam, limit: 100 }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    enabled: vaultFilters !== null,
+  });
+
+  const vaultItems = useMemo(() => vaultData ? vaultData.pages.flatMap(p => p.items) : [], [vaultData]);
+  const vaultTotal = vaultData ? vaultData.pages[0]?.total ?? 0 : 0;
+  const vaultNextCursor = hasNextPage ? vaultData.pages[vaultData.pages.length - 1].nextCursor : null;
+  const vaultError = vaultErrorObj ? vaultErrorObj.message : null;
+
+  const { data: vaultCountData, error: vaultCountErrorObj } = useQuery({
+    queryKey: ['vaultCount'],
+    queryFn: async () => {
+      const res = await InfiniteStashAdapter.count();
+      return res.total;
     }
-  }, []);
+  });
+  const vaultCount = vaultCountData ?? null;
+  const vaultCountError = vaultCountErrorObj?.message ?? null;
 
-  const refreshVaultFacets = useCallback(async () => {
-    const requestId = ++facetsRequestRef.current;
-    const facets = await InfiniteStashAdapter.facets();
-    if (!vaultMountedRef.current || requestId !== facetsRequestRef.current) return facets;
-    setVaultFacets(facets);
-    return facets;
-  }, []);
+  const { data: vaultFacetsData } = useQuery({
+    queryKey: ['vaultFacets'],
+    queryFn: () => InfiniteStashAdapter.facets(),
+  });
+  const vaultFacets = vaultFacetsData ?? { slots: [], sets: [], categories: [] };
 
-  const refreshVaultCount = useCallback(async () => {
-    const requestId = ++vaultCountRequestRef.current;
-    setVaultCountError(null);
-    try {
-      const { total } = await InfiniteStashAdapter.count();
-      if (!vaultMountedRef.current || requestId !== vaultCountRequestRef.current) return total;
-      setVaultCount(total);
-      return total;
-    } catch (err) {
-      if (vaultMountedRef.current && requestId === vaultCountRequestRef.current) {
-        setVaultCount(null);
-        setVaultCountError(err.message);
-      }
-      throw err;
-    }
-  }, []);
+  const queryClient = useQueryClient();
 
-  const refreshVault = useCallback(async () => {
-    const result = await queryVault(vaultFiltersRef.current);
-    await Promise.all([refreshVaultFacets(), refreshVaultCount()]);
-    return result;
-  }, [queryVault, refreshVaultFacets, refreshVaultCount]);
+  const queryVault = useCallback(async (filters = {}) => {
+    setVaultFilters(filters);
+  }, []);
 
   const loadMoreVault = useCallback(() => {
-    if (!vaultNextCursor || vaultLoading || vaultLoadingRef.current) return Promise.resolve();
-    return queryVault(vaultFiltersRef.current, { append: true, cursor: vaultNextCursor })
-      .catch((error) => {
-        // Replace the page if a cursor from an older server version is
-        // rejected after an upgrade.
-        if (error.status === 400) return queryVault(vaultFiltersRef.current);
-        throw error;
-      });
-  }, [queryVault, vaultNextCursor, vaultLoading]);
+    if (hasNextPage && !vaultLoading) {
+      return fetchNextPage();
+    }
+    return Promise.resolve();
+  }, [hasNextPage, vaultLoading, fetchNextPage]);
+
+  const refreshVault = useCallback(async () => {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['vault'] }),
+      queryClient.invalidateQueries({ queryKey: ['vaultCount'] }),
+      queryClient.invalidateQueries({ queryKey: ['vaultFacets'] })
+    ]);
+  }, [queryClient]);
+
+  const removeMutation = useMutation({
+    mutationFn: ({ vaultId, reason }) => InfiniteStashAdapter.remove(vaultId, reason),
+    onSuccess: () => refreshVault(),
+  });
 
   const removeItemFromVault = useCallback(async (vaultId, reason = 'delete') => {
-    await InfiniteStashAdapter.remove(vaultId, reason);
-    await refreshVault();
-  }, [refreshVault]);
+    await removeMutation.mutateAsync({ vaultId, reason });
+  }, [removeMutation]);
+
+  const transferInFlight = useRef(new Set());
+  const vaultMountedRef = useRef(true);
+  const { data: sharedStashData, error: sharedStashErrorObj, isFetching: sharedStashLoading, refetch: refreshSharedStashQuery } = useQuery({
+    queryKey: ['sharedStash', sharedStashFile],
+    queryFn: async () => {
+      if (!isSharedStashBasename(sharedStashFile)) {
+        throw new Error('Shared stash file must be a .d2i basename');
+      }
+      return await D2SParserAdapter.fetchSharedStash(sharedStashFile);
+    },
+    enabled: !!sharedStashFile,
+  });
+
+  const sharedStash = sharedStashData ?? null;
+  const sharedStashLoadedFile = sharedStashData ? sharedStashFile : null;
+  const sharedStashError = sharedStashErrorObj?.message ?? null;
+
+  // Compatibility no-ops for components that still try to set these manually
+  const setSharedStashLoadedFile = useCallback(() => {}, []);
+  const setSharedStashError = useCallback(() => {}, []);
+
+  const refreshSharedStash = useCallback(async (filename) => {
+    if (filename !== undefined) {
+      useUIStore.getState().setSharedStashFile(filename);
+    }
+    return refreshSharedStashQuery();
+  }, [refreshSharedStashQuery]);
+
+  // We no longer need setSharedStash since it's driven by React Query. 
+  // However, local optimistic updates in mutations will update the query cache.
+  const setSharedStash = useCallback((updater) => {
+    queryClient.setQueryData(['sharedStash', sharedStashFile], updater);
+  }, [queryClient, sharedStashFile]);
 
   useEffect(() => {
-    refreshVaultFacets().catch((err) => {
-      console.error('Failed to load Infinite Stash:', err);
-    });
-  }, [refreshVaultFacets]);
+    if (!sharedStashFile) {
+      useUIStore.getState().setSharedStashFile(DEFAULT_SHARED_STASH_FILE);
+    }
+  }, [sharedStashFile]);
 
-  useEffect(() => {
-    refreshVaultCount().catch((err) => {
-      console.error('Failed to load Infinite Stash count:', err);
-    });
-    return () => { vaultCountRequestRef.current += 1; };
-  }, [refreshVaultCount]);
-
-  useEffect(() => {
-    vaultMountedRef.current = true;
-    return () => { vaultMountedRef.current = false; };
-  }, []);
+  const [isGameRunning, setIsGameRunning] = useState(false);
 
   // Poll server for D2R process status
   useEffect(() => {
@@ -165,45 +161,6 @@ export function useCharacterCompanion() {
     };
   }, []);
 
-  // Refresh shared stash file from server (.d2i)
-  const refreshSharedStash = useCallback(async (filename) => {
-    const requestedFile = filename ?? useUIStore.getState().sharedStashFile;
-    const requestId = ++sharedRequestRef.current;
-    
-    // Only update the store if a specific filename was passed
-    if (filename !== undefined) {
-      useUIStore.getState().setSharedStashFile(requestedFile);
-    }
-    
-    setSharedStashLoading(true);
-    setSharedStashError(null);
-    if (!isSharedStashBasename(requestedFile)) {
-      const error = 'Shared stash file must be a .d2i basename';
-      if (vaultMountedRef.current && requestId === sharedRequestRef.current) {
-        setSharedStashError(error);
-        setSharedStashLoading(false);
-      }
-      return null;
-    }
-    try {
-      const stashData = await D2SParserAdapter.fetchSharedStash(requestedFile);
-      if (vaultMountedRef.current && requestId === sharedRequestRef.current) {
-        setSharedStash(stashData);
-        setSharedStashLoadedFile(requestedFile);
-      }
-      return stashData;
-    } catch (err) {
-      console.error('Shared stash fetch error:', err);
-      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashError(err.message);
-    } finally {
-      if (vaultMountedRef.current && requestId === sharedRequestRef.current) setSharedStashLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshSharedStash(DEFAULT_SHARED_STASH_FILE);
-  }, [refreshSharedStash]);
-
   // Trigger safe backup on server
   const triggerSaveBackup = useCallback(async () => {
     try {
@@ -215,122 +172,123 @@ export function useCharacterCompanion() {
     }
   }, []);
 
-  // Deposit item to vault with automatic safe backup & save file cleanup
-  const depositItemToVault = useCallback(
-    async (item, sourceName) => {
+  const depositMutation = useMutation({
+    mutationFn: async ({ item, sourceName }) => {
       const itemId = item?.id ?? item?.item_seed;
       const transferKey = `deposit:${sourceName || activeFile || 'uploaded'}:${itemId ?? item?.rawBytesHex ?? ''}`;
       if (transferInFlight.current.has(transferKey)) return;
       transferInFlight.current.add(transferKey);
       try {
-      if (isGameRunning) {
-        emitToast('D2R is running - exit the game before moving items.', 'error');
-        return;
-      }
-      if (sourceName === '__shared_stash__' && sharedStashFile !== sharedStashLoadedFile) {
-        emitToast('Shared Stash is not ready for edits; refresh the selected file first.', 'error');
-        return;
-      }
-      // 1. Perform automated backup first
-      const backup = await triggerSaveBackup();
-      if (!backup?.success) {
-        emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
-        return;
-      }
-
-      // Persist and journal the item before changing its source save. A failure can duplicate, never lose, the item.
-      const label = sourceName === '__shared_stash__'
-        ? `Shared Stash (${sharedStashFile || DEFAULT_SHARED_STASH_FILE})`
-        : (sourceName || activeFile || charData?.header?.name || 'Uploaded Character');
-      const entry = {
-        vaultId: `stash_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        stashedAt: new Date().toISOString(),
-        sourceSave: label,
-        itemData: item,
-      };
-      try {
-        await InfiniteStashAdapter.add(entry);
-      } catch (err) {
-        console.error('Failed to persist Infinite Stash item:', err);
-        emitToast(`Vault persistence failed: ${err.message}. The source save was not changed.`, 'error');
-        return;
-      }
-      let updatedChar = null;
-      // 2. Remove item from .d2s save file on disk if depositing from active character file
-      // Skip if item is coming from the shared stash (sourceName === '__shared_stash__')
-      if (activeFile && sourceName !== '__shared_stash__') {
-        try {
-          const res = await D2SParserAdapter.removeItemFromSave(activeFile, item);
-          if (res.success && res.char) {
-            updatedChar = res.char;
-            setCharData(res.char);
-          }
-          else throw new Error(res.error || 'D2SSharp did not confirm item removal');
-        } catch (err) {
-          console.error('Failed to update save file on disk:', err);
-          emitToast(`Source save was not changed; the item remains safely recorded in the vault. ${err.message}`, 'error');
+        if (isGameRunning) {
+          emitToast('D2R is running - exit the game before moving items.', 'error');
           return;
         }
-      }
+        if (sourceName === '__shared_stash__' && sharedStashFile !== sharedStashLoadedFile) {
+          emitToast('Shared Stash is not ready for edits; refresh the selected file first.', 'error');
+          return;
+        }
+        // 1. Perform automated backup first
+        const backup = await triggerSaveBackup();
+        if (!backup?.success) {
+          emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
+          return;
+        }
 
-      // 3. Remove item from the selected shared stash. Browser uploads are local-only.
-      if (sourceName === '__shared_stash__') {
-        if (!sharedStashFile) {
-          setSharedStash((current) => current ? {
-            ...current,
-            pages: (current.pages || []).map((page) => ({
-              ...page,
-              items: (page.items || []).filter((candidate) => item.id != null ? candidate.id !== item.id : candidate !== item),
-            })),
-          } : current);
-        } else {
+        // Persist and journal the item before changing its source save. A failure can duplicate, never lose, the item.
+        const label = sourceName === '__shared_stash__'
+          ? `Shared Stash (${sharedStashFile || DEFAULT_SHARED_STASH_FILE})`
+          : (sourceName || activeFile || charData?.header?.name || 'Uploaded Character');
+        const entry = {
+          vaultId: `stash_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          stashedAt: new Date().toISOString(),
+          sourceSave: label,
+          itemData: item,
+        };
+        try {
+          await InfiniteStashAdapter.add(entry);
+        } catch (err) {
+          console.error('Failed to persist Infinite Stash item:', err);
+          emitToast(`Vault persistence failed: ${err.message}. The source save was not changed.`, 'error');
+          return;
+        }
+        let updatedChar = null;
+        // 2. Remove item from .d2s save file on disk if depositing from active character file
+        // Skip if item is coming from the shared stash (sourceName === '__shared_stash__')
+        if (activeFile && sourceName !== '__shared_stash__') {
           try {
-            const d2iRes = await D2SParserAdapter.removeItemFromSharedStash(sharedStashFile, item);
-            if (!d2iRes.success) {
-              console.error('removeItemFromSharedStash error detail:', d2iRes);
-              emitToast('Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
-              return;
+            const res = await D2SParserAdapter.removeItemFromSave(activeFile, item);
+            if (res.success && res.char) {
+              updatedChar = res.char;
+              setCharData(res.char);
             }
-            if (!d2iRes.itemRemoved) {
-              console.warn('Item not matched in .d2i file:', item);
-              emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
-              return;
-            }
-            if (d2iRes.stash) setSharedStash(d2iRes.stash);
-            if (d2iRes.itemBytesHex) item.rawBytesHex = d2iRes.itemBytesHex;
-            try {
-              await InfiniteStashAdapter.update(entry);
-            } catch (updateError) {
-              emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
-            }
+            else throw new Error(res.error || 'D2SSharp did not confirm item removal');
           } catch (err) {
-            emitToast('Failed to update Shared Stash file: ' + err.message, 'error');
+            console.error('Failed to update save file on disk:', err);
+            emitToast(`Source save was not changed; the item remains safely recorded in the vault. ${err.message}`, 'error');
             return;
           }
         }
-      }
 
-      // 4. Fallback state update for client-only / uploaded files
-      if (!updatedChar) {
-        setCharData((prev) => {
-          if (!prev?.items) return prev;
-          const newItems = prev.items.filter((i) => i !== item);
-          return { ...prev, items: newItems };
-        });
-      }
+        // 3. Remove item from the selected shared stash. Browser uploads are local-only.
+        if (sourceName === '__shared_stash__') {
+          if (!sharedStashFile) {
+            setSharedStash((current) => current ? {
+              ...current,
+              pages: (current.pages || []).map((page) => ({
+                ...page,
+                items: (page.items || []).filter((candidate) => item.id != null ? candidate.id !== item.id : candidate !== item),
+              })),
+            } : current);
+          } else {
+            try {
+              const d2iRes = await D2SParserAdapter.removeItemFromSharedStash(sharedStashFile, item);
+              if (!d2iRes.success) {
+                console.error('removeItemFromSharedStash error detail:', d2iRes);
+                emitToast('Failed to remove from Shared Stash: ' + (d2iRes.error || 'unknown error'), 'error');
+                return;
+              }
+              if (!d2iRes.itemRemoved) {
+                console.warn('Item not matched in .d2i file:', item);
+                emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
+                return;
+              }
+              if (d2iRes.stash) setSharedStash(d2iRes.stash);
+              if (d2iRes.itemBytesHex) item.rawBytesHex = d2iRes.itemBytesHex;
+              try {
+                await InfiniteStashAdapter.update(entry);
+              } catch (updateError) {
+                emitToast(`Item is safe in the vault, but raw-byte metadata update failed: ${updateError.message}`, 'error');
+              }
+            } catch (err) {
+              emitToast('Failed to update Shared Stash file: ' + err.message, 'error');
+              return;
+            }
+          }
+        }
 
-      await refreshVault();
-      emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
+        // 4. Fallback state update for client-only / uploaded files
+        if (!updatedChar) {
+          setCharData((prev) => {
+            if (!prev?.items) return prev;
+            const newItems = prev.items.filter((i) => i !== item);
+            return { ...prev, items: newItems };
+          });
+        }
+
+        emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
       } finally {
         transferInFlight.current.delete(transferKey);
       }
     },
-    [activeFile, charData, triggerSaveBackup, isGameRunning, refreshVault, sharedStashFile, sharedStashLoadedFile]
-  );
+    onSuccess: () => refreshVault(),
+  });
 
-  // Withdraw item from Infinite Stash Vault back into active character's in-game Stash (.d2s)
-  const withdrawItemFromVault = useCallback(
-    async (vaultId, itemData) => {
+  const depositItemToVault = useCallback(async (item, sourceName) => {
+    await depositMutation.mutateAsync({ item, sourceName });
+  }, [depositMutation]);
+
+  const withdrawMutation = useMutation({
+    mutationFn: async ({ vaultId, itemData }) => {
       if (isGameRunning) {
         emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
@@ -374,16 +332,17 @@ export function useCharacterCompanion() {
         } catch (err) {
           emitToast(`Item was written to the save, but vault history update failed: ${err.message}`, 'error');
         }
-      } else {
-        await refreshVault(); // Refresh to remove the item from the active UI view
       }
     },
-    [activeFile, triggerSaveBackup, isGameRunning, removeItemFromVault, refreshVault]
-  );
+    onSuccess: () => refreshVault(),
+  });
 
-  // Withdraw item from Infinite Stash Vault into Shared Stash (.d2i)
-  const withdrawItemToSharedStash = useCallback(
-    async (vaultId, itemData) => {
+  const withdrawItemFromVault = useCallback(async (vaultId, itemData) => {
+    await withdrawMutation.mutateAsync({ vaultId, itemData });
+  }, [withdrawMutation]);
+
+  const withdrawToSharedStashMutation = useMutation({
+    mutationFn: async ({ vaultId, itemData }) => {
       if (isGameRunning) {
         emitToast('D2R is running - exit the game before moving items.', 'error');
         return;
@@ -432,22 +391,31 @@ export function useCharacterCompanion() {
         } catch (err) {
           emitToast(`Item was written to Shared Stash, but vault history update failed: ${err.message}`, 'error');
         }
-      } else {
-        await refreshVault();
       }
     },
-    [triggerSaveBackup, isGameRunning, removeItemFromVault, sharedStashFile, sharedStashLoadedFile, refreshVault]
-  );
+    onSuccess: () => refreshVault(),
+  });
 
-  const recoverItemFromVault = useCallback(async (vaultId) => {
-    try {
+  const withdrawItemToSharedStash = useCallback(async (vaultId, itemData) => {
+    await withdrawToSharedStashMutation.mutateAsync({ vaultId, itemData });
+  }, [withdrawToSharedStashMutation]);
+
+  const recoverMutation = useMutation({
+    mutationFn: async (vaultId) => {
       await InfiniteStashAdapter.recover(vaultId);
-      await refreshVault();
+    },
+    onSuccess: () => {
+      refreshVault();
       emitToast('Item recovered successfully', 'success');
-    } catch (err) {
+    },
+    onError: (err) => {
       emitToast(`Failed to recover item: ${err.message}`, 'error');
     }
-  }, [refreshVault]);
+  });
+
+  const recoverItemFromVault = useCallback(async (vaultId) => {
+    await recoverMutation.mutateAsync(vaultId);
+  }, [recoverMutation]);
 
   // Fetch list of files
   useEffect(() => {
