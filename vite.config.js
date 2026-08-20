@@ -312,9 +312,12 @@ function d2sWatcherPlugin() {
             }
 
             for (const tIdx of searchOrder) {
+              const page = stash.pages[tIdx];
+              if (page && page.type !== 0) continue; // Only add to normal StorageGrid tabs
+
               const grid = Array.from({ length: 10 }, () => Array(10).fill(false))
-              if (stash.pages[tIdx].items) {
-                stash.pages[tIdx].items.forEach(i => {
+              if (page.items) {
+                page.items.forEach(i => {
                   const x = i.position_x ?? 0
                   const y = i.position_y ?? 0
                   const [w, h] = getItemDimensions(i.type)
