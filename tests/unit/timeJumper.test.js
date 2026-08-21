@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { setWindowsTime } from '../../server/timeJumper.js';
+import { createTimeScript, setWindowsTime } from '../../server/timeJumper.js';
 
 function decodedScripts(command) {
   return [...command.matchAll(/-EncodedCommand ([A-Za-z0-9+/=]+)/g)]
@@ -8,6 +8,12 @@ function decodedScripts(command) {
 }
 
 describe('timeJumper', () => {
+  it('builds only the supported helper operations', () => {
+    assert.ok(createTimeScript({ operation: 'pin', datetime: '2026-08-19T10:00:00.000Z' }).includes("Set-Date -Date ([datetime]'2026-08-19T10:00:00.000Z')"));
+    assert.ok(createTimeScript({ operation: 'restore' }).includes('Set-Service -Name W32Time -StartupType $startupType'));
+    assert.throws(() => createTimeScript({ operation: 'exec', datetime: '2026-08-19T10:00:00.000Z' }), /Unsupported Windows time operation/);
+  });
+
   it('should call exec with restore command when restore is true', async () => {
     let executedScript = '';
     const mockExec = (script, callback) => {

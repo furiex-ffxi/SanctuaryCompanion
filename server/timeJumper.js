@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { exec } from 'child_process';
+import { runWithElevatedHelper } from './timeHelperClient.js';
 
 const STATE_ROOT = process.env.LOCALAPPDATA || os.tmpdir();
 const STATE_DIRECTORY = path.join(STATE_ROOT, 'SanctuaryCompanion');
@@ -83,20 +84,35 @@ if ($state.State -eq 'Running') {
 Remove-Item -LiteralPath $statePath -Force`;
 }
 
+export function createTimeScript({ operation, datetime }) {
+  if (operation === 'restore') return restoreScript();
+  if (operation !== 'pin') throw new Error('Unsupported Windows time operation');
+  if (!datetime) throw new Error('Missing datetime parameter');
+  const parsedDate = new Date(datetime);
+  if (isNaN(parsedDate.getTime())) throw new Error('Invalid datetime parameter');
+  return pinScript(parsedDate.toISOString());
+}
+
 export function setWindowsTime({ datetime, restore }, execFn = exec) {
   const operation = operationQueue.then(() => new Promise((resolve, reject) => {
-      let script;
-      if (restore) {
-        script = elevatedCommand(restoreScript());
-      } else {
-        if (!datetime) return reject(new Error('Missing datetime parameter'));
-        const parsedDate = new Date(datetime);
-        if (isNaN(parsedDate.getTime())) {
-          return reject(new Error('Invalid datetime parameter'));
-        }
-        const safeDatetime = parsedDate.toISOString();
-        script = elevatedCommand(pinScript(safeDatetime));
+      const operationName = restore ? 'restore' : 'pin';
+      if (execFn === exec) {
+        runWithElevatedHelper({ operation: operationName, datetime })
+          .then(result => {
+            if (!result.ok) {
+              const detail = String(result.error || result.stderr || 'Elevated time operation failed').trim();
+              const error = new Error(`Windows time operation failed: ${detail}`);
+              error.code = result.code;
+              reject(error);
+            } else resolve({ success: true });
+          })
+          .catch(reject);
+        return;
       }
+
+      let script;
+      try { script = elevatedCommand(createTimeScript({ operation: operationName, datetime })); }
+      catch (error) { reject(error); return; }
 
       execFn(script, (err, stdout, stderr) => {
         if (err) {
