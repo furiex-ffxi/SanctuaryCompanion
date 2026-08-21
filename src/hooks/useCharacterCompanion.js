@@ -165,9 +165,12 @@ export function useCharacterCompanion() {
   }, []);
 
   // Trigger safe backup on server
-  const triggerSaveBackup = useCallback(async () => {
+  const triggerSaveBackup = useCallback(async (files = []) => {
     try {
-      const res = await fetch('/__d2s_backup');
+      const params = new URLSearchParams();
+      for (const file of files) if (file) params.append('file', file);
+      const query = params.toString();
+      const res = await fetch(`/__d2s_backup${query ? `?${query}` : ''}`);
       return await res.json();
     } catch (err) {
       console.error('Backup request failed:', err);
@@ -192,7 +195,7 @@ export function useCharacterCompanion() {
           return;
         }
         // 1. Perform automated backup first
-        const backup = await triggerSaveBackup();
+        const backup = await triggerSaveBackup(sourceName === '__shared_stash__' ? [sharedStashFile] : [activeFile]);
         if (!backup?.success) {
           emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
           return;
@@ -304,7 +307,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      const backup = await triggerSaveBackup();
+      const backup = await triggerSaveBackup([activeFile]);
       if (!backup?.success) {
         emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
         return;
@@ -365,7 +368,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      const backup = await triggerSaveBackup();
+      const backup = await triggerSaveBackup([sharedStashFile]);
       if (!backup?.success) {
         emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
         return;

@@ -533,7 +533,7 @@ function d2sWatcherPlugin() {
       })
 
       // Expose endpoint to trigger backup of all save files (.d2s & .d2i)
-      server.middlewares.use('/__d2s_backup', async (_req, res) => {
+      server.middlewares.use('/__d2s_backup', async (req, res) => {
         try {
           if (rejectWhileD2RRunning(res)) return
           if (!fs.existsSync(SAVES_DIR)) {
@@ -544,8 +544,17 @@ function d2sWatcherPlugin() {
           const backupSubdir = path.join(SAVES_DIR, 'backups', timestamp)
           fs.mkdirSync(backupSubdir, { recursive: true })
 
+          const requestedFiles = new URL(req.url, 'http://localhost').searchParams.getAll('file')
           const allFiles = fs.readdirSync(SAVES_DIR)
-          const saveFiles = allFiles.filter(f => f.endsWith('.d2s') || f.endsWith('.d2i'))
+          const saveFiles = requestedFiles.length
+            ? [...new Set(requestedFiles)].map((file) => {
+              if (path.basename(file) !== file || !['.d2s', '.d2i'].includes(path.extname(file).toLowerCase())) {
+                throw new Error(`Invalid backup file: ${file}`)
+              }
+              if (!allFiles.includes(file)) throw new Error(`Backup file not found: ${file}`)
+              return file
+            })
+            : allFiles.filter(f => f.endsWith('.d2s') || f.endsWith('.d2i'))
           const copied = []
 
           for (const f of saveFiles) {
