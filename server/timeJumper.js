@@ -2,10 +2,12 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { exec } from 'child_process';
+import { runWithElevatedHelper } from './timeHelperClient.js';
 
 const STATE_ROOT = process.env.LOCALAPPDATA || os.tmpdir();
-const STATE_DIRECTORY = path.join(STATE_ROOT, 'SanctuaryCompanion');
+const STATE_DIRECTORY = process.env.SANCTUARY_TIME_STATE_DIRECTORY || path.join(STATE_ROOT, 'SanctuaryCompanion');
 const SERVICE_STATE_PATH = path.join(STATE_DIRECTORY, 'W32Time-state.json');
+const TIME_ERROR_PATH = path.join(STATE_DIRECTORY, 'W32Time-error.txt');
 fs.mkdirSync(STATE_DIRECTORY, { recursive: true });
 let operationQueue = Promise.resolve();
 
@@ -18,8 +20,16 @@ function encodedPowerShell(script) {
 }
 
 function elevatedCommand(script) {
-  const encoded = encodedPowerShell(script);
-  return `powershell -NoProfile -Command "$process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${encoded}'; exit $process.ExitCode"`;
+  const errorPath = quotePowerShell(TIME_ERROR_PATH);
+  const guardedScript = `$ErrorActionPreference = 'Stop'
+try {
+${script}
+} catch {
+  try { $_.Exception.ToString() | Set-Content -LiteralPath ${errorPath} -Encoding UTF8 } catch {}
+  exit 1
+}`;
+  const guardedEncoded = encodedPowerShell(guardedScript);
+  return `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $errorPath = ${errorPath}; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue; try { $process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${guardedEncoded}'; if ($null -eq $process) { throw 'The elevated time helper did not start; UAC may have been cancelled.' }; if ($process.ExitCode -ne 0) { if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw | Write-Error; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }; exit $process.ExitCode }; exit 0 } catch { Write-Error $_; exit 1 }"`;
 }
 
 function pinScript(safeDatetime) {
@@ -36,7 +46,7 @@ if (Test-Path -LiteralPath ${statePath}) {
     throw "Cannot safely reuse existing W32Time state: $($_.Exception.Message)"
   }
 } else {
-  $state = @{ StartMode = $service.StartMode; State = $service.State; PinnedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+  $state = @{ StartMode = $service.StartMode; State = $service.State; OriginalUtc = [DateTime]::UtcNow.ToString('o'); PinnedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
   $temporaryStatePath = ${statePath} + '.tmp'
   Set-Content -LiteralPath $temporaryStatePath -Value $state -Encoding UTF8
   Move-Item -LiteralPath $temporaryStatePath -Destination ${statePath} -Force
@@ -57,8 +67,6 @@ function restoreScript() {
 $statePath = ${statePath}
 if (-not (Test-Path -LiteralPath $statePath)) { throw 'No saved W32Time service state was found' }
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-$stateAge = ([DateTime]::UtcNow - [DateTime]::Parse($state.PinnedAt)).TotalHours
-if ($stateAge -gt 24 -or $stateAge -lt -1) { throw 'Saved W32Time service state is stale; manual recovery is required' }
 $startupType = switch ($state.StartMode) {
   'Auto' { 'Automatic'; break }
   'Manual' { 'Manual'; break }
@@ -69,32 +77,79 @@ Set-Service -Name W32Time -StartupType $startupType
 if ($state.State -eq 'Running') {
   if ((Get-Service -Name W32Time).Status -ne 'Running') { Start-Service -Name W32Time }
   w32tm /resync /force
+  if ($LASTEXITCODE -ne 0) { throw "W32Time resynchronization failed with exit code $LASTEXITCODE" }
 } else {
   if ((Get-Service -Name W32Time).Status -ne 'Stopped') { Stop-Service -Name W32Time -Force -ErrorAction Stop }
 }
 Remove-Item -LiteralPath $statePath -Force`;
 }
 
+export function createTimeScript({ operation, datetime }) {
+  if (operation === 'restore') return restoreScript();
+  if (operation !== 'pin') throw new Error('Unsupported Windows time operation');
+  if (!datetime) throw new Error('Missing datetime parameter');
+  const parsedDate = new Date(datetime);
+  if (isNaN(parsedDate.getTime())) throw new Error('Invalid datetime parameter');
+  return pinScript(parsedDate.toISOString());
+}
+
 export function setWindowsTime({ datetime, restore }, execFn = exec) {
   const operation = operationQueue.then(() => new Promise((resolve, reject) => {
-      let script;
-      if (restore) {
-        script = elevatedCommand(restoreScript());
-      } else {
-        if (!datetime) return reject(new Error('Missing datetime parameter'));
-        const parsedDate = new Date(datetime);
-        if (isNaN(parsedDate.getTime())) {
-          return reject(new Error('Invalid datetime parameter'));
-        }
-        const safeDatetime = parsedDate.toISOString();
-        script = elevatedCommand(pinScript(safeDatetime));
+      const operationName = restore ? 'restore' : 'pin';
+      if (execFn === exec) {
+        runWithElevatedHelper({ operation: operationName, datetime })
+          .then(result => {
+            if (!result.ok) {
+              const detail = String(result.error || result.stderr || 'Elevated time operation failed').trim();
+              const error = new Error(`Windows time operation failed: ${detail}`);
+              error.code = result.code;
+              reject(error);
+            } else resolve({ success: true });
+          })
+          .catch(reject);
+        return;
       }
 
-      execFn(script, (err) => {
-        if (err) reject(err);
+      let script;
+      try { script = elevatedCommand(createTimeScript({ operation: operationName, datetime })); }
+      catch (error) { reject(error); return; }
+
+      execFn(script, (err, stdout, stderr) => {
+        if (err) {
+          const detail = String(stderr || '').trim();
+          // Node's exec error message includes the complete command, which
+          // contains a large base64 payload. Surface PowerShell's useful
+          // stderr instead and never send that payload to the UI.
+          if (detail || err.cmd) {
+            const message = detail
+              ? `Windows time operation failed: ${detail}`
+              : `Windows time operation failed (exit code ${err.code ?? 'unknown'}). UAC may have been cancelled or denied.`;
+            const wrapped = new Error(message, { cause: err });
+            wrapped.code = err.code;
+            reject(wrapped);
+          } else {
+            reject(err);
+          }
+        }
         else resolve({ success: true });
       });
     }));
   operationQueue = operation.catch(() => {});
   return operation;
+}
+
+export function getWindowsTimeStatus() {
+  const recoveryNeeded = fs.existsSync(SERVICE_STATE_PATH);
+  let state = null;
+  if (recoveryNeeded) {
+    try {
+      state = JSON.parse(fs.readFileSync(SERVICE_STATE_PATH, 'utf8').replace(/^\uFEFF/, ''));
+    } catch {
+      return { recoveryNeeded: true, state: null, error: 'The saved W32Time recovery state is unreadable.' };
+    }
+  }
+  return {
+    recoveryNeeded,
+    state: state ? { originalUtc: state.OriginalUtc ?? null, pinnedAt: state.PinnedAt ?? null, startMode: state.StartMode ?? null, serviceState: state.State ?? null } : null,
+  };
 }

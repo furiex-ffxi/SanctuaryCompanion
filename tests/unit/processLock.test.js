@@ -10,6 +10,13 @@ test('detects D2R from tasklist output and fails open when tasklist errors', () 
   assert.equal(isD2RRunning(() => { throw new Error('tasklist unavailable') }), false)
 })
 
+test('falls back to PowerShell process inspection when tasklist is denied', () => {
+  assert.equal(isD2RRunning((command) => {
+    if (command.startsWith('tasklist')) throw new Error('Access denied')
+    return '22232\n'
+  }), true)
+})
+
 test('returns a lock response for every save mutation boundary', () => {
   const response = { headers: null, status: null, body: null, writeHead(status, headers) { this.status = status; this.headers = headers }, end(body) { this.body = body } }
   assert.equal(rejectWhileD2RRunning(response, () => runningOutput), true)

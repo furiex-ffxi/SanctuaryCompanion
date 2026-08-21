@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export function TerrorZoneScheduler({ onClose, addToast }) {
   const [selectedZone, setSelectedZone] = useState('');
   const [showRestoreHelp, setShowRestoreHelp] = useState(false);
   const [tzMaxTime, setTzMaxTime] = useState(() => parseInt(localStorage.getItem('tz_max_time') || '0', 10));
   const [mfTimerDir, setMfTimerDir] = useState(() => localStorage.getItem('mf_timer_dir') || '');
+  const queryClient = useQueryClient();
 
   const { data: schedule, isLoading } = useQuery({
     queryKey: ['tzSchedule'],
@@ -14,6 +15,16 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       if (!res.ok) throw new Error('Failed to load schedule');
       return res.json();
     }
+  });
+
+  const { data: timeStatus } = useQuery({
+    queryKey: ['windowsTimeStatus'],
+    queryFn: async () => {
+      const res = await fetch('/__d2r_set_time');
+      if (!res.ok) throw new Error('Failed to load Windows time status');
+      return res.json();
+    },
+    staleTime: 0,
   });
 
   const uniqueZones = React.useMemo(() => {
@@ -46,6 +57,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       setTzMaxTime(targetTime);
       localStorage.setItem('tz_max_time', targetTime.toString());
       addToast(`System time changed! ${selectedZone} is now active.`, 'success');
+      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     },
     onError: (err) => {
       addToast(`Failed to change time: ${err.message}`, 'error');
@@ -67,9 +79,11 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       localStorage.removeItem('tz_max_time');
       addToast('Clock restored and synced to present time.', 'success');
       setShowRestoreHelp(false);
+      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     },
     onError: (err) => {
       addToast(`Failed to restore time: ${err.message}`, 'error');
+      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     }
   });
 
@@ -134,6 +148,12 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           <strong>Close MF Timer before the jump, reopen it after the clock is forward, and close it again before restoring the clock.</strong>{' '}
           This keeps its time.time() clock from seeing a discontinuity.
         </p>
+
+        {timeStatus?.recoveryNeeded && (
+          <div className="game-running-warning-banner" role="alert">
+            A previous clock pin still needs recovery. Restore Windows time before starting another jump.
+          </div>
+        )}
         
         <div className="form-group">
           <label>MF Timer folder</label>

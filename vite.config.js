@@ -9,9 +9,9 @@ import { exec } from 'child_process'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 import { repairMfTimerProfile } from './server/mfTimerRepair.js'
-import { setWindowsTime } from './server/timeJumper.js'
+import { getWindowsTimeStatus, setWindowsTime } from './server/timeJumper.js'
 import { safeSavePath } from './server/savePath.js'
-import { rejectWhileD2RRunning } from './server/processLock.js'
+import { isD2RRunning, rejectWhileD2RRunning } from './server/processLock.js'
 
 import { constants } from './src/domain/entities/static_constant_data.js'
 
@@ -63,12 +63,8 @@ function d2sWatcherPlugin() {
 
       // Endpoint to check if Diablo II Resurrected process is currently running
       server.middlewares.use('/__d2r_status', (_req, res) => {
-        const { exec } = require('child_process')
-        exec('tasklist /FI "IMAGENAME eq D2R.exe"', (err, stdout) => {
-          const isRunning = !err && stdout && stdout.toLowerCase().includes('d2r.exe')
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ isRunning: Boolean(isRunning) }))
-        })
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ isRunning: isD2RRunning() }))
       })
 
       // Expose an SSE-friendly HTTP endpoint so the browser can also manually
@@ -597,6 +593,11 @@ function d2sWatcherPlugin() {
       })
 
       server.middlewares.use('/__d2r_set_time', (req, res) => {
+        if (req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(getWindowsTimeStatus()));
+          return;
+        }
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
         let body = '';
         req.on('data', chunk => { body += chunk });

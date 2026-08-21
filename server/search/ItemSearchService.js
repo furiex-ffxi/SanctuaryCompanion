@@ -57,7 +57,14 @@ export class ItemSearchService {
     const saves = fs.existsSync(this.savesDir) ? fs.readdirSync(this.savesDir).filter(f => f.toLowerCase().endsWith('.d2s')) : []
     await Promise.all(saves.map(async filename => { const file = path.join(this.savesDir, filename); try { const stat = fs.statSync(file), save = await this.parse(file, this.parseD2S), sets = [[save.items,'character'],[save.contained_items,'contained'],[save.merc_items,'mercenary'],[save.corpse_items,'corpse'],[save.iron_golem_item?[save.iron_golem_item]:[],'iron-golem']]; for (const [items,kind] of sets) for (const row of walk(items,{sourceKind:'character',filename,characterName:save.name,fileSize:stat.size,fileMtimeMs:stat.mtimeMs,location:kind})) { if(row.location==='character')row.location=location(row.item); const match=getItemQueryMatch(row.item,query); if(match)characters.push(this.result({...row,match})) } } catch(e) { errors.push({sourceKind:'character',filename,error:e.message}) } }))
     if (sharedFile) { if (path.basename(sharedFile)!==sharedFile || path.extname(sharedFile).toLowerCase()!=='.d2i') errors.push({sourceKind:'sharedStash',filename:sharedFile,error:'sharedFile must be a .d2i basename'}); else { const file=path.join(this.savesDir,sharedFile); try { const stat=fs.statSync(file), stash=await this.parse(file,this.parseD2I); for(const [pageIndex,page] of (stash.pages||[]).entries())for(const row of walk(page.items,{sourceKind:'sharedStash',filename:sharedFile,fileSize:stat.size,fileMtimeMs:stat.mtimeMs,location:'shared-stash',pageIndex})){const match=getItemQueryMatch(row.item,query);if(match)sharedStash.push(this.result({...row,match}))} } catch(e){errors.push({sourceKind:'sharedStash',filename:sharedFile,error:e.message})} } }
-    const infiniteStash=this.repository.list({q:query,limit:200}).items.map(e=>({entry:e,match:getItemQueryMatch(e.itemData,query)})).filter(x=>x.match).map(({entry:e,match})=>this.result({sourceKind:'infiniteStash',filename:e.sourceSave,location:'vault',vaultId:e.vaultId,item:e.itemData,match}))
+    const infiniteStashRows = []
+    let vaultCursor = null
+    do {
+      const page = this.repository.list({ q: query, limit: 200, cursor: vaultCursor, statuses: ['active', 'pending_deposit', 'pending_withdraw'] })
+      infiniteStashRows.push(...page.items)
+      vaultCursor = page.nextCursor
+    } while (vaultCursor)
+    const infiniteStash=infiniteStashRows.map(e=>({entry:e,match:getItemQueryMatch(e.itemData,query)})).filter(x=>x.match).map(({entry:e,match})=>this.result({sourceKind:'infiniteStash',filename:e.sourceSave,location:'vault',vaultId:e.vaultId,item:e.itemData,match}))
     const group = rows => { const ranked=rows.sort((a,b)=>a.match.rank-b.match.rank||a.preview.displayName.localeCompare(b.preview.displayName)); return {results:ranked.slice(0,cap),total:ranked.length} }
     return {query,groups:{characters:group(characters),sharedStash:group(sharedStash),infiniteStash:group(infiniteStash)},errors,nextCursor:null}
   }

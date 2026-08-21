@@ -1,13 +1,19 @@
 import { execSync as defaultExecSync } from 'node:child_process'
 
 const D2R_TASKLIST = 'tasklist /FI "IMAGENAME eq D2R.exe"'
+const D2R_POWERSHELL = `powershell.exe -NoProfile -NonInteractive -Command "(Get-Process -Name 'D2R' -ErrorAction SilentlyContinue | Select-Object -First 1).Id"`
 
 export function isD2RRunning(execSync = defaultExecSync) {
   try {
     const output = execSync(D2R_TASKLIST, { stdio: ['ignore', 'pipe', 'ignore'] }).toString()
     return output.toLowerCase().includes('d2r.exe')
   } catch {
-    return false
+    try {
+      const fallback = execSync(D2R_POWERSHELL, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+      return /^\d+$/.test(fallback)
+    } catch {
+      return false
+    }
   }
 }
 
