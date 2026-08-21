@@ -202,6 +202,13 @@ function d2sWatcherPlugin() {
 
             // Re-parse for UI using our display parser
             const uiStash = await parseD2I(fullPath)
+
+            const removedId = String(item.id ?? item.item_seed ?? '')
+            const stillPresent = (uiStash.pages || []).some((page) =>
+              (page.items || []).some((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === removedId))
+            if (stillPresent) {
+              throw new Error(`D2SSharp did not remove item ${removedId} from the shared stash`)
+            }
             
             // Reconstruct item bytes hex (rawBytesHex) from the requested item to return to Vault
             const itemBytesHex = item.rawBytesHex || ''
@@ -259,6 +266,16 @@ function d2sWatcherPlugin() {
 
             // Re-parse for UI using Go WASM
             const char = await parseD2S(fullPath)
+            const removedId = String(item.id ?? item.item_seed ?? '')
+            const remainingItems = [
+              ...(char.items || []),
+              ...(char.contained_items || []),
+              ...(char.merc_items || []),
+              ...(char.corpse_items || []),
+            ]
+            if (remainingItems.some((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === removedId)) {
+              throw new Error(`D2SSharp did not remove item ${removedId} from the character save`)
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true, char }))
           } catch (err) {
@@ -417,17 +434,18 @@ function d2sWatcherPlugin() {
 
             const char = await parseD2S(fullPath)
 
-            // Deep clone item & place into character Stash (location_id: 0, alt_position_id: 1)
+            // Deep clone item & place into the character Stash (10x10 grid).
+            // Keep this in sync with D2RStashWorker's StorePage.Stash target.
             const newItem = JSON.parse(JSON.stringify(item))
             newItem.location_id = 0
-            newItem.alt_position_id = 1 // Stash grid
+            newItem.alt_position_id = 5 // Character stash grid
             newItem.equipped_id = 0
 
             // Find an open space in Stash grid (10 cols x 10 rows) respecting item width/height
             const stashGrid = Array.from({ length: 10 }, () => Array(10).fill(false))
             if (char.items) {
               char.items.forEach(i => {
-                if (i.location_id === 0 && i.alt_position_id === 1) {
+                if (i.location_id === 0 && i.alt_position_id === 5) {
                   const x = i.position_x ?? 0
                   const y = i.position_y ?? 0
                   const [w, h] = getItemDimensions(i.type)
@@ -500,6 +518,11 @@ function d2sWatcherPlugin() {
 
             // Re-parse for UI using Go WASM
             const updatedChar = await parseD2S(fullPath)
+            const placedId = String(item.id ?? item.item_seed ?? '')
+            const placedItem = (updatedChar.items || []).find((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === placedId)
+            if (!placedItem || placedItem.location_id !== 0 || placedItem.alt_position_id !== 5) {
+              throw new Error(`D2SSharp did not confirm item ${placedId} in the character stash`)
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true, char: updatedChar, placedX, placedY }))
           } catch (err) {

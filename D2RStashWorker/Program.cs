@@ -1179,7 +1179,7 @@ namespace D2RStashWorker
                     item.Position.BodyLocation = D2SSharp.Enums.BodyLocation.None;
                     item.Position.InvX = placedX;
                     item.Position.InvY = placedY;
-                    item.Position.StorePage = D2SSharp.Enums.StorePage.Inventory; // Character stash uses Inventory page code
+                    item.Position.StorePage = D2SSharp.Enums.StorePage.Stash;
 
                     save.Items.Add(item);
 
