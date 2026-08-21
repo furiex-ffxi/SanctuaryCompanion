@@ -28,7 +28,7 @@ ${script}
   exit 1
 }`;
   const guardedEncoded = encodedPowerShell(guardedScript);
-  return `powershell -NoProfile -Command "$errorPath = ${errorPath}; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue; $process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${guardedEncoded}'; if ($process.ExitCode -ne 0) { if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw | Write-Error; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }; exit $process.ExitCode }; exit 0"`;
+  return `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $errorPath = ${errorPath}; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue; try { $process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${guardedEncoded}'; if ($null -eq $process) { throw 'The elevated time helper did not start; UAC may have been cancelled.' }; if ($process.ExitCode -ne 0) { if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw | Write-Error; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }; exit $process.ExitCode }; exit 0 } catch { Write-Error $_; exit 1 }"`;
 }
 
 function pinScript(safeDatetime) {
@@ -45,7 +45,7 @@ if (Test-Path -LiteralPath ${statePath}) {
     throw "Cannot safely reuse existing W32Time state: $($_.Exception.Message)"
   }
 } else {
-  $state = @{ StartMode = $service.StartMode; State = $service.State; PinnedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
+  $state = @{ StartMode = $service.StartMode; State = $service.State; OriginalUtc = [DateTime]::UtcNow.ToString('o'); PinnedAt = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json -Compress
   $temporaryStatePath = ${statePath} + '.tmp'
   Set-Content -LiteralPath $temporaryStatePath -Value $state -Encoding UTF8
   Move-Item -LiteralPath $temporaryStatePath -Destination ${statePath} -Force
@@ -66,8 +66,6 @@ function restoreScript() {
 $statePath = ${statePath}
 if (-not (Test-Path -LiteralPath $statePath)) { throw 'No saved W32Time service state was found' }
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-$stateAge = ([DateTime]::UtcNow - [DateTime]::Parse($state.PinnedAt)).TotalHours
-if ($stateAge -gt 24 -or $stateAge -lt -1) { throw 'Saved W32Time service state is stale; manual recovery is required' }
 $startupType = switch ($state.StartMode) {
   'Auto' { 'Automatic'; break }
   'Manual' { 'Manual'; break }
@@ -78,6 +76,7 @@ Set-Service -Name W32Time -StartupType $startupType
 if ($state.State -eq 'Running') {
   if ((Get-Service -Name W32Time).Status -ne 'Running') { Start-Service -Name W32Time }
   w32tm /resync /force
+  if ($LASTEXITCODE -ne 0) { throw "W32Time resynchronization failed with exit code $LASTEXITCODE" }
 } else {
   if ((Get-Service -Name W32Time).Status -ne 'Stopped') { Stop-Service -Name W32Time -Force -ErrorAction Stop }
 }

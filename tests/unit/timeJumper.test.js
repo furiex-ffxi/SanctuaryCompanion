@@ -21,9 +21,12 @@ describe('timeJumper', () => {
     assert.ok(executedScript.includes('-PassThru -Wait'));
     assert.ok(executedScript.includes('exit $process.ExitCode'));
     assert.ok(executedScript.includes('Get-Content -LiteralPath $errorPath -Raw | Write-Error'));
+    assert.ok(executedScript.includes("$ErrorActionPreference = 'Stop'"));
+    assert.ok(executedScript.includes('UAC may have been cancelled'));
     assert.ok(restoreScript.includes('Set-Service -Name W32Time -StartupType $startupType'));
     assert.ok(restoreScript.includes('Start-Service -Name W32Time'));
     assert.ok(restoreScript.includes('w32tm /resync /force'));
+    assert.ok(!restoreScript.includes('Saved W32Time service state is stale'));
     assert.ok(restoreScript.includes('Remove-Item -LiteralPath $statePath -Force'));
   });
 
@@ -41,6 +44,7 @@ describe('timeJumper', () => {
     assert.ok(pinScript.includes('Stop-Service -Name W32Time -Force -ErrorAction Stop'));
     assert.ok(pinScript.includes("if ((Get-Service -Name W32Time).Status -ne 'Stopped')"));
     assert.ok(pinScript.includes('ConvertTo-Json -Compress'));
+    assert.ok(pinScript.includes('OriginalUtc = [DateTime]::UtcNow.ToString'));
     assert.ok(pinScript.includes("Set-Date -Date ([datetime]'2026-08-19T10:00:00.000Z')"));
   });
 
