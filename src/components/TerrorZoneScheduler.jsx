@@ -79,14 +79,19 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       const res = await fetch('/__mf_timer_repair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mfTimerDir })
+        body: JSON.stringify({ directory: mfTimerDir })
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       return data;
     },
     onSuccess: (data) => {
-      addToast(`MF Timer Repaired! Found ${data.profileCount} profiles, modified ${data.modifiedCount} files.`, 'success');
+      addToast(
+        data.repaired
+          ? `MF Timer repaired: ${data.profile} (${data.runCount} runs).`
+          : `MF Timer profile ${data.profile} does not need repair.`,
+        'success'
+      );
     },
     onError: (err) => {
       addToast(`Failed to repair MF Timer: ${err.message}`, 'error');
