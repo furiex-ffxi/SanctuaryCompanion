@@ -1,11 +1,26 @@
 import crypto from 'node:crypto'
 import net from 'node:net'
+import os from 'node:os'
 import path from 'node:path'
-import { exec } from 'node:child_process'
+import { exec, execFileSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const HELPER_PATH = fileURLToPath(new URL('./timeHelper.js', import.meta.url))
+const STATE_DIRECTORY = process.env.SANCTUARY_TIME_STATE_DIRECTORY || path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'SanctuaryCompanion')
 const quotePowerShell = value => `'${String(value).replaceAll("'", "''")}'`
+const encodePowerShell = script => Buffer.from(script, 'utf16le').toString('base64')
+
+function isElevated() {
+  try {
+    const result = execFileSync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      '[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)',
+    ], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    return result.toLowerCase() === 'true'
+  } catch {
+    return false
+  }
+}
 
 let sessionPromise = null
 
@@ -55,10 +70,15 @@ function startSession() {
 
   const launch = () => {
     const address = server.address()
-    const nodePath = quotePowerShell(process.execPath)
-    const helperPath = quotePowerShell(path.resolve(HELPER_PATH))
-    const tokenArg = quotePowerShell(token)
-    const command = `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Start-Process -FilePath ${nodePath} -Verb RunAs -WindowStyle Hidden -ArgumentList @(${helperPath}, '--port', '${address.port}', '--token', ${tokenArg})"`
+    const helperArguments = [path.resolve(HELPER_PATH), '--port', String(address.port), '--token', token, '--state-dir', STATE_DIRECTORY]
+    if (isElevated()) {
+      const helper = spawn(process.execPath, helperArguments, { windowsHide: true })
+      helper.once('error', error => { if (!socket) readyReject(error) })
+      return
+    }
+    const helperScript = `& ${quotePowerShell(process.execPath)} ${quotePowerShell(path.resolve(HELPER_PATH))} --port ${quotePowerShell(address.port)} --token ${quotePowerShell(token)} --state-dir ${quotePowerShell(STATE_DIRECTORY)}`
+    const encodedHelperScript = encodePowerShell(helperScript)
+    const command = `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-EncodedCommand', '${encodedHelperScript}')"`
     exec(command, error => { if (error && !socket) readyReject(error) })
   }
 

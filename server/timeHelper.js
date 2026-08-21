@@ -1,12 +1,14 @@
 import net from 'node:net'
 import { execFile } from 'node:child_process'
-import { createTimeScript } from './timeJumper.js'
 
 const args = new Map()
 for (let index = 2; index < process.argv.length; index += 2) args.set(process.argv[index], process.argv[index + 1])
 const port = Number(args.get('--port'))
 const token = args.get('--token')
 if (!Number.isInteger(port) || !token) throw new Error('Invalid time helper arguments')
+if (args.get('--state-dir')) process.env.SANCTUARY_TIME_STATE_DIRECTORY = args.get('--state-dir')
+
+const { createTimeScript } = await import('./timeJumper.js')
 
 const encodedPowerShell = script => Buffer.from(script, 'utf16le').toString('base64')
 const socket = net.createConnection({ host: '127.0.0.1', port }, () => {

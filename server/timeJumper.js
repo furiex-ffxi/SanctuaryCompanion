@@ -5,7 +5,7 @@ import { exec } from 'child_process';
 import { runWithElevatedHelper } from './timeHelperClient.js';
 
 const STATE_ROOT = process.env.LOCALAPPDATA || os.tmpdir();
-const STATE_DIRECTORY = path.join(STATE_ROOT, 'SanctuaryCompanion');
+const STATE_DIRECTORY = process.env.SANCTUARY_TIME_STATE_DIRECTORY || path.join(STATE_ROOT, 'SanctuaryCompanion');
 const SERVICE_STATE_PATH = path.join(STATE_DIRECTORY, 'W32Time-state.json');
 const TIME_ERROR_PATH = path.join(STATE_DIRECTORY, 'W32Time-error.txt');
 fs.mkdirSync(STATE_DIRECTORY, { recursive: true });
@@ -143,7 +143,7 @@ export function getWindowsTimeStatus() {
   let state = null;
   if (recoveryNeeded) {
     try {
-      state = JSON.parse(fs.readFileSync(SERVICE_STATE_PATH, 'utf8'));
+      state = JSON.parse(fs.readFileSync(SERVICE_STATE_PATH, 'utf8').replace(/^\uFEFF/, ''));
     } catch {
       return { recoveryNeeded: true, state: null, error: 'The saved W32Time recovery state is unreadable.' };
     }
