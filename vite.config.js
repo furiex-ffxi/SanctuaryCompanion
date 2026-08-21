@@ -440,12 +440,15 @@ function d2sWatcherPlugin() {
         req.on('end', async () => {
           try {
             const { file, item } = JSON.parse(body)
+            const phaseStarted = performance.now()
+            const phase = (label) => console.log(`[transfer-timing] d2s-add ${file || 'unknown'} ${label}=${Math.round(performance.now() - phaseStarted)}ms`)
             if (rejectWhileD2RRunning(res)) return
             if (!file) throw new Error('Missing file parameter')
             const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             const char = await parseD2S(fullPath)
+            phase('initial-parse')
 
             // Deep clone item & place into the character Stash (10x10 grid).
             // Keep this in sync with D2RStashWorker's StorePage.Stash target.
@@ -528,9 +531,11 @@ function d2sWatcherPlugin() {
 
             // Atomic rename swap
             fs.renameSync(tempFilePath, fullPath)
+            phase('worker-and-swap')
 
             // Re-parse for UI using Go WASM
             const updatedChar = await parseD2S(fullPath)
+            phase('verification-parse')
             const placedId = String(item.id ?? item.item_seed ?? '')
             const placedItem = (updatedChar.items || []).find((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === placedId)
             if (!placedItem || placedItem.location_id !== 0 || placedItem.alt_position_id !== 5) {
