@@ -23,6 +23,18 @@ const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item
 const require = createRequire(import.meta.url)
 const { parseD2S, parseD2I } = require('./src/domain/parsers/CustomD2Parser.cjs');
 
+function transferTimingMiddleware(req, res, next) {
+  const pathName = req.url?.split('?')[0] || ''
+  if (!['/__d2s_backup', '/__d2i_remove_item', '/__d2s_remove_item', '/__d2i_add_item', '/__d2s_add_item'].includes(pathName)) {
+    return next()
+  }
+  const started = performance.now()
+  res.on('finish', () => {
+    console.log(`[transfer-timing] ${req.method} ${pathName} status=${res.statusCode} total=${Math.round(performance.now() - started)}ms`)
+  })
+  next()
+}
+
 
 function getItemDimensions(type) {
   const t = (type || '').toLowerCase().trim()
@@ -43,6 +55,7 @@ function d2sWatcherPlugin() {
     name: 'd2s-watcher',
 
     configureServer(server) {
+      server.middlewares.use(transferTimingMiddleware)
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
 
