@@ -9,7 +9,7 @@ import { exec } from 'child_process'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
 import { repairMfTimerProfile } from './server/mfTimerRepair.js'
-import { setWindowsTime } from './server/timeJumper.js'
+import { getWindowsTimeStatus, setWindowsTime } from './server/timeJumper.js'
 import { safeSavePath } from './server/savePath.js'
 import { rejectWhileD2RRunning } from './server/processLock.js'
 
@@ -597,6 +597,11 @@ function d2sWatcherPlugin() {
       })
 
       server.middlewares.use('/__d2r_set_time', (req, res) => {
+        if (req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(getWindowsTimeStatus()));
+          return;
+        }
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
         let body = '';
         req.on('data', chunk => { body += chunk });

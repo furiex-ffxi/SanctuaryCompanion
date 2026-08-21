@@ -121,3 +121,19 @@ export function setWindowsTime({ datetime, restore }, execFn = exec) {
   operationQueue = operation.catch(() => {});
   return operation;
 }
+
+export function getWindowsTimeStatus() {
+  const recoveryNeeded = fs.existsSync(SERVICE_STATE_PATH);
+  let state = null;
+  if (recoveryNeeded) {
+    try {
+      state = JSON.parse(fs.readFileSync(SERVICE_STATE_PATH, 'utf8'));
+    } catch {
+      return { recoveryNeeded: true, state: null, error: 'The saved W32Time recovery state is unreadable.' };
+    }
+  }
+  return {
+    recoveryNeeded,
+    state: state ? { originalUtc: state.OriginalUtc ?? null, pinnedAt: state.PinnedAt ?? null, startMode: state.StartMode ?? null, serviceState: state.State ?? null } : null,
+  };
+}
