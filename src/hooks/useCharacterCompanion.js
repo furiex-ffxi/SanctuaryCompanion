@@ -214,6 +214,18 @@ export function useCharacterCompanion() {
         try {
           await InfiniteStashAdapter.add(entry);
         } catch (err) {
+          if (err.status === 409 && sourceName === '__shared_stash__' && sharedStashFile) {
+            try {
+              const reconciled = await D2SParserAdapter.removeItemFromSharedStash(sharedStashFile, item);
+              if (reconciled.success && reconciled.itemRemoved) {
+                if (reconciled.stash) setSharedStash(reconciled.stash);
+                emitToast(`Reconciled “${itemLabel(item)}” and removed the duplicate from Shared Stash`, 'success');
+                return;
+              }
+            } catch (reconcileError) {
+              console.error('Failed to reconcile existing vault item:', reconcileError);
+            }
+          }
           console.error('Failed to persist Infinite Stash item:', err);
           emitToast(`Vault persistence failed: ${err.message}. The source save was not changed.`, 'error');
           return;
