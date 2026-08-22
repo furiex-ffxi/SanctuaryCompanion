@@ -90,8 +90,23 @@ export function setWindowsTime({ datetime, restore }, execFn = exec) {
         script = elevatedCommand(pinScript(safeDatetime));
       }
 
-      execFn(script, (err) => {
-        if (err) reject(err);
+      execFn(script, (err, stdout, stderr) => {
+        if (err) {
+          const detail = String(stderr || '').trim();
+          // Node's exec error message includes the complete command, which
+          // contains a large base64 payload. Surface PowerShell's useful
+          // stderr instead and never send that payload to the UI.
+          if (detail || err.cmd) {
+            const message = detail
+              ? `Windows time operation failed: ${detail}`
+              : `Windows time operation failed (exit code ${err.code ?? 'unknown'}). UAC may have been cancelled or denied.`;
+            const wrapped = new Error(message, { cause: err });
+            wrapped.code = err.code;
+            reject(wrapped);
+          } else {
+            reject(err);
+          }
+        }
         else resolve({ success: true });
       });
     }));

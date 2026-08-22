@@ -110,4 +110,11 @@ describe('timeJumper', () => {
       assert.equal(err.message, 'exec failed');
     }
   });
+
+  it('does not expose the encoded command when elevated PowerShell fails', async () => {
+    await assert.rejects(
+      setWindowsTime({ restore: true }, (_script, callback) => callback({ message: 'Command failed', cmd: 'powershell -EncodedCommand long-payload', code: 1 }, '', 'Access is denied.')),
+      { message: 'Windows time operation failed: Access is denied.' }
+    );
+  });
 });
