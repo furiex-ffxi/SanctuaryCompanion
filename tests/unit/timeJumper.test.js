@@ -20,6 +20,7 @@ describe('timeJumper', () => {
     const [restoreScript] = decodedScripts(executedScript);
     assert.ok(executedScript.includes('-PassThru -Wait'));
     assert.ok(executedScript.includes('exit $process.ExitCode'));
+    assert.ok(executedScript.includes('Get-Content -LiteralPath $errorPath -Raw | Write-Error'));
     assert.ok(restoreScript.includes('Set-Service -Name W32Time -StartupType $startupType'));
     assert.ok(restoreScript.includes('Start-Service -Name W32Time'));
     assert.ok(restoreScript.includes('w32tm /resync /force'));

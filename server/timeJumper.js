@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 const STATE_ROOT = process.env.LOCALAPPDATA || os.tmpdir();
 const STATE_DIRECTORY = path.join(STATE_ROOT, 'SanctuaryCompanion');
 const SERVICE_STATE_PATH = path.join(STATE_DIRECTORY, 'W32Time-state.json');
+const TIME_ERROR_PATH = path.join(STATE_DIRECTORY, 'W32Time-error.txt');
 fs.mkdirSync(STATE_DIRECTORY, { recursive: true });
 let operationQueue = Promise.resolve();
 
@@ -18,8 +19,16 @@ function encodedPowerShell(script) {
 }
 
 function elevatedCommand(script) {
-  const encoded = encodedPowerShell(script);
-  return `powershell -NoProfile -Command "$process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${encoded}'; exit $process.ExitCode"`;
+  const errorPath = quotePowerShell(TIME_ERROR_PATH);
+  const guardedScript = `$ErrorActionPreference = 'Stop'
+try {
+${script}
+} catch {
+  try { $_.Exception.ToString() | Set-Content -LiteralPath ${errorPath} -Encoding UTF8 } catch {}
+  exit 1
+}`;
+  const guardedEncoded = encodedPowerShell(guardedScript);
+  return `powershell -NoProfile -Command "$errorPath = ${errorPath}; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue; $process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${guardedEncoded}'; if ($process.ExitCode -ne 0) { if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw | Write-Error; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }; exit $process.ExitCode }; exit 0"`;
 }
 
 function pinScript(safeDatetime) {
