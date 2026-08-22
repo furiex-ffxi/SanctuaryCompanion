@@ -180,6 +180,8 @@ function d2sWatcherPlugin() {
           try {
             if (!body) throw new Error('Empty request body')
             const { file, item } = JSON.parse(body)
+            const phaseStarted = performance.now()
+            const phase = (label) => console.log(`[transfer-timing] d2i-remove ${file || 'unknown'} ${label}=${Math.round(performance.now() - phaseStarted)}ms`)
             if (!item) throw new Error('Missing item object in request body')
             
             if (rejectWhileD2RRunning(res)) return
@@ -212,9 +214,11 @@ function d2sWatcherPlugin() {
 
             // Atomic rename swap
             fs.renameSync(tempFilePath, fullPath)
+            phase('worker-and-swap')
 
             // Re-parse for UI using our display parser
             const uiStash = await parseD2I(fullPath)
+            phase('verification-parse')
 
             const removedId = String(item.id ?? item.item_seed ?? '')
             const stillPresent = (uiStash.pages || []).some((page) =>
