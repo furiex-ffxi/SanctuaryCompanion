@@ -26,16 +26,35 @@ function fixture() {
 test('groups every source, preserves duplicate seeds, locations, and partial errors', async t => {
   const f = fixture(); t.after(() => { f.repository.close(); fs.rmSync(f.savesDir, { recursive: true, force: true }) })
   await f.repository.add({ vaultId: 'active', stashedAt: new Date().toISOString(), sourceSave: 'Alpha.d2s', itemData: item(42, 'Needle Vault') })
+  await f.repository.add({ vaultId: 'pending-deposit', stashedAt: new Date().toISOString(), sourceSave: 'Alpha.d2s', itemData: item(43, 'Needle Deposit') })
+  f.repository.db.prepare("UPDATE vault_items SET status = 'pending_deposit' WHERE vault_id = 'pending-deposit'").run()
   await f.repository.add({ vaultId: 'inactive', stashedAt: new Date().toISOString(), sourceSave: 'Beta.d2s', itemData: item(99, 'Needle Retired') })
   await f.repository.retire('inactive')
+  await f.repository.markPendingWithdraw('active')
   const result = await f.service.search({ q: 'needle', sharedFile: 'Chosen.d2i', limit: 50 })
-  assert.equal(result.groups.infiniteStash.total, 1)
+  assert.equal(result.groups.infiniteStash.total, 2)
+  assert.deepEqual(new Set(result.groups.infiniteStash.results.map(row => row.vaultId)), new Set(['active', 'pending-deposit']))
   assert.equal(result.groups.sharedStash.results[0].filename, 'Chosen.d2i')
   assert.equal(result.groups.characters.results.find(row => row.itemSeed === 50).preview.socketCount, 1)
   assert.ok(result.errors.some(error => error.filename === 'Broken.d2s'))
   assert.ok(new Set(result.groups.characters.results.map(row => row.location)).isSupersetOf(new Set(['inventory', 'contained', 'mercenary', 'corpse', 'iron-golem'])))
   assert.equal(result.groups.characters.results.some(row => row.itemSeed === 51), false)
   assert.ok(result.groups.characters.results.some(row => row.itemSeed === 42) && result.groups.sharedStash.results.some(row => row.itemSeed === 42))
+})
+
+test('search paginates through all active and pending vault matches', async t => {
+  const f = fixture(); t.after(() => { f.repository.close(); fs.rmSync(f.savesDir, { recursive: true, force: true }) })
+  const entries = Array.from({ length: 201 }, (_, index) => ({
+    vaultId: `bulk-${index}`,
+    stashedAt: new Date(Date.UTC(2025, 0, 1, 0, 0, index)).toISOString(),
+    sourceSave: 'Bulk.d2s',
+    itemData: item(index, 'Needle Bulk'),
+  }))
+  entries.push({ vaultId: 'pending-last', stashedAt: new Date(0).toISOString(), sourceSave: 'Bulk.d2s', itemData: item(999, 'Needle Pending') })
+  await f.repository.importEntries(entries)
+  f.repository.db.prepare("UPDATE vault_items SET status = 'pending_withdraw' WHERE vault_id = 'pending-last'").run()
+  const result = await f.service.search({ q: 'needle' })
+  assert.equal(result.groups.infiniteStash.total, 202)
 })
 
 test('enforces selected d2i basename, query minimum, and result cap', async t => {

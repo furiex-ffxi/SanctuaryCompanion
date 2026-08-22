@@ -6,7 +6,7 @@ import { projectVaultEntry } from './vaultProjection.js'
 import { normalizeVaultItem } from './itemImageResolver.js'
 
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { eq, and, desc, asc, sql } from 'drizzle-orm'
+import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
 import * as schema from './schema.js'
 
 const SCHEMA_VERSION = 6
@@ -14,6 +14,7 @@ const DEFAULT_PAGE_SIZE = 100
 const MAX_PAGE_SIZE = 200
 const DEFAULT_SORT = 'dateAdded'
 const DEFAULT_DIRECTION = 'desc'
+const VAULT_STATUSES = Object.freeze(['active', 'pending_deposit', 'pending_withdraw', 'withdrawn', 'deleted', 'recovery_needed'])
 const SORTS = Object.freeze({
   dateAdded: { column: 'stashedAt', nullable: false },
   name: { column: 'displayNameSort', nullable: false },
@@ -44,6 +45,12 @@ function normalizeListOptions(options = {}) {
     error.statusCode = 400
     throw error
   }
+  const statuses = [...new Set((Array.isArray(options.statuses) ? options.statuses : [options.status || 'active']).map(String))].sort()
+  if (!statuses.length || statuses.some(status => !VAULT_STATUSES.includes(status))) {
+    const error = new Error('Unsupported vault status')
+    error.statusCode = 400
+    throw error
+  }
   return {
     q: options.q?.trim().toLowerCase() || '',
     slot: options.slot || 'All',
@@ -52,6 +59,7 @@ function normalizeListOptions(options = {}) {
     quality: options.quality || 'All',
     minLevel: options.minLevel ? Number(options.minLevel) : null,
     maxLevel: options.maxLevel ? Number(options.maxLevel) : null,
+    statuses,
     sort,
     direction,
   }
@@ -73,6 +81,7 @@ function decodeCursor(cursor, query, secret) {
   }
   const { signature, ...payload } = decoded || {}
   const expectedSignature = signCursor(payload, secret)
+  const cursorStatuses = Array.isArray(payload.statuses) ? [...new Set(payload.statuses.map(String))].sort() : ['active']
   const contextMatches = payload.sort === query.sort
     && payload.direction === query.direction
     && payload.q === query.q
@@ -82,6 +91,7 @@ function decodeCursor(cursor, query, secret) {
     && payload.quality === query.quality
     && payload.minLevel === query.minLevel
     && payload.maxLevel === query.maxLevel
+    && JSON.stringify(cursorStatuses) === JSON.stringify(query.statuses)
   const actualSignature = typeof signature === 'string' ? Buffer.from(signature) : null
   const expectedSignatureBytes = Buffer.from(expectedSignature)
   const validSignature = actualSignature?.length === expectedSignatureBytes.length
@@ -451,9 +461,9 @@ export class VaultRepository {
     const query = normalizeListOptions(options)
     const sort = SORTS[query.sort]
     const cursor = decodeCursor(options.cursor, query, this.cursorSecret)
-    const status = options.status || 'active'
-    
-    const conditions = [eq(schema.vaultItems.status, status)]
+    const conditions = query.statuses.length === 1
+      ? [eq(schema.vaultItems.status, query.statuses[0])]
+      : [inArray(schema.vaultItems.status, query.statuses)]
 
     if (query.q) {
       conditions.push(sql`${schema.vaultItems.searchText} LIKE ${'%' + query.q.replace(/[\\%_]/g, '\\$&') + '%'} ESCAPE '\\'`)
