@@ -454,6 +454,17 @@ function d2sWatcherPlugin() {
             const char = await parseD2S(fullPath)
             phase('initial-parse')
 
+            const requestedId = String(item.id ?? item.item_seed ?? '')
+            const existingItem = (char.items || []).find((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === requestedId)
+            if (existingItem) {
+              if (existingItem.location_id === 0 && existingItem.alt_position_id === 5) {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, char, placedX: existingItem.position_x, placedY: existingItem.position_y, alreadyPresent: true }))
+                return
+              }
+              throw new Error(`Item ${requestedId} already exists in the character save outside the stash`)
+            }
+
             // Deep clone item & place into the character Stash (10x10 grid).
             // Keep this in sync with D2RStashWorker's StorePage.Stash target.
             const newItem = JSON.parse(JSON.stringify(item))
