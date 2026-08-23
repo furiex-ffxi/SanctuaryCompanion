@@ -36,6 +36,7 @@ export function InfiniteStashPanel({
   highlightIdentity,
   searchQuery = '',
   onSearchQueryChange = () => {},
+  movingItemKeys = new Set(),
 }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedSlot, setSelectedSlot] = useState('All');
@@ -305,6 +306,7 @@ export function InfiniteStashPanel({
             {virtualItems.map((entry) => {
               const item = entry.itemData;
               const colorClass = getItemColorClass(item);
+              const moving = movingItemKeys.has(`withdraw:${entry.vaultId}`);
               return (
                 <TooltipTrigger key={entry.vaultId} className={`stash-item-row ${highlightIdentity?.vaultId === entry.vaultId ? 'item-search-highlight' : ''}`} item={item}>
                   <div className="col-icon icon-cell"><ItemSprite item={item} showTooltip={false} /></div>
@@ -313,7 +315,9 @@ export function InfiniteStashPanel({
                   <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {entry.status === 'pending_withdraw' ? (
+                    {moving ? (
+                      <button className="btn-d2r btn-secondary" disabled>Moving…</button>
+                    ) : entry.status === 'pending_withdraw' ? (
                       <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>🔄 Recover</button>
                     ) : (
                       <>
@@ -321,7 +325,7 @@ export function InfiniteStashPanel({
                         <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
                       </>
                     )}
-                    <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑️</button>
+                    {!moving && <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑️</button>}
                   </div>
                 </TooltipTrigger>
               );

@@ -88,6 +88,7 @@ function MainContent() {
     setSharedStashLoadedFile,
     setSharedStashError,
     isGameRunning,
+    movingItemKeys,
   } = useCharacterCompanion();
 
   const mainTab = useUIStore((state) => state.mainTab);
@@ -309,6 +310,7 @@ function MainContent() {
           highlightIdentity={searchHighlight}
           searchQuery={vaultSearchQuery}
           onSearchQueryChange={setVaultSearchQuery}
+          movingItemKeys={movingItemKeys}
         />
       ) : mainTab === 'shared_stash' ? (
         <SharedStashPanel
@@ -322,6 +324,7 @@ function MainContent() {
           setSharedStashLoadedFile={setSharedStashLoadedFile}
           setSharedStashError={setSharedStashError}
           highlightIdentity={searchHighlight}
+          movingItemKeys={movingItemKeys}
         />
       ) : (
         <div className="dashboard-grid">
@@ -334,6 +337,7 @@ function MainContent() {
             <EquipmentPanel
               charData={charData}
               onDeposit={depositItemToVault}
+              movingItemKeys={movingItemKeys}
             />
 
             {/* Storage / Skills tabs */}
@@ -382,6 +386,7 @@ function MainContent() {
                   meta={{
                     ...(STORAGE_META[activeTab] || STORAGE_META.inventory),
                     onDeposit: depositItemToVault,
+                    movingItemKeys,
                   }}
                   items={storageItems}
                 />
