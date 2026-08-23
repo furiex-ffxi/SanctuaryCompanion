@@ -20,6 +20,20 @@ const uniqueRows = new Map(readTsv('uniqueitems.txt').map((row) => [row.index?.t
 const setRows = new Map(readTsv('setitems.txt').map((row) => [row.index?.toLowerCase(), row]))
 const SUNDER_STAT_IDS = new Set([187, 189, 190, 191, 192, 193])
 
+const UNIQUE_NAME_ALIASES = new Map([
+  ['irices shard', 'Spectral Shard'],
+  ['cutthroat1', "Bartuc's Cut-Throat"],
+  ['unique warlock helm', "Hellwarden's Will"],
+  ['wartraveler', 'War Traveler'],
+  ['peasent crown', 'Peasant Crown'],
+  ["eschuta's temper", "Eschuta's Temper"],
+])
+
+export function canonicalizeUniqueName(value) {
+  const name = typeof value === 'string' ? value.trim() : ''
+  return UNIQUE_NAME_ALIASES.get(name.toLowerCase()) || name
+}
+
 export function isSunderCharm(item = {}) {
   const type = typeof item.type === 'string' ? item.type.trim().toLowerCase() : ''
   if (type === 'cs2') return true
@@ -68,7 +82,7 @@ export function getItemTransformMetadata(item = {}) {
   }
 
   const quality = Number(item.quality ?? item.item_quality)
-  const name = String(item.unique_name || '').trim().toLowerCase()
+  const name = canonicalizeUniqueName(item.unique_name).toLowerCase()
   let row = quality === 5
     ? setRows.get(name)
     : quality === 7 || quality === 8
@@ -90,11 +104,13 @@ export function getItemTransformMetadata(item = {}) {
 
 export function normalizeVaultItem(item = {}) {
   if (!item || typeof item !== 'object') return item
+  const uniqueName = canonicalizeUniqueName(item.unique_name)
   const imageKey = resolveItemImageKey(item)
   const transform = getItemTransformMetadata(item)
   const normalized = imageKey
     ? { ...item, ...transform, image_key: imageKey, inv_file: imageKey }
     : { ...item, ...transform }
+  if (uniqueName && uniqueName !== item.unique_name) normalized.unique_name = uniqueName
   if (Array.isArray(item.socketed_items)) {
     normalized.socketed_items = item.socketed_items.map(normalizeVaultItem)
   }
