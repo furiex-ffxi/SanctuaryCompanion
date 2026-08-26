@@ -5,6 +5,7 @@ import { STORAGE_META } from '../domain/entities/Item';
 
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
+import { getItemDisplayName } from '../components/ItemSprite';
 
 import { useUIStore } from '../stores/useUIStore';
 
@@ -109,6 +110,8 @@ export function useCharacterCompanion() {
   }, [removeMutation]);
 
   const transferInFlight = useRef(new Set());
+  const [movingItemKeys, setMovingItemKeys] = useState(() => new Set());
+  const itemLabel = useCallback((item) => getItemDisplayName(item) || item?.type_name || item?.type || 'item', []);
   const vaultMountedRef = useRef(true);
   const { data: sharedStashData, error: sharedStashErrorObj, isFetching: sharedStashLoading, refetch: refreshSharedStashQuery } = useQuery({
     queryKey: ['sharedStash', sharedStashFile],
@@ -173,9 +176,12 @@ export function useCharacterCompanion() {
   }, []);
 
   // Trigger safe backup on server
-  const triggerSaveBackup = useCallback(async () => {
+  const triggerSaveBackup = useCallback(async (files = []) => {
     try {
-      const res = await fetch('/__d2s_backup');
+      const params = new URLSearchParams();
+      for (const file of files) if (file) params.append('file', file);
+      const query = params.toString();
+      const res = await fetch(`/__d2s_backup${query ? `?${query}` : ''}`);
       return await res.json();
     } catch (err) {
       console.error('Backup request failed:', err);
@@ -189,6 +195,7 @@ export function useCharacterCompanion() {
       const transferKey = `deposit:${sourceName || activeFile || 'uploaded'}:${itemId ?? item?.rawBytesHex ?? ''}`;
       if (transferInFlight.current.has(transferKey)) return;
       transferInFlight.current.add(transferKey);
+      setMovingItemKeys((current) => new Set(current).add(transferKey));
       try {
         if (isGameRunning) {
           emitToast('D2R is running - exit the game before moving items.', 'error');
@@ -199,7 +206,7 @@ export function useCharacterCompanion() {
           return;
         }
         // 1. Perform automated backup first
-        const backup = await triggerSaveBackup();
+        const backup = await triggerSaveBackup(sourceName === '__shared_stash__' ? [sharedStashFile] : [activeFile]);
         if (!backup?.success) {
           emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
           return;
@@ -218,6 +225,18 @@ export function useCharacterCompanion() {
         try {
           await InfiniteStashAdapter.add(entry);
         } catch (err) {
+          if (err.status === 409 && sourceName === '__shared_stash__' && sharedStashFile) {
+            try {
+              const reconciled = await D2SParserAdapter.removeItemFromSharedStash(sharedStashFile, item);
+              if (reconciled.success && reconciled.itemRemoved) {
+                if (reconciled.stash) setSharedStash(reconciled.stash);
+                emitToast(`Reconciled “${itemLabel(item)}” and removed the duplicate from Shared Stash`, 'success');
+                return;
+              }
+            } catch (reconcileError) {
+              console.error('Failed to reconcile existing vault item:', reconcileError);
+            }
+          }
           console.error('Failed to persist Infinite Stash item:', err);
           emitToast(`Vault persistence failed: ${err.message}. The source save was not changed.`, 'error');
           return;
@@ -260,7 +279,7 @@ export function useCharacterCompanion() {
               }
               if (!d2iRes.itemRemoved) {
                 console.warn('Item not matched in .d2i file:', item);
-                emitToast('Item not found in Shared Stash file (X:' + (item.position_x ?? 0) + ' Y:' + (item.position_y ?? 0) + ' ' + (item.type_name || item.type) + ')', 'error');
+                emitToast(`Item not found in Shared Stash file (X:${item.position_x ?? 0} Y:${item.position_y ?? 0} ${itemLabel(item)})`, 'error');
                 return;
               }
               if (d2iRes.stash) setSharedStash(d2iRes.stash);
@@ -286,9 +305,10 @@ export function useCharacterCompanion() {
           });
         }
 
-        emitToast(`Stashed "${item.type_name || item.type}" → Infinite Stash`, 'success');
+        emitToast(`Moved “${itemLabel(item)}” to Infinite Stash`, 'success');
       } finally {
         transferInFlight.current.delete(transferKey);
+        setMovingItemKeys((current) => { const next = new Set(current); next.delete(transferKey); return next; });
       }
     },
     onSuccess: () => refreshVault(),
@@ -310,7 +330,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      const backup = await triggerSaveBackup();
+      const backup = await triggerSaveBackup([activeFile]);
       if (!backup?.success) {
         emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
         return;
@@ -339,7 +359,7 @@ export function useCharacterCompanion() {
       if (actionSuccess) {
         try {
           await removeItemFromVault(vaultId, 'withdraw');
-          emitToast(`"${itemData.type_name || itemData.type}" → Personal Stash`, 'success');
+          emitToast(`Moved “${itemLabel(itemData)}” to Personal Stash`, 'success');
         } catch (err) {
           emitToast(`Item was written to the save, but vault history update failed: ${err.message}`, 'error');
         }
@@ -349,7 +369,15 @@ export function useCharacterCompanion() {
   });
 
   const withdrawItemFromVault = useCallback(async (vaultId, itemData) => {
-    await withdrawMutation.mutateAsync({ vaultId, itemData });
+    const key = `withdraw:${vaultId}`;
+    if (transferInFlight.current.has(key)) return;
+    transferInFlight.current.add(key);
+    setMovingItemKeys((current) => new Set(current).add(key));
+    try { await withdrawMutation.mutateAsync({ vaultId, itemData }); }
+    finally {
+      transferInFlight.current.delete(key);
+      setMovingItemKeys((current) => { const next = new Set(current); next.delete(key); return next; });
+    }
   }, [withdrawMutation]);
 
   const withdrawToSharedStashMutation = useMutation({
@@ -363,7 +391,7 @@ export function useCharacterCompanion() {
         return;
       }
 
-      const backup = await triggerSaveBackup();
+      const backup = await triggerSaveBackup([sharedStashFile]);
       if (!backup?.success) {
         emitToast(`Backup failed; no files were changed. ${backup?.error || ''}`, 'error');
         return;
@@ -398,7 +426,7 @@ export function useCharacterCompanion() {
       if (actionSuccess) {
         try {
           await removeItemFromVault(vaultId, 'withdraw');
-          emitToast(`"${itemData.type_name || itemData.type}" → Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
+          emitToast(`Moved “${itemLabel(itemData)}” to Shared Stash (Tab ${targetTabIdx + 1})`, 'success');
         } catch (err) {
           emitToast(`Item was written to Shared Stash, but vault history update failed: ${err.message}`, 'error');
         }
@@ -408,7 +436,15 @@ export function useCharacterCompanion() {
   });
 
   const withdrawItemToSharedStash = useCallback(async (vaultId, itemData) => {
-    await withdrawToSharedStashMutation.mutateAsync({ vaultId, itemData });
+    const key = `withdraw:${vaultId}`;
+    if (transferInFlight.current.has(key)) return;
+    transferInFlight.current.add(key);
+    setMovingItemKeys((current) => new Set(current).add(key));
+    try { await withdrawToSharedStashMutation.mutateAsync({ vaultId, itemData }); }
+    finally {
+      transferInFlight.current.delete(key);
+      setMovingItemKeys((current) => { const next = new Set(current); next.delete(key); return next; });
+    }
   }, [withdrawToSharedStashMutation]);
 
   const recoverMutation = useMutation({
@@ -544,6 +580,7 @@ export function useCharacterCompanion() {
     sharedStashError,
     refreshSharedStash,
     isGameRunning,
+    movingItemKeys,
   };
 }
 

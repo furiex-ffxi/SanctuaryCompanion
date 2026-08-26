@@ -44,18 +44,23 @@ export function StorageGrid({ meta, items, highlightIdentity }) {
           >
             <div className="inv-item-inner">
               <ItemSprite item={item} />
-              {meta?.onDeposit && (
+              {meta?.onDeposit && (() => {
+                const itemKey = String(item.id ?? item.item_seed ?? item.rawBytesHex ?? '');
+                const moving = [...(meta.movingItemKeys || [])].some((key) => key.startsWith('deposit:') && key.endsWith(`:${itemKey}`));
+                return (
                 <button
                   className="btn-deposit-stash"
-                  title="Deposit item to Infinite Stash Vault"
+                  title={moving ? `Moving ${getItemDisplayName(item)}…` : 'Deposit item to Infinite Stash Vault'}
+                  disabled={moving}
                   onClick={(e) => {
                     e.stopPropagation();
                     meta.onDeposit({ ...item, position_x: item.position_x ?? c, position_y: item.position_y ?? r, pageIndex: meta.activePageIdx });
                   }}
                 >
-                  📥 Vault
+                  {moving ? 'Moving…' : '📥 Vault'}
                 </button>
-              )}
+                );
+              })()}
             </div>
           </TooltipTrigger>
         );

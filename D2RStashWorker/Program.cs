@@ -296,7 +296,17 @@ namespace D2RStashWorker
             }
         }
 
-        public static string? GetUniqueName(int id) => _uniques.TryGetValue(id, out var val) ? val : null;
+        public static string? GetUniqueName(int id) => _uniques.TryGetValue(id, out var val) ? CanonicalizeUniqueName(val) : null;
+        private static string CanonicalizeUniqueName(string name) => name.Trim().ToLowerInvariant() switch
+        {
+            "irices shard" => "Spectral Shard",
+            "cutthroat1" => "Bartuc's Cut-Throat",
+            "unique warlock helm" => "Hellwarden's Will",
+            "wartraveler" => "War Traveler",
+            "peasent crown" => "Peasant Crown",
+            "eschuta's temper" => "Eschuta's Temper",
+            _ => name,
+        };
         public static int GetUniqueLevelRequirement(int id) => _uniqueLevelRequirements.GetValueOrDefault(id);
         public static bool HasUniqueLevelRequirement(int id) => _uniqueLevelRequirements.ContainsKey(id);
         public static int GetSetLevelRequirement(int id) => _setLevelRequirements.GetValueOrDefault(id);
@@ -1179,7 +1189,7 @@ namespace D2RStashWorker
                     item.Position.BodyLocation = D2SSharp.Enums.BodyLocation.None;
                     item.Position.InvX = placedX;
                     item.Position.InvY = placedY;
-                    item.Position.StorePage = D2SSharp.Enums.StorePage.Inventory; // Character stash uses Inventory page code
+                    item.Position.StorePage = D2SSharp.Enums.StorePage.Stash;
 
                     save.Items.Add(item);
 

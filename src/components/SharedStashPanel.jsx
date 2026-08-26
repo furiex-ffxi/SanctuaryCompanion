@@ -15,6 +15,7 @@ export function SharedStashPanel({
   setSharedStashLoadedFile,
   setSharedStashError,
   highlightIdentity,
+  movingItemKeys,
 }) {
   const sharedStashFile = useUIStore((state) => state.sharedStashFile);
   const setSharedStashFile = useUIStore((state) => state.setSharedStashFile);
@@ -138,6 +139,8 @@ export function SharedStashPanel({
                     rows: 10,
                     activePageIdx,
                     onDeposit: sharedStashReady ? (item) => depositItemToVault(item, '__shared_stash__') : undefined,
+                    sourceName: '__shared_stash__',
+                    movingItemKeys,
                   }}
                   items={items}
                   highlightIdentity={highlightIdentity}
