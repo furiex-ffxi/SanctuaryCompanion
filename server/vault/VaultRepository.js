@@ -51,14 +51,15 @@ function normalizeListOptions(options = {}) {
     error.statusCode = 400
     throw error
   }
+  const level = value => value === '' || value === null || value === undefined ? null : Number(value)
   return {
     q: options.q?.trim().toLowerCase() || '',
     slot: options.slot || 'All',
     category: options.category || 'All',
     setName: options.setName || 'All',
     quality: options.quality || 'All',
-    minLevel: options.minLevel ? Number(options.minLevel) : null,
-    maxLevel: options.maxLevel ? Number(options.maxLevel) : null,
+    minLevel: level(options.minLevel),
+    maxLevel: level(options.maxLevel),
     statuses,
     sort,
     direction,

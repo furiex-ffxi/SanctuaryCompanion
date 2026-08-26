@@ -80,6 +80,17 @@ export function useCharacterCompanion() {
     return Promise.resolve();
   }, [hasNextPage, vaultLoading, fetchNextPage]);
 
+  const focusVaultItem = useCallback(async (vaultId) => {
+    let pages = vaultData?.pages || [];
+    if (pages.some(page => page.items?.some(item => item.vaultId === vaultId))) return true;
+    while (pages.at(-1)?.nextCursor) {
+      const result = await fetchNextPage();
+      pages = result.data?.pages || pages;
+      if (pages.some(page => page.items?.some(item => item.vaultId === vaultId))) return true;
+    }
+    return false;
+  }, [vaultData, fetchNextPage]);
+
   const refreshVault = useCallback(async () => {
     return Promise.all([
       queryClient.invalidateQueries({ queryKey: ['vault'] }),
@@ -517,6 +528,7 @@ export function useCharacterCompanion() {
     queryVault,
     refreshVault,
     loadMoreVault,
+    focusVaultItem,
     removeItemFromVault,
     depositItemToVault,
     withdrawItemFromVault,

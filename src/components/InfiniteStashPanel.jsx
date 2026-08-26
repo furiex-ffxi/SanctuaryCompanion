@@ -8,20 +8,11 @@ import { getVirtualRange } from '../domain/virtualList';
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 8;
-const SORT_DIRECTION_LABELS = {
-  dateAdded: { asc: 'Oldest', desc: 'Newest' },
-  name: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
-  type: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
-  rarity: { asc: 'Lowest', desc: 'Highest' },
-  source: { asc: 'A\u2013Z', desc: 'Z\u2013A' },
-};
-
 
 export function InfiniteStashPanel({
   vaultItems,
   vaultTotal,
   vaultNextCursor,
-  vaultFacets,
   vaultLoading,
   vaultError,
   onQuery,
@@ -34,16 +25,7 @@ export function InfiniteStashPanel({
   onWithdrawShared,
   onRecover,
   highlightIdentity,
-  searchQuery = '',
-  onSearchQueryChange = () => {},
 }) {
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedSlot, setSelectedSlot] = useState('All');
-  const [selectedSet, setSelectedSet] = useState('All');
-  const [selectedQuality, setSelectedQuality] = useState('All');
-  const [minLevel, setMinLevel] = useState('');
-  const [maxLevel, setMaxLevel] = useState('');
-  const [status, setStatus] = useState('active');
   const [sort, setSort] = useState('dateAdded');
   const [direction, setDirection] = useState('desc');
   const [backupMessage, setBackupMessage] = useState(null);
@@ -62,22 +44,15 @@ export function InfiniteStashPanel({
     const timeout = setTimeout(() => {
       listScrollTopRef.current = 0;
       setListScrollTop(0);
+      loadMoreTriggerRef.current = null;
       if (listBodyRef.current) listBodyRef.current.scrollTop = 0;
       onQuery({
-        category: selectedCategory,
-        slot: selectedSlot,
-        setName: selectedSet,
-        quality: selectedQuality,
-        minLevel: minLevel || null,
-        maxLevel: maxLevel || null,
-        q: searchQuery,
         sort,
         direction,
-        status,
       }).catch(() => {});
     }, 250);
     return () => clearTimeout(timeout);
-  }, [selectedCategory, selectedSlot, selectedSet, selectedQuality, minLevel, maxLevel, searchQuery, sort, direction, status, onQuery]);
+  }, [sort, direction, onQuery]);
 
   useEffect(() => () => {
     clearTimeout(backupTimerRef.current);
@@ -176,16 +151,11 @@ export function InfiniteStashPanel({
       });
     }
   };
-  const resetFilters = () => {
-    setSelectedCategory('All');
-    setSelectedSlot('All');
-    setSelectedSet('All');
-    setSelectedQuality('All');
-    setMinLevel('');
-    setMaxLevel('');
-    onSearchQueryChange('');
+  const selectSort = (field) => {
+    if (sort === field) setDirection(current => current === 'asc' ? 'desc' : 'asc');
+    else { setSort(field); setDirection('asc'); }
   };
-
+  const sortAria = field => sort === field ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
   return (
     <div className="infinite-stash-container">
       <div className="stash-header-bar">
@@ -207,98 +177,23 @@ export function InfiniteStashPanel({
       {vaultError && <div className="game-running-warning-banner" role="alert">Vault error: {vaultError}</div>}
       <div className="stash-status" role="status" aria-live="polite">{vaultLoading ? (vaultItems.length ? `Loading more items… ${vaultItems.length} shown` : "Loading vault…") : ""}</div>
 
-      <div className="stash-toolbar">
-        <div className="filter-selects">
-          <div className="filter-group vault-search-filter">
-            <label htmlFor="infinite-vault-search">Search vault:</label>
-            <div className="search-box">
-              <input
-                id="infinite-vault-search"
-                className="d2r-input vault-search-input"
-                type="search"
-                placeholder="Item name..."
-                value={searchQuery}
-                onChange={(event) => onSearchQueryChange(event.target.value)}
-              />
-              {searchQuery && <button className="search-clear-btn" type="button" onClick={() => onSearchQueryChange('')} aria-label="Clear vault search">×</button>}
-            </div>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-category">Category:</label>
-            <select id="infinite-vault-category" className="d2r-select" value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
-              <option value="All">All Categories</option>
-              {vaultFacets.categories.map((category) => <option key={category}>{category}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-slot">Slot:</label>
-            <select id="infinite-vault-slot" className="d2r-select" value={selectedSlot} onChange={(event) => setSelectedSlot(event.target.value)}>
-              <option value="All">All Slots</option>
-              {vaultFacets.slots.map((slot) => <option key={slot}>{slot}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-set">Set Name:</label>
-            <select id="infinite-vault-set" className="d2r-select" value={selectedSet} onChange={(event) => setSelectedSet(event.target.value)}>
-              <option value="All">All Sets ({vaultFacets.sets.length})</option>
-              {vaultFacets.sets.map((setName) => <option key={setName}>{setName}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-quality">Rarity:</label>
-            <select id="infinite-vault-quality" className="d2r-select" value={selectedQuality} onChange={(event) => setSelectedQuality(event.target.value)}>
-              <option value="All">All Qualities</option>
-              <option value="7">Unique</option><option value="5">Set</option><option value="6">Rare</option>
-              <option value="4">Magic</option><option value="2">Normal</option>
-            </select>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-min-level">Level:</label>
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <input id="infinite-vault-min-level" className="d2r-input" type="number" placeholder="Min" style={{ width: '64px', padding: '8px 4px' }} value={minLevel} onChange={(e) => setMinLevel(e.target.value)} />
-              <span>-</span>
-              <input className="d2r-input" type="number" placeholder="Max" style={{ width: '64px', padding: '8px 4px' }} value={maxLevel} onChange={(e) => setMaxLevel(e.target.value)} />
-            </div>
-          </div>
-          <div className="filter-group">
-            <label htmlFor="infinite-vault-status">Status:</label>
-            <select id="infinite-vault-status" className="d2r-select" value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="active">Active Items</option>
-              <option value="pending_withdraw">Pending Recovery</option>
-            </select>
-          </div>
-          <div className="filter-group vault-sort-controls">
-            <label htmlFor="infinite-vault-sort">Sort by:</label>
-            <select id="infinite-vault-sort" className="d2r-select" value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="dateAdded">Date added</option>
-              <option value="name">Item name</option>
-              <option value="type">Base type</option>
-              <option value="rarity">Rarity</option>
-              <option value="source">Source save</option>
-            </select>
-            <button
-              type="button"
-              className="btn-d2r btn-secondary vault-sort-direction"
-              aria-label={'Sort direction: ' + SORT_DIRECTION_LABELS[sort][direction]}
-              onClick={() => setDirection((current) => current === 'asc' ? 'desc' : 'asc')}
-            >
-              {SORT_DIRECTION_LABELS[sort][direction]}
-            </button>
-          </div>
-        </div>
-      </div>
-
       {!vaultLoading && vaultItems.length === 0 ? (
         <div className="stash-empty-state">
-          <h3>{vaultTotal === 0 ? 'Your Infinite Stash is empty' : 'No items match your filters'}</h3>
-          {vaultTotal !== 0 && <button className="btn-d2r btn-secondary" onClick={resetFilters}>Reset All Filters</button>}
+          <div className="stash-empty-sort-controls" aria-label="Sort empty stash">
+            {['name', 'type', 'rarity', 'source', 'dateAdded'].map((field) => (
+              <button key={field} type="button" className={`list-sort-header${sort === field ? ' active' : ''}`} aria-label={`Sort by ${field === 'dateAdded' ? 'date added' : field}`} aria-sort={sortAria(field)} onClick={() => selectSort(field)}>
+                {field === 'dateAdded' ? 'Added' : field[0].toUpperCase() + field.slice(1)} {sort === field ? (direction === 'asc' ? '↑' : '↓') : ''}
+              </button>
+            ))}
+          </div>
+          <h3>{vaultTotal === 0 ? 'Your Infinite Stash is empty' : 'No items available'}</h3>
         </div>
       ) : (
         <div className="stash-list-view">
           <div className="stash-list-header" ref={listHeaderRef}>
-            <span className="col-icon">Icon</span><span className="col-name">Item Name</span>
-            <span className="col-type">Type & Slot</span><span className="col-set">Set / Rarity</span>
-            <span className="col-source">Source Save</span><span className="col-actions">Actions</span>
+            <span className="col-icon">Icon</span><button type="button" className={`list-sort-header col-name${sort === 'name' ? ' active' : ''}`} aria-label="Sort by item name" aria-sort={sortAria('name')} onClick={() => selectSort('name')}>Item Name {sort === 'name' ? (direction === 'asc' ? '↑' : '↓') : ''}</button>
+            <button type="button" className={`list-sort-header col-type${sort === 'type' ? ' active' : ''}`} aria-label="Sort by type" aria-sort={sortAria('type')} onClick={() => selectSort('type')}>Type {sort === 'type' ? (direction === 'asc' ? '↑' : '↓') : ''}</button><button type="button" className={`list-sort-header col-set${sort === 'rarity' ? ' active' : ''}`} aria-label="Sort by rarity" aria-sort={sortAria('rarity')} onClick={() => selectSort('rarity')}>Rarity {sort === 'rarity' ? (direction === 'asc' ? '↑' : '↓') : ''}</button>
+            <button type="button" className={`list-sort-header col-source${sort === 'source' ? ' active' : ''}`} aria-label="Sort by source save" aria-sort={sortAria('source')} onClick={() => selectSort('source')}>Source Save {sort === 'source' ? (direction === 'asc' ? '↑' : '↓') : ''}</button><button type="button" className={`list-sort-header col-added${sort === 'dateAdded' ? ' active' : ''}`} aria-label="Sort by date added" aria-sort={sortAria('dateAdded')} onClick={() => selectSort('dateAdded')}>Added {sort === 'dateAdded' ? (direction === 'asc' ? '↑' : '↓') : ''}</button><span className="col-actions">Actions</span>
           </div>
           <div className="stash-list-body" ref={listBodyRef} onScroll={handleListScroll}>
                         <div className="stash-virtual-spacer" style={{ height: `${virtualStart * VIRTUAL_ROW_HEIGHT}px` }} aria-hidden="true" />
@@ -311,7 +206,8 @@ export function InfiniteStashPanel({
                   <div className="col-name name-cell"><span className={`item-name-text ${colorClass}`}>{getItemDisplayName(item)}</span></div>
                   <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
                   <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
-                  <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
+                  <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span></div>
+                  <div className="col-added source-cell"><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                     {entry.status === 'pending_withdraw' ? (
                       <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>🔄 Recover</button>

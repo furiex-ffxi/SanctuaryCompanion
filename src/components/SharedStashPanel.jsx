@@ -122,7 +122,7 @@ export function SharedStashPanel({
             <div className="shared-stash-grid-center">
               {activePage.type === 1 ? (
                 <AdvancedStashPanel 
-                  items={items} 
+                  items={items}
                   onDeposit={sharedStashReady ? (item) => depositItemToVault(item, '__shared_stash__') : undefined}
                   highlightIdentity={highlightIdentity}
                 />

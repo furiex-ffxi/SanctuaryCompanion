@@ -7,8 +7,8 @@ const EMPTY_REQUEST = {
   error: '',
 };
 
-export function useGlobalItemSearchResults(query, sharedFile) {
-  const requestKey = [sharedFile, query].join('\0');
+export function useGlobalItemSearchResults(query, sharedFile, filters = {}) {
+  const requestKey = [sharedFile, query, JSON.stringify(filters)].join('\0');
   const [request, setRequest] = useState(EMPTY_REQUEST);
 
   useEffect(() => {
@@ -32,6 +32,7 @@ export function useGlobalItemSearchResults(query, sharedFile) {
           sharedFile,
           limit: '10',
         });
+        Object.entries(filters).forEach(([key, value]) => { if (value !== '' && value != null) params.set(key, value); });
         const response = await fetch('/__item_search?' + params, {
           signal: controller.signal,
         });

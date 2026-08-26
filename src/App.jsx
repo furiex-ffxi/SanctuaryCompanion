@@ -9,6 +9,7 @@ import { SharedStashPanel } from './components/SharedStashPanel';
 import { GlobalItemSearch } from './components/GlobalItemSearch';
 import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
+import { getItemFilterFacets } from './components/ItemFilterControls.jsx';
 
 
 import './App.css';
@@ -73,6 +74,7 @@ function MainContent() {
     queryVault,
     refreshVault,
     loadMoreVault,
+    focusVaultItem,
     removeItemFromVault,
     depositItemToVault,
     withdrawItemFromVault,
@@ -100,8 +102,6 @@ function MainContent() {
   const setSharedStashFile = useUIStore((state) => state.setSharedStashFile);
   const sharedStashTab = useUIStore((state) => state.sharedStashTab);
   const setSharedStashTab = useUIStore((state) => state.setSharedStashTab);
-  const vaultSearchQuery = useUIStore((state) => state.vaultSearchQuery);
-  const setVaultSearchQuery = useUIStore((state) => state.setVaultSearchQuery);
   const setIsSwapped = useUIStore((state) => state.setIsSwapped);
 
   const { toasts, addToast, dismissToast } = useToasts();
@@ -119,6 +119,12 @@ function MainContent() {
     if (!meta) return [];
     return charData.items.filter((i) => i.location_id === 0 && i.alt_position_id === meta.altId);
   }, [charData, activeTab, STORAGE_META]);
+  const characterFacets = React.useMemo(() => getItemFilterFacets(charData?.items || []), [charData]);
+  const searchFacets = React.useMemo(() => {
+    const sharedItems = (sharedStash?.pages || []).flatMap(page => page.items || [])
+    const sharedFacets = getItemFilterFacets(sharedItems)
+    return Object.fromEntries(['categories', 'slots', 'sets'].map(key => [key, [...new Set([...(vaultFacets[key] || []), ...(characterFacets[key] || []), ...(sharedFacets[key] || [])])].sort()]))
+  }, [vaultFacets, characterFacets, sharedStash]);
 
   // Sync tab selection with URL hash (#character, #inventory, #char-stash, #stash, #cube, #skills, #shared-stash, #infinite-stash)
   React.useEffect(() => {
@@ -190,7 +196,7 @@ function MainContent() {
         ? 'That Shared Stash search result is stale; the item is no longer in the save.'
         : `Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, stale ? 'error' : 'info');
     } else {
-      setVaultSearchQuery(result.preview.displayName);
+      await focusVaultItem?.(result.vaultId);
       setMainTab('stash');
       window.history.pushState(null, '', '#infinite-stash');
     }
@@ -228,7 +234,7 @@ function MainContent() {
         </div>
 
         <div className="controls-row">
-          <GlobalItemSearch sharedFile={sharedStashFile || ""} onSelect={handleSearchSelect} />
+          <GlobalItemSearch sharedFile={sharedStashFile || ""} facets={searchFacets} onSelect={handleSearchSelect} />
           {saveFiles.length > 0 && (
             <select
               className="header-control save-picker"
@@ -294,7 +300,6 @@ function MainContent() {
           vaultItems={vaultItems}
           vaultTotal={vaultTotal}
           vaultNextCursor={vaultNextCursor}
-          vaultFacets={vaultFacets}
           vaultLoading={vaultLoading}
           vaultError={vaultError}
           onQuery={queryVault}
@@ -307,8 +312,6 @@ function MainContent() {
           onWithdrawShared={withdrawItemToSharedStash}
           onRecover={recoverItemFromVault}
           highlightIdentity={searchHighlight}
-          searchQuery={vaultSearchQuery}
-          onSearchQueryChange={setVaultSearchQuery}
         />
       ) : mainTab === 'shared_stash' ? (
         <SharedStashPanel
