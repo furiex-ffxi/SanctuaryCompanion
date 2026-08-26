@@ -29,6 +29,12 @@ export const useUIStore = create(
 
       vaultSearchQuery: '',
       setVaultSearchQuery: (query) => set({ vaultSearchQuery: query }),
+      itemSearchDraft: { q: '', category: 'All', slot: 'All', setName: 'All', quality: 'All', minLevel: '', maxLevel: '', scope: 'all' },
+      setItemSearchDraft: (draft) => set((state) => ({ itemSearchDraft: { ...state.itemSearchDraft, ...draft } })),
+      itemSearchOpen: false,
+      setItemSearchOpen: (open) => set({ itemSearchOpen: open }),
+      itemSearchFiltersOpen: false,
+      setItemSearchFiltersOpen: (open) => set({ itemSearchFiltersOpen: open }),
     }),
     {
       name: 'sc-ui-storage',

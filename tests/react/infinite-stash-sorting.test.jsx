@@ -14,7 +14,6 @@ function props(overrides = {}) {
     vaultItems: [],
     vaultTotal: 0,
     vaultNextCursor: null,
-    vaultFacets: { categories: ['Rings & Amulets'], slots: ['Ring'], sets: [] },
     vaultLoading: false,
     vaultError: null,
     onQuery: vi.fn(async () => {}),
@@ -76,44 +75,39 @@ describe('Infinite Stash sorting', () => {
 
     const list = document.querySelector('.stash-list-body');
     list.scrollTop = 140;
-    fireEvent.change(screen.getByLabelText('Sort by:'), { target: { value: 'name' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by item name' }));
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(list.scrollTop).toBe(0);
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
+      sort: 'name',
+      direction: 'asc',
+    }));
+
+    list.scrollTop = 95;
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by item name' }));
     await act(() => vi.advanceTimersByTimeAsync(250));
     expect(list.scrollTop).toBe(0);
     expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
       sort: 'name',
       direction: 'desc',
     }));
-
-    list.scrollTop = 95;
-    fireEvent.click(screen.getByRole('button', { name: 'Sort direction: Z\u2013A' }));
-    await act(() => vi.advanceTimersByTimeAsync(250));
-    expect(list.scrollTop).toBe(0);
-    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
-      sort: 'name',
-      direction: 'asc',
-    }));
-    expect(screen.getByRole('button', { name: 'Sort direction: A\u2013Z' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sort by item name' })).toHaveAttribute('aria-sort', 'descending');
   });
 
-  test('retains sorting when all filters are reset', async () => {
+  test('sorts from the empty-state controls', async () => {
     vi.useFakeTimers();
     const onQuery = vi.fn(async () => {});
     render(<InfiniteStashPanel {...props({ onQuery, vaultTotal: 3 })} />);
     await act(() => vi.advanceTimersByTimeAsync(250));
 
-    fireEvent.change(screen.getByLabelText('Sort by:'), { target: { value: 'rarity' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sort direction: Highest' }));
-    fireEvent.change(screen.getByLabelText('Category:'), { target: { value: 'Rings & Amulets' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by rarity' }));
     await act(() => vi.advanceTimersByTimeAsync(250));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset All Filters' }));
-    await act(() => vi.advanceTimersByTimeAsync(250));
     expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
-      category: 'All',
       sort: 'rarity',
       direction: 'asc',
     }));
-    expect(screen.getByRole('button', { name: 'Sort direction: Lowest' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sort by rarity' })).toHaveAttribute('aria-sort', 'ascending');
   });
 
   test('renders canonical rehydrated stat wording through the Infinite Stash tooltip path', async () => {

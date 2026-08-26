@@ -107,3 +107,20 @@ test('ranks name matches above attributes and explains the matched field', () =>
   assert.equal(statMatch.text, 'Absorb Fire +12')
   assert.ok(nameMatch.rank < statMatch.rank)
 })
+
+test('applies shared filters and source scopes before ranking results', async t => {
+  const f = fixture(); t.after(() => { f.repository.close(); fs.rmSync(f.savesDir, { recursive: true, force: true }) })
+  await f.repository.add({ vaultId: 'unique-high', stashedAt: new Date().toISOString(), sourceSave: 'Alpha.d2s', itemData: item(70, 'Needle Ring', { quality: 7, level_req: 80, set_name: 'Test Set' }) })
+  await f.repository.add({ vaultId: 'normal-low', stashedAt: new Date().toISOString(), sourceSave: 'Alpha.d2s', itemData: item(71, 'Needle Ring', { quality: 2, level_req: 10 }) })
+  const filtered = await f.service.search({ q: 'needle', scope: 'infiniteStash', category: 'Set Items', slot: 'Ring', quality: '7', minLevel: '75', maxLevel: '90' })
+  assert.deepEqual(filtered.groups.infiniteStash.results.map(row => row.vaultId), ['unique-high'])
+  assert.equal(filtered.groups.characters.total, 0)
+  assert.equal(filtered.groups.sharedStash.total, 0)
+})
+
+test('rejects invalid shared filter values', async t => {
+  const f = fixture(); t.after(() => { f.repository.close(); fs.rmSync(f.savesDir, { recursive: true, force: true }) })
+  await assert.rejects(() => f.service.search({ q: 'needle', scope: 'treasure' }), /scope/)
+  await assert.rejects(() => f.service.search({ q: 'needle', quality: 'legendary' }), /quality/)
+  await assert.rejects(() => f.service.search({ q: 'needle', minLevel: 90, maxLevel: 10 }), /exceed/)
+})
