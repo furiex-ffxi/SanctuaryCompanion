@@ -110,4 +110,32 @@ describe('TerrorZoneScheduler', () => {
 
     expect(localStorage.getItem('tz_max_time')).toBeNull();
   });
+
+  it('allows another future jump after restoring time', async () => {
+    render(<TerrorZoneScheduler onClose={() => {}} addToast={addToastMock} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Future Zone')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Future Zone' } });
+    fireEvent.click(screen.getByText('Jump to Zone'));
+    await waitFor(() => expect(localStorage.getItem('tz_max_time')).not.toBeNull());
+
+    fireEvent.click(screen.getByText('How to restore time'));
+    fireEvent.click(screen.getByText('Restore Windows Clock to Present'));
+    await waitFor(() => expect(localStorage.getItem('tz_max_time')).toBeNull());
+
+    fireEvent.click(screen.getByText('Jump to Zone'));
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('/__d2r_set_time', expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining(mockSchedule[1].datetime)
+      }));
+    });
+    expect(addToastMock).not.toHaveBeenCalledWith(
+      'No future occurrences of this zone found after the latest simulated time.',
+      'error'
+    );
+  });
 });

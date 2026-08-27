@@ -9,7 +9,10 @@ function decodedScripts(command) {
 
 describe('timeJumper', () => {
   it('builds only the supported helper operations', () => {
-    assert.ok(createTimeScript({ operation: 'pin', datetime: '2026-08-19T10:00:00.000Z' }).includes("Set-Date -Date ([datetime]'2026-08-19T10:00:00.000Z')"));
+    const pinScript = createTimeScript({ operation: 'pin', datetime: '2026-08-19T10:00:00.000Z' });
+    assert.ok(pinScript.includes("$targetDate = [datetime]'2026-08-19T10:00:00.000Z'"));
+    assert.ok(pinScript.includes("$targetDate -le [DateTime]::Now"));
+    assert.ok(pinScript.includes('Set-Date -Date $targetDate'));
     assert.ok(createTimeScript({ operation: 'restore' }).includes('Set-Service -Name W32Time -StartupType $startupType'));
     assert.throws(() => createTimeScript({ operation: 'exec', datetime: '2026-08-19T10:00:00.000Z' }), /Unsupported Windows time operation/);
   });
@@ -51,7 +54,9 @@ describe('timeJumper', () => {
     assert.ok(pinScript.includes("if ((Get-Service -Name W32Time).Status -ne 'Stopped')"));
     assert.ok(pinScript.includes('ConvertTo-Json -Compress'));
     assert.ok(pinScript.includes('OriginalUtc = [DateTime]::UtcNow.ToString'));
-    assert.ok(pinScript.includes("Set-Date -Date ([datetime]'2026-08-19T10:00:00.000Z')"));
+    assert.ok(pinScript.includes("$targetDate = [datetime]'2026-08-19T10:00:00.000Z'"));
+    assert.ok(pinScript.includes("$targetDate -le [DateTime]::Now"));
+    assert.ok(pinScript.includes('Set-Date -Date $targetDate'));
   });
 
   it('preserves service state when pinning is requested repeatedly', async () => {
