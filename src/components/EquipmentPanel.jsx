@@ -1,12 +1,12 @@
 import React from 'react';
-import ItemSprite from './ItemSprite';
+import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { ItemTooltip } from './ItemTooltip';
 import { TooltipTrigger } from './TooltipTrigger';
 import { SLOT_META } from '../domain/entities/Item';
 
 import { useUIStore } from '../stores/useUIStore';
 
-export function EquipmentPanel({ charData, onDeposit }) {
+export function EquipmentPanel({ charData, onDeposit, movingItemKeys = new Set() }) {
   const isSwapped = useUIStore((state) => state.isSwapped);
   const setIsSwapped = useUIStore((state) => state.setIsSwapped);
 
@@ -19,6 +19,8 @@ export function EquipmentPanel({ charData, onDeposit }) {
   const renderSlot = (slotId) => {
     const meta = SLOT_META[slotId];
     const item = getItemInSlot(slotId);
+    const itemKey = item ? String(item.id ?? item.item_seed ?? item.rawBytesHex ?? '') : '';
+    const moving = item && [...movingItemKeys].some((key) => key.startsWith('deposit:') && key.endsWith(`:${itemKey}`));
 
     return (
       <TooltipTrigger key={slotId} className={`equip-slot ${meta.cls}`} item={item}>
@@ -29,7 +31,8 @@ export function EquipmentPanel({ charData, onDeposit }) {
             {onDeposit && (
               <button
                 className="btn-deposit-stash equip-deposit"
-                title="Deposit item to Infinite Stash Vault"
+                title={moving ? `Moving ${getItemDisplayName(item)}…` : 'Deposit item to Infinite Stash Vault'}
+                disabled={moving}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDeposit(item);

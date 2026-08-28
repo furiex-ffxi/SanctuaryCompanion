@@ -2,7 +2,6 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { exec } from 'child_process';
-import { runWithElevatedHelper } from './timeHelperClient.js';
 
 const STATE_ROOT = process.env.LOCALAPPDATA || os.tmpdir();
 const STATE_DIRECTORY = process.env.SANCTUARY_TIME_STATE_DIRECTORY || path.join(STATE_ROOT, 'SanctuaryCompanion');
@@ -30,6 +29,20 @@ ${script}
 }`;
   const guardedEncoded = encodedPowerShell(guardedScript);
   return `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; $errorPath = ${errorPath}; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue; try { $process = Start-Process powershell -Verb RunAs -WindowStyle Hidden -PassThru -Wait -ArgumentList '-NoProfile -EncodedCommand ${guardedEncoded}'; if ($null -eq $process) { throw 'The elevated time helper did not start; UAC may have been cancelled.' }; if ($process.ExitCode -ne 0) { if (Test-Path -LiteralPath $errorPath) { Get-Content -LiteralPath $errorPath -Raw | Write-Error; Remove-Item -LiteralPath $errorPath -Force -ErrorAction SilentlyContinue }; exit $process.ExitCode }; exit 0 } catch { Write-Error $_; exit 1 }"`;
+}
+
+// Keep the live request path compatible with the original scheduler. The
+// hardened recovery script is still used by injected/test executors, but the
+// persistent elevated-helper path has proven unreliable on some Windows hosts.
+function legacyTimeCommand({ datetime, restore }) {
+  if (restore) {
+    return `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-Command Start-Service W32Time -ErrorAction SilentlyContinue; W32tm /resync /force'"`;
+  }
+  if (!datetime) throw new Error('Missing datetime parameter');
+  const parsedDate = new Date(datetime);
+  if (isNaN(parsedDate.getTime())) throw new Error('Invalid datetime parameter');
+  const safeDatetime = parsedDate.toISOString();
+  return `powershell -Command "Start-Process powershell -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '-Command Stop-Service W32Time -ErrorAction SilentlyContinue; Set-Date -Date ([datetime]''${safeDatetime}'')'"`;
 }
 
 function pinScript(safeDatetime) {
@@ -73,14 +86,14 @@ $startupType = switch ($state.StartMode) {
   'Disabled' { 'Disabled'; break }
   default { throw "Unsupported W32Time startup mode: $($state.StartMode)" }
 }
+# The service may be left Disabled after an interrupted pin even when the
+# saved pre-pin mode was Manual. Always use a temporary startable mode first.
+Set-Service -Name W32Time -StartupType Manual
+if ((Get-Service -Name W32Time).Status -ne 'Running') { Start-Service -Name W32Time }
+w32tm /resync /force
+if ($LASTEXITCODE -ne 0) { throw "W32Time resynchronization failed with exit code $LASTEXITCODE" }
+if ($state.State -ne 'Running' -and (Get-Service -Name W32Time).Status -ne 'Stopped') { Stop-Service -Name W32Time -Force -ErrorAction Stop }
 Set-Service -Name W32Time -StartupType $startupType
-if ($state.State -eq 'Running') {
-  if ((Get-Service -Name W32Time).Status -ne 'Running') { Start-Service -Name W32Time }
-  w32tm /resync /force
-  if ($LASTEXITCODE -ne 0) { throw "W32Time resynchronization failed with exit code $LASTEXITCODE" }
-} else {
-  if ((Get-Service -Name W32Time).Status -ne 'Stopped') { Stop-Service -Name W32Time -Force -ErrorAction Stop }
-}
 Remove-Item -LiteralPath $statePath -Force`;
 }
 
@@ -95,21 +108,21 @@ export function createTimeScript({ operation, datetime }) {
 
 export function setWindowsTime({ datetime, restore }, execFn = exec) {
   const operation = operationQueue.then(() => new Promise((resolve, reject) => {
-      const operationName = restore ? 'restore' : 'pin';
       if (execFn === exec) {
-        runWithElevatedHelper({ operation: operationName, datetime })
-          .then(result => {
-            if (!result.ok) {
-              const detail = String(result.error || result.stderr || 'Elevated time operation failed').trim();
-              const error = new Error(`Windows time operation failed: ${detail}`);
-              error.code = result.code;
-              reject(error);
-            } else resolve({ success: true });
-          })
-          .catch(reject);
+        let legacyScript;
+        try {
+          legacyScript = restore && fs.existsSync(SERVICE_STATE_PATH)
+            ? elevatedCommand(restoreScript())
+            : legacyTimeCommand({ datetime, restore });
+        }
+        catch (error) { reject(error); return; }
+        execFn(legacyScript, error => {
+          if (error) reject(error);
+          else resolve({ success: true });
+        });
         return;
       }
-
+      const operationName = restore ? 'restore' : 'pin';
       let script;
       try { script = elevatedCommand(createTimeScript({ operation: operationName, datetime })); }
       catch (error) { reject(error); return; }
