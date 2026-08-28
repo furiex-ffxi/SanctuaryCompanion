@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compareItemStat, getRollRange, summarizeItemComparison } from '../../src/domain/entities/ItemRollComparison.js';
+import { compareItemStat, getRollRange, getTotalDefense, summarizeItemComparison } from '../../src/domain/entities/ItemRollComparison.js';
 
 const item = (fire, magicFind) => ({
   displayed_combined_magic_attributes: [
@@ -40,4 +40,41 @@ test('uses explicit parser roll ranges and clamps the displayed percentile', () 
   });
   assert.equal(getRollRange({ id: 39, values: [28] }), null);
   assert.equal(getRollRange({ id: 48, values: [1, 20], range: [1, 20] }), null);
+});
+
+const armor = (type, defense, enhancedDefense) => ({
+  type,
+  defense,
+  displayed_combined_magic_attributes: enhancedDefense == null ? [] : [{ id: 16, values: [enhancedDefense] }],
+});
+
+test('calculates rounded total defense with or without enhanced defense', () => {
+  assert.equal(getTotalDefense(armor('uar', 101, null)), 101);
+  assert.equal(getTotalDefense(armor('uar', 101, 33)), 134);
+  assert.equal(getTotalDefense({ type: 'rin', defense: 999 }), null);
+});
+
+test('compares total defense and enhanced defense independently', () => {
+  const current = armor('uar', 101, 33);
+  const peer = armor('uar', 100, 40);
+  const attrs = current.displayed_combined_magic_attributes;
+  assert.deepEqual(compareItemStat({ id: 'total_defense', name: 'total_defense', values: [134], derived: true, itemType: 'uar' }, [current, peer]), {
+    value: 134, best: 140, compared: 2, isBest: false, difference: 6,
+  });
+  assert.deepEqual(compareItemStat(attrs[0], [current, peer]), {
+    value: 33, best: 40, compared: 2, isBest: false, difference: 7,
+  });
+  assert.equal(summarizeItemComparison(current, [current, peer]).comparableCount, 2);
+});
+
+test('compares enhanced damage percentage and separate minimum/maximum rolls', () => {
+  const current = { type: '9cr', displayed_combined_magic_attributes: [
+    { id: 25, values: [150] }, { id: 17, values: [170] }, { id: 18, values: [140] },
+  ] };
+  const peer = { type: '9cr', displayed_combined_magic_attributes: [
+    { id: 25, values: [125] }, { id: 17, values: [180] }, { id: 18, values: [135] },
+  ] };
+  const summary = summarizeItemComparison(current, [current, peer]);
+  assert.equal(summary.comparableCount, 3);
+  assert.equal(summary.bestCount, 2);
 });

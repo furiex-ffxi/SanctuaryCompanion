@@ -238,5 +238,32 @@ describe('GlobalItemSearch', () => {
     fireEvent.mouseEnter(screen.getAllByRole('option')[1], { clientX: 20, clientY: 20 });
     expect(screen.getByText('Best of 2 matches')).toBeInTheDocument();
   });
+
+  test('counts total defense and enhanced damage in global comparison badges', async () => {
+    vi.useFakeTimers();
+    const items = [
+      { name: 'Armor A', type: 'uar', defense: 101, attrs: [{ id: 16, values: [33] }] },
+      { name: 'Armor B', type: 'uar', defense: 100, attrs: [{ id: 16, values: [40] }] },
+      { name: 'Weapon A', type: '9cr', attrs: [{ id: 25, values: [150] }] },
+      { name: 'Weapon B', type: '9cr', attrs: [{ id: 25, values: [125] }] },
+    ];
+    const body = { groups: { characters: { results: items.map(({ name, type, defense, attrs }) => ({
+      identity: { itemSeed: name },
+      preview: { displayName: name, typeName: type, socketCount: 0, item: { type, defense, displayed_combined_magic_attributes: attrs } },
+      match: { field: 'name', text: name }, sourceKind: 'character', characterName: 'TestHero', location: 'inventory',
+    })) } } };
+    const response = deferredResponse(body);
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(response.promise));
+
+    render(<GlobalItemSearch onSelect={vi.fn()} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'item' } });
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await act(async () => response.resolve());
+
+    expect(screen.getAllByText('2/2 best')).toHaveLength(1);
+    expect(screen.getAllByText('0/2 best')).toHaveLength(1);
+    expect(screen.getAllByText('1/1 best')).toHaveLength(1);
+    expect(screen.getAllByText('0/1 best')).toHaveLength(1);
+  });
 });
 

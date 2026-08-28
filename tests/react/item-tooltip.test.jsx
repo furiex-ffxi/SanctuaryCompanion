@@ -15,6 +15,52 @@ describe('ItemTooltip', () => {
     expect(screen.getByText('Defense: 467')).toBeInTheDocument();
   });
 
+  test('shows total defense and independent enhanced-defense comparison', () => {
+    render(<ItemTooltip
+      item={{
+        type: 'uar', defense: 101,
+        displayed_combined_magic_attributes: [{ id: 16, values: [33], description: '+33% Enhanced Defense' }],
+      }}
+      comparisonItems={[
+        { type: 'uar', defense: 101, displayed_combined_magic_attributes: [{ id: 16, values: [33] }] },
+        { type: 'uar', defense: 100, displayed_combined_magic_attributes: [{ id: 16, values: [40] }] },
+      ]}
+    />);
+
+    expect(screen.getByText('Total Defense: 134')).toBeInTheDocument();
+    expect(screen.getAllByText('6 below best of 2')).toHaveLength(1);
+    expect(screen.getAllByText('7 below best of 2')).toHaveLength(1);
+  });
+
+  test('shows enhanced damage comparisons for parser minimum and maximum rolls', () => {
+    render(<ItemTooltip
+      item={{
+        type: '9cr',
+        displayed_combined_magic_attributes: [
+          { id: 25, values: [150], description: '+150% Enhanced Damage' },
+          { id: 17, values: [170], description: '+170% Enhanced Maximum Damage' },
+          { id: 18, values: [140], description: '+140% Enhanced Minimum Damage' },
+        ],
+      }}
+      comparisonItems={[
+        { type: '9cr', displayed_combined_magic_attributes: [
+          { id: 25, values: [150] }, { id: 17, values: [170] }, { id: 18, values: [140] },
+        ] },
+        { type: '9cr', displayed_combined_magic_attributes: [
+          { id: 25, values: [125] }, { id: 17, values: [180] }, { id: 18, values: [135] },
+        ] },
+      ]}
+    />);
+
+    expect(screen.getAllByText('Best of 2 matches')).toHaveLength(2);
+    expect(screen.getByText('10 below best of 2')).toBeInTheDocument();
+  });
+
+  test('does not fabricate total defense for non-armor items', () => {
+    render(<ItemTooltip item={{ type: 'rin', defense: 999 }} comparisonItems={[{ type: 'rin', defense: 1 }]} />);
+    expect(screen.queryByText('Total Defense: 999')).not.toBeInTheDocument();
+  });
+
   test('respects an intentionally empty displayed stat list', () => {
     render(<ItemTooltip item={{
       type: 'vgl',

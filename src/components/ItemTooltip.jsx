@@ -2,7 +2,7 @@ import React from 'react';
 import { getItemDisplayName, getItemSocketCount } from './ItemSprite';
 import { getItemTypeDisplayName, getItemDetails, formatStat, groupItemStats } from '../domain/entities/ItemDisplay.js';
 import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
-import { compareItemStat, getRollRange } from '../domain/entities/ItemRollComparison.js';
+import { compareItemDerivedStat, compareItemStat, getDerivedComparisonAttributes, getRollRange } from '../domain/entities/ItemRollComparison.js';
 
 export const ItemTooltip = ({ item, comparisonItems = [] }) => {
   if (!item) return null;
@@ -27,6 +27,7 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
   const attrs = comparisonItems.length > 0 || rawVisible.some(getRollRange)
     ? rawVisible
     : groupItemStats(rawVisible);
+  const derivedAttrs = getDerivedComparisonAttributes(item);
 
   // Extract set attributes if available on set items
   const setAttrs = (item.set_attributes || []).flat().filter(Boolean);
@@ -55,10 +56,25 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
             [{socketCount} sockets]
           </div>
         )}
+        {derivedAttrs.map((a) => {
+          const comparison = compareItemDerivedStat(a, item, comparisonItems);
+          return (
+            <div key={a.id} className="tooltip-stat-item">
+              <span>{a.description}</span>
+              {comparison && (
+                <small className={comparison.isBest ? 'tooltip-roll-best' : 'tooltip-roll-comparison'}>
+                  {comparison.isBest
+                    ? `Best of ${comparison.compared} matches`
+                    : `${comparison.difference} below best of ${comparison.compared}`}
+                </small>
+              )}
+            </div>
+          );
+        })}
         {attrs.map((a, i) => {
           const desc = formatStat(a);
           const range = getRollRange(a);
-          const comparison = compareItemStat(a, comparisonItems);
+          const comparison = compareItemStat({ ...a, itemType: item.type }, comparisonItems);
           return (
             <div key={i} className="tooltip-stat-item">
               <span>{desc}</span>
@@ -67,7 +83,7 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
                   Roll {range.min}–{range.max} · {range.percent}%
                 </small>
               )}
-              {!range && comparison && (
+              {comparison && (
                 <small className={comparison.isBest ? 'tooltip-roll-best' : 'tooltip-roll-comparison'}>
                   {comparison.isBest
                     ? `Best of ${comparison.compared} matches`
