@@ -1,88 +1,76 @@
 # Sanctuary Companion
 
-Sanctuary Companion is a local React/Vite companion for Diablo II: Resurrected. It inspects character and shared-stash saves, moves items through the pinned D2SSharp worker, and provides a searchable Infinite Stash backed by SQLite (via Drizzle ORM). The frontend UI is built with React, utilizing Zustand for local state and TanStack Query for remote data fetching.
-## Development
+Sanctuary Companion is a local companion app for **Diablo II: Resurrected**. It gives you a searchable view of your characters and stashes, makes item details easier to inspect, and provides an Infinite Stash vault for organizing items across saves.
 
-Install dependencies and start the local server:
+It runs locally in your browser and works with the save files already on your machine. It is designed for single-player / offline save management and does not connect to Battle.net.
+
+## What it does
+
+- Inspect character stats, equipment, inventory, stash, cube, skills, and resistance breakdowns.
+- Browse and search D2R shared stash pages.
+- Move items between character/shared stash saves and the Infinite Stash vault, with safety checks and backups around mutations.
+- Search across characters, shared stash, and the Infinite Stash from one global search box.
+- View Terror Zone timing information and other companion utilities.
+- Keep the Infinite Stash in a local SQLite database instead of mirroring the whole vault in browser storage.
+
+## Screenshots
+
+### Character Inspector
+
+![Character Inspector](docs/assets/character-inspector.png)
+
+### Shared Stash
+
+![Shared Stash](docs/assets/shared-stash.png)
+
+### Infinite Stash
+
+![Infinite Stash](docs/assets/infinite-stash.png)
+
+> The screenshots were captured from a local save directory. The red **Game Running (Locked)** state is intentional: save-changing actions are disabled while D2R is running to reduce the risk of corruption.
+
+## Quick start
+
+Requirements:
+
+- Windows with Diablo II: Resurrected save files available locally.
+- Node.js and npm.
+- A sibling checkout of [D2SSharp](https://github.com/ResurrectedTrader/D2SSharp) for the save worker.
+
+Install dependencies and start the local app:
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Production and static validation commands:
+Open the local URL printed by Vite, normally `http://127.0.0.1:5173`.
+
+Before moving items, exit D2R to unlock save mutations. On first use, select a character or shared stash file from the controls in the header. You can also use **Browse...** / **Upload .d2i...** to inspect a save file manually.
+
+To enable private local item artwork, run:
+
+```powershell
+python scripts/extract-d2r-item-assets.py
+```
+
+The artwork cache is intentionally ignored by Git and should not be redistributed.
+
+## Documentation
+
+- [User guide](docs/usage.md) — setup, daily workflows, transfers, backups, and troubleshooting.
+- [Architecture](docs/architecture.md) — worker boundary, server routes, SQLite vault, recovery, and testing strategy.
+
+## Validation
 
 ```powershell
 npm run build
 npm run lint
-npm run test:vault
-```
-
-## Local D2R artwork (optional)
-
-Item artwork is intentionally not bundled with this repository. The existing sprites were extracted/derived game assets without a redistribution license. To use private local artwork, extract the installed D2R item sprites into the default private cache with:
-
-```powershell
-python scripts/extract-d2r-item-assets.py
-npm run dev
-```
-
-The dev server reads the ignored .d2r-item-assets cache in the repository, or the directory specified by D2R_ITEM_ASSET_DIR, and exposes it only through the validated /__d2r_item_image route. Do not commit or publish the extracted files.
-
-## D2SSharp worker
-
-The worker is built from the pinned sibling checkout described by `D2SSharp.lock.json`, rather than a floating NuGet package. Clone `https://github.com/ResurrectedTrader/D2SSharp.git` beside this repository and check out `f26f21897db5c0075e74defca1e31d1930080750` (add that repository as `upstream` if working from your own fork).
-
-Publish the sole runtime worker output with:
-
-```powershell
-.\scripts\build-d2r-worker.ps1
-```
-
-Run all JavaScript tests, including the worker integration suite, with:
-
-```powershell
 npm test
 ```
 
-The worker integration suite can also be run directly with:
+The worker integration tests use isolated copies of save fixtures and clean up their temporary directories after each run. See the [architecture notes](docs/architecture.md) for the full validation matrix.
 
-```powershell
-.\scripts\test-d2r-worker.ps1
-```
+## License
 
-The test uses D2R `.d2s`/`.d2i` fixtures only after copying them into a uniquely named `Saved Games/Diablo II Resurrected/backups/D2R_JS_TEST_TEMP_*` directory. It tests round trips, save checksum/file-size validity, add/remove operations, and repeated parsing; the directory is removed in `finally` on completion or failure.
-
-## Infinite Stash persistence and recovery
-
-The Infinite Stash is stored in `infinite_stash_vault.sqlite3` in the D2R save directory. The first vault mutation after each dev-server start creates one SQLite checkpoint under `backups/vault/<epoch>/`; subsequent mutations append checksummed intent/commit records to that epoch's `transactions.jsonl`.
-
-Normal reads are cursor-paginated in batches of 100 and managed by TanStack Query in the React client. Search, rarity, set, category, and slot filtering execute in SQLite; the browser no longer mirrors the complete vault in `localStorage`.
-
-On first launch after upgrading, `infinite_stash_vault.json` is transactionally imported. The original JSON remains in place and an additional copy plus migration report is written under `backups/vault-legacy-migration_*`.
-
-Validate persistence changes with:
-
-```powershell
-npm run test:vault
-```
-
-Replay a checkpoint and its journal into a separate recovery database with:
-
-```powershell
-npm run replay:vault -- "C:\path\to\backups\vault\<epoch>" "C:\path\to\recovered.sqlite3"
-```
-
-Replay never overwrites an existing database. It validates the checkpoint, journal sequence and checksum chain, replays committed operations idempotently, preserves incomplete operations as `recovery_needed`, and validates the recovered database. Review the result before replacing a live database.
-
-### Transfer safety
-
-- Every mutating endpoint independently rejects requests while `D2R.exe` is running.
-- Deposits are persisted and journaled before D2SSharp removes the source item.
-- Withdrawals remain in the vault until D2SSharp confirms destination placement.
-- Save backups must succeed before a transfer begins.
-- Ambiguous failures preserve the vault entry and may produce a recoverable duplicate rather than risk item loss.
-
-### Legacy migration
-
-On the first server start with an existing `infinite_stash_vault.json`, migration validates the complete document and imports it in one SQLite transaction. Duplicate IDs or malformed entries abort the migration. The source JSON remains untouched, and an additional copy plus `migration-report.json` is stored under `backups/vault-legacy-migration_<timestamp>/`.
+See [LICENSE](LICENSE).
