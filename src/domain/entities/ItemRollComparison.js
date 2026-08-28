@@ -1,9 +1,63 @@
+import { getItemSlotCategory } from './VaultCatalog.js';
+
 const ATTRIBUTE_SOURCES = [
   'displayed_combined_magic_attributes',
   'displayed_magic_attributes',
   'combined_magic_attributes',
   'magic_attributes',
 ];
+
+const ARMOR_SLOTS = new Set(['Armor', 'Head', 'Torso', 'Gloves', 'Boots', 'Belt', 'Shield']);
+
+function isArmor(item = {}) {
+  return ARMOR_SLOTS.has(getItemSlotCategory(item));
+}
+
+function isWeapon(item = {}) {
+  return getItemSlotCategory(item) === 'Weapon';
+}
+
+function isEnhancedDamageAttribute(attribute = {}) {
+  return [17, 18, 25].includes(Number(attribute.id));
+}
+
+function numericField(item, names) {
+  for (const name of names) {
+    const value = Number(item?.[name]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function findScalarAttribute(item, ids) {
+  return getVisibleItemAttributes(item).find(attribute => ids.includes(Number(attribute?.id))) || null;
+}
+
+// The parser's defense field is the base defense for an armor item. Keep
+// aliases here for imported/legacy records that preserve the field name.
+export function getTotalDefense(item = {}) {
+  if (!isArmor(item)) return null;
+  const base = numericField(item, ['base_defense', 'baseDefense', 'defense_base', 'defense_rating', 'defense']);
+  if (base == null) return null;
+  const enhanced = findScalarAttribute(item, [16]);
+  const enhancedValue = enhanced && scalarValue(enhanced);
+  return Math.round(base * (1 + (enhancedValue ?? 0) / 100));
+}
+
+export function getDerivedComparisonAttributes(item = {}) {
+  const totalDefense = getTotalDefense(item);
+  return totalDefense == null ? [] : [{
+    id: 'total_defense',
+    name: 'total_defense',
+    values: [totalDefense],
+    description: `Total Defense: ${totalDefense}`,
+    derived: true,
+  }];
+}
+
+function getComparisonAttributes(item = {}) {
+  return [...getVisibleItemAttributes(item), ...getDerivedComparisonAttributes(item)];
+}
 
 export function getVisibleItemAttributes(item = {}) {
   const attributes = ATTRIBUTE_SOURCES.map(key => item[key]).find(Array.isArray) || [];
@@ -57,7 +111,12 @@ export function compareItemStat(attribute, peerItems = []) {
   const key = statKey(attribute);
   const value = scalarValue(attribute);
   if (!key || value == null) return null;
-  const values = peerItems.flatMap(item => getVisibleItemAttributes(item)
+  if (isEnhancedDamageAttribute(attribute) && attribute.itemType && !isWeapon({ type: attribute.itemType })) return null;
+  const derived = attribute.derived === true || key.startsWith('total_defense:');
+  const peers = derived
+    ? peerItems.filter(item => item?.type === attribute.itemType && isArmor(item))
+    : peerItems;
+  const values = peers.flatMap(item => getComparisonAttributes(item)
     .filter(peer => statKey(peer) === key).map(scalarValue).filter(peerValue => peerValue != null));
   if (values.length < 2) return null;
   const best = lowerIsBetter(attribute) ? Math.min(...values) : Math.max(...values);
@@ -65,6 +124,14 @@ export function compareItemStat(attribute, peerItems = []) {
 }
 
 export function summarizeItemComparison(item, peerItems = []) {
-  const comparisons = getVisibleItemAttributes(item).map(attribute => compareItemStat(attribute, peerItems)).filter(Boolean);
+  const attributes = getComparisonAttributes(item)
+    .filter(attribute => !isEnhancedDamageAttribute(attribute) || isWeapon(item))
+    .map(attribute => ({ ...attribute, itemType: item?.type }));
+  const comparablePeers = peerItems.filter(peer => peer?.type === item?.type);
+  const comparisons = attributes.map(attribute => compareItemStat(attribute, comparablePeers)).filter(Boolean);
   return { comparableCount: comparisons.length, bestCount: comparisons.filter(comparison => comparison.isBest).length };
+}
+
+export function compareItemDerivedStat(attribute, item, peerItems = []) {
+  return compareItemStat({ ...attribute, itemType: item?.type, derived: true }, peerItems);
 }
