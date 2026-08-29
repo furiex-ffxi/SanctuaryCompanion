@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "npm run test:node && npm run test:react && npm run test:worker",
+    "test": "npm run test:node && npm run test:react && npm run test:worker && npm run test:browser",
     "test:node": "node --test tests/item-display.test.js src/utils/tooltipPosition.test.js tests/unit/*.test.js tests/search/*.test.js tests/vault/*.test.js",
-    "dev": "vite",
+    "dev": "node scripts/start-dev.mjs",
     "build": "vite build",
     "replay:vault": "node scripts/replay-vault-backup.mjs",
     "lint": "oxlint",
@@ -14,8 +14,11 @@
     "test:search": "node --test tests/search/*.test.js",
     "test:unit": "node --test tests/unit/*.test.js",
     "test:react": "vitest run tests/react",
+    "test:browser": "node scripts/test-browser.mjs",
     "test:worker": "node scripts/build-d2r-worker.mjs && vitest run tests/integration",
     "test:images": "node scripts/test-item-images.mjs",
+    "analyze:tz": "node scripts/tz-reverse-engineer.mjs",
+    "analyze:tz-static": "node scripts/tz-static-analyze.mjs",
     "preview": "vite preview",
     "postinstall": "patch-package"
   },

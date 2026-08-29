@@ -10,7 +10,20 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
   const { data: schedule, isLoading } = useQuery({
     queryKey: ['tzSchedule'],
     queryFn: async () => {
-      const res = await fetch('/data/tz-2023-localized.json');
+      let res;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      try {
+        res = await fetch('/__tz_schedule', { signal: controller.signal });
+      } catch {
+        // Fall back to the static asset if the development middleware is absent
+        // or unavailable during server startup.
+      } finally {
+        clearTimeout(timeout);
+      }
+      // Keep static preview/deployment builds compatible when the dev middleware
+      // is not available.
+      if (!res?.ok) res = await fetch('/data/tz-2023-localized.json');
       if (!res.ok) throw new Error('Failed to load schedule');
       return res.json();
     }

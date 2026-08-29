@@ -58,17 +58,61 @@ function d2sWatcherPlugin() {
       server.middlewares.use(transferTimingMiddleware)
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
+      const itemAssetCache = new Map()
+      const missingItemAssets = new Set()
+      let compactTzSchedulePromise
 
       // Proprietary D2R artwork is opt-in and served only from a local cache.
-      server.middlewares.use('/__d2r_item_image', (req, res) => {
+      server.middlewares.use('/__d2r_item_image', async (req, res) => {
         if (!ITEM_ASSET_DIR) { res.writeHead(404); res.end(); return }
         const relative = decodeURIComponent(new URL(req.url, 'http://localhost').pathname).replace(/^\/+/, '')
         if (!/^[A-Za-z0-9._@-]+\.(?:png|svg)$/.test(relative)) { res.writeHead(400); res.end('invalid item asset'); return }
         const fullPath = path.resolve(ITEM_ASSET_DIR, relative)
         if (fullPath !== ITEM_ASSET_DIR && !fullPath.startsWith(ITEM_ASSET_DIR + path.sep)) { res.writeHead(403); res.end(); return }
-        if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) { res.writeHead(404); res.end(); return }
-        res.writeHead(200, { 'Content-Type': relative.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': 'private, max-age=3600' })
-        res.end(fs.readFileSync(fullPath))
+        if (missingItemAssets.has(relative)) {
+          res.writeHead(404, { 'Cache-Control': 'private, max-age=60' }); res.end(); return
+        }
+        let asset = itemAssetCache.get(relative)
+        if (!asset) {
+          try {
+            asset = await fs.promises.readFile(fullPath)
+            itemAssetCache.set(relative, asset)
+          } catch (err) {
+            if (err.code === 'ENOENT' || err.code === 'EISDIR') missingItemAssets.add(relative)
+            res.writeHead(404, { 'Cache-Control': 'private, max-age=60' }); res.end(); return
+          }
+        }
+        res.writeHead(200, {
+          'Content-Type': relative.endsWith('.svg') ? 'image/svg+xml' : 'image/png',
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        })
+        res.end(asset)
+      })
+
+      // The source schedule contains localization and metadata that the UI does not
+      // use. Keep that parsing server-side and send only the date and English zone.
+      server.middlewares.use('/__tz_schedule', async (_req, res) => {
+        try {
+          if (!compactTzSchedulePromise) {
+            compactTzSchedulePromise = fs.promises.readFile(
+              path.resolve('public/data/tz-2023-localized.json'),
+              'utf8'
+            ).then((text) => JSON.stringify(JSON.parse(text.replace(/^\uFEFF/, '')).map((item) => ({
+              datetime: item.datetime,
+              zone: { enUS: item.zone?.enUS || '' }
+            }))))
+          }
+          const scheduleJson = await compactTzSchedulePromise
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'private, max-age=3600'
+          })
+          res.end(scheduleJson)
+        } catch (err) {
+          compactTzSchedulePromise = undefined
+          res.writeHead(500, { 'Content-Type': 'text/plain' })
+          res.end(`Failed to load schedule: ${err.message}`)
+        }
       })
 
       const vaultRepository = registerVaultRoutes(server, { savesDir: SAVES_DIR })

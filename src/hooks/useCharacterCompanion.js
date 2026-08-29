@@ -5,7 +5,7 @@ import { STORAGE_META } from '../domain/entities/Item';
 
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { emitToast } from './useToasts';
-import { getItemDisplayName } from '../components/ItemSprite';
+import { getItemDisplayName } from '../domain/entities/ItemDisplay.js';
 
 import { useUIStore } from '../stores/useUIStore';
 

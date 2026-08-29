@@ -1,5 +1,8 @@
 import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
+import { getVaultCategory } from '../../src/domain/entities/VaultProjection.js'
 import { canonicalizeUniqueName } from './itemImageResolver.js'
+
+export { getVaultCategory } from '../../src/domain/entities/VaultProjection.js'
 
 function normalizeText(value) {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -36,17 +39,6 @@ export function getItemSocketCount(item = {}) {
   const total = Number(item.total_nr_of_sockets)
   if (Number.isFinite(total) && total >= 0) return total
   return Array.isArray(item.socketed_items) ? item.socketed_items.length : 0
-}
-
-export function getVaultCategory(item, slot = getVaultItemSlot(item)) {
-  if (item.set_name) return 'Set Items'
-  if (Number(item.quality) === 7) return 'Unique Items'
-  if (['Ring', 'Amulet'].includes(slot)) return 'Rings & Amulets'
-  if (['Rune', 'Gem'].includes(slot)) return 'Runes & Gems'
-  if (slot.includes('Charm')) return 'Charms'
-  if (['Torso', 'Head', 'Gloves', 'Boots', 'Belt', 'Shield', 'Armor'].includes(slot)) return 'Armor'
-  if (slot === 'Weapon') return 'Weapons'
-  return 'Other / Misc'
 }
 
 export function projectVaultEntry(entry) {

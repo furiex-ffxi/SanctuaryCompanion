@@ -62,52 +62,13 @@ export const getItemSocketCount = (item = {}) => {
 };
 
 
-import { constants as constants99 } from '../domain/entities/static_constant_data.js';
-
 export const getBaseTypeName = (type) => getItemTypeDisplayName({ type, type_name: type });
-
-export const getItemDisplayName = (item) => {
-  if (!item) return '';
-  if (item.runeword_name) return item.runeword_name;
-
-  const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
-    ? getItemTypeDisplayName(item)
-    : null;
-  const baseType = typeName || getFriendlyBaseName(item) || getBaseTypeName(item.type) || 'Item';
-
-  // D2R set items carry both the individual piece name (unique_name) and the
-  // set/family name (set_name). The piece name is what the game shows as the
-  // item's primary name; combining the family with an internal type code made
-  // labels such as "Trang-Oul's Avatar uh9".
-  if (item.quality === 5 && item.unique_name) return item.unique_name;
-  if (item.quality === 5 && item.set_name) return item.set_name;
-  if (item.quality === 7 && item.unique_name) return item.unique_name;
-  if (item.unique_name) return item.unique_name;
-  if (item.set_name) return item.set_name;
-  
-  const rare = [item.rare_name, item.rare_name2].filter(Boolean).join(' ');
-  if (rare) return rare;
-
-  const prefix = item.magic_prefix_name || '';
-  const suffix = item.magic_suffix_name || '';
-
-  if (prefix && suffix) {
-    return `${prefix} ${baseType} ${suffix}`;
-  }
-  if (prefix) {
-    return `${prefix} ${baseType}`;
-  }
-  if (suffix) {
-    return `${baseType} ${suffix}`;
-  }
-
-  return baseType;
-};
-
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
 import WORLDSTONE_SHARD_DATA_URLS from './worldstoneShardAssets.js';
-import { getFriendlyBaseName, getItemTypeDisplayName, isItemEthereal } from '../domain/entities/ItemDisplay.js';
+import { getItemDisplayName, getItemTypeDisplayName, isItemEthereal } from '../domain/entities/ItemDisplay.js';
+
+export { getItemDisplayName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);

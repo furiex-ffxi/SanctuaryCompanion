@@ -68,10 +68,21 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
   if (migration.migrated) console.log(`Migrated ${migration.count} Infinite Stash items to SQLite`)
 
   let mutationQueue = Promise.resolve()
+  const rehydrationInFlight = new Set()
   const enqueue = (operation) => {
     const pending = mutationQueue.then(operation, operation)
     mutationQueue = pending.catch(() => {})
     return pending
+  }
+  const scheduleVaultRehydration = (entries) => {
+    const stale = entries.filter((entry) => (
+      needsVaultItemRehydration(entry.itemData) && !rehydrationInFlight.has(entry.vaultId)
+    ))
+    if (!stale.length) return
+    stale.forEach((entry) => rehydrationInFlight.add(entry.vaultId))
+    enqueue(() => rehydrateVaultEntries(vault, stale, rehydrateItem))
+      .catch((error) => console.error('Background vault item rehydration failed:', error.message))
+      .finally(() => stale.forEach((entry) => rehydrationInFlight.delete(entry.vaultId)))
   }
   const requireUnlocked = () => {
     if (processCheck()) {
@@ -98,7 +109,9 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
           direction: url.searchParams.has('direction') ? url.searchParams.get('direction') : undefined,
           status: url.searchParams.get('status') || 'active'
         })
-        result.items = await enqueue(() => rehydrateVaultEntries(vault, result.items, rehydrateItem))
+        // Return the page immediately. Legacy stat display repair invokes the
+        // worker and can take seconds per item; it must not block pagination.
+        scheduleVaultRehydration(result.items)
         return sendJson(res, 200, result)
       }
       if (req.method === 'GET' && url.pathname === '/__vault/count') return sendJson(res, 200, { total: vault.count() })

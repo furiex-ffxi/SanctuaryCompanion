@@ -69,6 +69,8 @@ npm run lint
 npm test
 ```
 
+`npm test` includes a production-browser smoke test. If Chrome is not installed locally, run `npx puppeteer browsers install chrome` first (or set `PUPPETEER_EXECUTABLE_PATH`).
+
 The worker integration tests use isolated copies of save fixtures and clean up their temporary directories after each run. See the [architecture notes](docs/architecture.md) for the full validation matrix.
 
 ## License
