@@ -7,6 +7,7 @@
     "test": "npm run test:node && npm run test:react && npm run test:worker && npm run test:browser",
     "test:node": "node --test tests/item-display.test.js src/utils/tooltipPosition.test.js tests/unit/*.test.js tests/search/*.test.js tests/vault/*.test.js",
     "dev": "node scripts/start-dev.mjs",
+    "cleanup:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/cleanup-dev.ps1",
     "build": "vite build",
     "replay:vault": "node scripts/replay-vault-backup.mjs",
     "lint": "oxlint",
