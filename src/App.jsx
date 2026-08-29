@@ -197,7 +197,8 @@ function MainContent() {
         ? 'That Shared Stash search result is stale; the item is no longer in the save.'
         : `Shared Stash: ${result.preview.displayName} is on Tab ${(result.pageIndex ?? 0) + 1}.`, stale ? 'error' : 'info');
     } else {
-      await focusVaultItem?.(result.vaultId);
+      const { q = '', category = 'All', slot = 'All', setName = 'All', quality = 'All', minLevel = '', maxLevel = '' } = useUIStore.getState().itemSearchDraft || {};
+      await focusVaultItem?.(result.vaultId, { q, category, slot, setName, quality, minLevel, maxLevel, status: 'available' });
       setMainTab('stash');
       window.history.pushState(null, '', '#infinite-stash');
     }

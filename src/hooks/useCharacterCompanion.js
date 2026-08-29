@@ -71,7 +71,7 @@ export function useCharacterCompanion() {
   const queryClient = useQueryClient();
 
   const queryVault = useCallback(async (filters = {}) => {
-    setVaultFilters(filters);
+    setVaultFilters(current => ({ ...(current || {}), ...filters }));
   }, []);
 
   const loadMoreVault = useCallback(() => {
@@ -81,7 +81,11 @@ export function useCharacterCompanion() {
     return Promise.resolve();
   }, [hasNextPage, vaultLoading, fetchNextPage]);
 
-  const focusVaultItem = useCallback(async (vaultId) => {
+  const focusVaultItem = useCallback(async (vaultId, filters = {}) => {
+    if (Object.keys(filters).length > 0) {
+      setVaultFilters(current => ({ ...(current || {}), ...filters }));
+      return false;
+    }
     let pages = vaultData?.pages || [];
     if (pages.some(page => page.items?.some(item => item.vaultId === vaultId))) return true;
     while (pages.at(-1)?.nextCursor) {

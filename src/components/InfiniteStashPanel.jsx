@@ -85,6 +85,16 @@ export function InfiniteStashPanel({
     return () => observer.disconnect();
   }, [vaultNextCursor, vaultLoading, onLoadMore]);
 
+  useEffect(() => {
+    if (!highlightIdentity?.vaultId || !listBodyRef.current) return;
+    const index = vaultItems.findIndex(entry => entry.vaultId === highlightIdentity.vaultId);
+    if (index < 0) return;
+    const targetTop = index * VIRTUAL_ROW_HEIGHT;
+    listBodyRef.current.scrollTop = targetTop;
+    listScrollTopRef.current = targetTop;
+    setListScrollTop(targetTop);
+  }, [highlightIdentity, vaultItems]);
+
   const handleRemove = async (vaultId) => {
     if (isGameRunning) {
       alert('Cannot update the vault while Diablo II: Resurrected is running.');
