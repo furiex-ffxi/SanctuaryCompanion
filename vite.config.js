@@ -56,6 +56,41 @@ function d2sWatcherPlugin() {
 
     configureServer(server) {
       server.middlewares.use(transferTimingMiddleware)
+      // A file write must include the read, placement calculation, worker
+      // write, atomic swap, and verification as one critical section. Without
+      // this lock, rapid multi-item withdrawals can all read the same file and
+      // then overwrite one another with stale snapshots.
+      const transferMutationPaths = new Set([
+        '/__d2s_backup',
+        '/__d2i_remove_item',
+        '/__d2s_remove_item',
+        '/__d2i_add_item',
+        '/__d2s_add_item',
+        '/__d2s_restore',
+      ])
+      let transferMutationQueue = Promise.resolve()
+      server.middlewares.use((req, res, next) => {
+        const pathName = req.url?.split('?')[0] || ''
+        if (!transferMutationPaths.has(pathName)) return next()
+
+        let release
+        const previous = transferMutationQueue
+        transferMutationQueue = new Promise(resolve => { release = resolve })
+        previous.then(() => {
+          let released = false
+          const unlock = () => {
+            if (released) return
+            released = true
+            release()
+          }
+          res.once('finish', unlock)
+          res.once('close', unlock)
+          next()
+        }, () => {
+          release()
+          next()
+        })
+      })
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
       const itemAssetCache = new Map()
