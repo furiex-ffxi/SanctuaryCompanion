@@ -23,7 +23,18 @@ jobs:
         shell: pwsh
         run: |
           $lock = Get-Content D2SSharp.lock.json -Raw | ConvertFrom-Json
-          "repository=$($lock.repository)" >> $env:GITHUB_OUTPUT
+          $repository = ([string]$lock.repository).Trim()
+          if ($repository -match '^https://github\.com/(.+?)/?$') {
+            $repository = $Matches[1]
+          }
+          $repository = $repository.TrimEnd('/')
+          if ($repository.EndsWith('.git')) {
+            $repository = $repository.Substring(0, $repository.Length - 4)
+          }
+          if ($repository -notmatch '^[^/]+/[^/]+$') {
+            throw "D2SSharp.lock.json repository must be owner/repo or a GitHub HTTPS URL; got '$repository'"
+          }
+          "repository=$repository" >> $env:GITHUB_OUTPUT
           "commit=$($lock.commit)" >> $env:GITHUB_OUTPUT
       - name: Checkout pinned D2SSharp source
         uses: actions/checkout@v4
