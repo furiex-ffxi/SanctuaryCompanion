@@ -112,7 +112,7 @@ function applyIntent(db, intent, status = null) {
     .run(intent.operationId, intent.operation, timestamp)
 }
 
-export function replayVaultEpoch(epochDirectory, destinationPath) {
+export function replayVaultEpoch(epochDirectory, destinationPath, { maxSequence = Infinity } = {}) {
   const checkpointPath = path.join(epochDirectory, 'checkpoint.sqlite3')
   const journalPath = path.join(epochDirectory, 'transactions.jsonl')
   if (!fs.existsSync(checkpointPath)) throw new Error('Vault checkpoint is missing')
@@ -121,19 +121,20 @@ export function replayVaultEpoch(epochDirectory, destinationPath) {
   fs.copyFileSync(checkpointPath, destinationPath)
 
   const journal = readVaultJournal(journalPath)
+  const selectedRecords = journal.records.filter(record => record.sequence <= maxSequence)
   const db = new Database(destinationPath)
   try {
     const initialIntegrity = db.pragma('integrity_check', { simple: true })
     if (initialIntegrity !== 'ok') throw new Error(`Checkpoint integrity check failed: ${initialIntegrity}`)
-    const intents = new Map(journal.records.filter((record) => record.phase === 'intent').map((record) => [record.operationId, record]))
-    const commits = journal.records.filter((record) => record.phase === 'commit')
+    const intents = new Map(selectedRecords.filter((record) => record.phase === 'intent').map((record) => [record.operationId, record]))
+    const commits = selectedRecords.filter((record) => record.phase === 'commit')
     const replay = db.transaction(() => {
       for (const commit of commits) {
         const intent = intents.get(commit.operationId)
         if (!intent) throw new Error(`Commit ${commit.operationId} has no matching intent`)
         applyIntent(db, intent)
       }
-      for (const intent of journal.unresolved) applyIntent(db, intent, 'recovery_needed')
+      for (const intent of journal.unresolved.filter(record => record.sequence <= maxSequence)) applyIntent(db, intent, 'recovery_needed')
     })
     replay()
     const finalIntegrity = db.pragma('integrity_check', { simple: true })

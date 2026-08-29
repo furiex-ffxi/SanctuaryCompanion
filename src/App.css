@@ -1604,6 +1604,12 @@ header {
   padding: 10px 0;
 }
 
+.backup-restore-control { position: relative; }
+.backup-restore-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 10001; width: min(420px, 88vw); display: grid; gap: 8px; padding: 14px; background: #15120d; border: 1px solid #8b6b2f; border-radius: 6px; box-shadow: 0 10px 28px #000c; color: #ddd; }
+.backup-restore-menu p, .backup-restore-menu small { color: #aaa; font-size: .8rem; margin: 0; }
+.backup-restore-menu select { background: #0e0a07; border: 1px solid var(--color-border-dim); color: var(--color-border-gold); padding: 7px; }
+.backup-restore-warning { color: #ff7777 !important; }
+
 .col-added {
   min-width: 0;
 }

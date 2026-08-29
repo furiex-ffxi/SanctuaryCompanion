@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { projectVaultEntry } from './vaultProjection.js'
 import { normalizeVaultItem } from './itemImageResolver.js'
+import { replayVaultEpoch } from './VaultRecovery.js'
 
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { eq, and, desc, asc, sql, inArray } from 'drizzle-orm'
@@ -45,7 +46,10 @@ function normalizeListOptions(options = {}) {
     error.statusCode = 400
     throw error
   }
-  const statuses = [...new Set((Array.isArray(options.statuses) ? options.statuses : [options.status || 'active']).map(String))].sort()
+  const requestedStatuses = options.status === 'available'
+    ? ['active', 'pending_deposit', 'pending_withdraw']
+    : (Array.isArray(options.statuses) ? options.statuses : [options.status || 'active'])
+  const statuses = [...new Set(requestedStatuses.map(String))].sort()
   if (!statuses.length || statuses.some(status => !VAULT_STATUSES.includes(status))) {
     const error = new Error('Unsupported vault status')
     error.statusCode = 400
@@ -400,6 +404,35 @@ export class VaultRepository {
   async forceCheckpoint() {
     this.epoch = null
     return this.ensureCheckpoint()
+  }
+
+  async getRecoveryReference() {
+    const epoch = await this.ensureCheckpoint()
+    return { epochId: epoch.epochId, sequence: epoch.sequence }
+  }
+
+  async restoreRecoveryReference(reference) {
+    if (!reference?.epochId || !Number.isInteger(reference.sequence) || reference.sequence < 0) throw new Error('Invalid vault recovery reference')
+    const epochDirectory = path.join(this.backupsRoot, reference.epochId)
+    if (!fs.existsSync(path.join(epochDirectory, 'checkpoint.sqlite3'))) throw new Error('Vault checkpoint for snapshot not found')
+    const token = crypto.randomUUID()
+    const restorePath = `${this.databasePath}.restore-${token}`
+    const safetyPath = path.join(this.backupsRoot, `restore-before-${timestampForPath(this.now())}_${token}`, 'checkpoint.sqlite3')
+    fs.mkdirSync(path.dirname(safetyPath), { recursive: true })
+    await this.db.backup(safetyPath)
+    replayVaultEpoch(epochDirectory, restorePath, { maxSequence: reference.sequence })
+    this.db.close()
+    for (const suffix of ['', '-wal', '-shm']) fs.rmSync(this.databasePath + suffix, { force: true })
+    fs.renameSync(restorePath, this.databasePath)
+    this.db = new Database(this.databasePath)
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('synchronous = FULL')
+    this.db.pragma('foreign_keys = ON')
+    this.db.pragma('busy_timeout = 5000')
+    this.orm = drizzle(this.db, { schema })
+    this.cursorSecret = this.orm.select({ value: schema.vaultMetadata.value }).from(schema.vaultMetadata).where(eq(schema.vaultMetadata.key, 'cursor_hmac_secret')).get()?.value || null
+    this.epoch = null
+    return { safetyPath, reference }
   }
 
   #appendJournal(record) {
