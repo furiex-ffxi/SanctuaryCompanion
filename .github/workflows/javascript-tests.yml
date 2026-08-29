@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   D2R_SHARP_ROOT: ${{ github.workspace }}/D2SSharp
   D2R_FIXTURES_ROOT: ${{ github.workspace }}/D2SSharp/src/D2SSharp.Tests/Resources/105
@@ -12,13 +15,32 @@ env:
 jobs:
   test:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Read pinned D2SSharp commit
+        id: d2r-lock
+        shell: pwsh
+        run: |
+          $lock = Get-Content D2SSharp.lock.json -Raw | ConvertFrom-Json
+          $repository = ([string]$lock.repository).Trim()
+          if ($repository -match '^https://github\.com/(.+?)/?$') {
+            $repository = $Matches[1]
+          }
+          $repository = $repository.TrimEnd('/')
+          if ($repository.EndsWith('.git')) {
+            $repository = $repository.Substring(0, $repository.Length - 4)
+          }
+          if ($repository -notmatch '^[^/]+/[^/]+$') {
+            throw "D2SSharp.lock.json repository must be owner/repo or a GitHub HTTPS URL; got '$repository'"
+          }
+          "repository=$repository" >> $env:GITHUB_OUTPUT
+          "commit=$($lock.commit)" >> $env:GITHUB_OUTPUT
       - name: Checkout pinned D2SSharp source
         uses: actions/checkout@v4
         with:
-          repository: ResurrectedTrader/D2SSharp
-          ref: f26f21897db5c0075e74defca1e31d1930080750
+          repository: ${{ steps.d2r-lock.outputs.repository }}
+          ref: ${{ steps.d2r-lock.outputs.commit }}
           path: D2SSharp
       - uses: actions/setup-node@v4
         with:
@@ -28,4 +50,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: npm ci
+      - name: Install Chrome for browser smoke tests
+        run: npx puppeteer browsers install chrome
+      - run: npm run lint
+      - run: npm run build
       - run: npm test

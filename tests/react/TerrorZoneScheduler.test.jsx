@@ -21,7 +21,7 @@ describe('TerrorZoneScheduler', () => {
     vi.clearAllMocks();
     localStorage.clear();
     global.fetch = vi.fn((url) => {
-      if (url.includes('tz-2023-localized.json')) {
+      if (url.includes('__tz_schedule')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockSchedule)

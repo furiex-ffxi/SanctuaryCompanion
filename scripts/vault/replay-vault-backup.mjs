@@ -1,6 +1,6 @@
 import path from 'node:path'
 import process from 'node:process'
-import { replayVaultEpoch } from '../server/vault/VaultRecovery.js'
+import { replayVaultEpoch } from '../../server/vault/VaultRecovery.js'
 
 const epochDirectory = process.argv[2] ? path.resolve(process.argv[2]) : null
 if (!epochDirectory) {

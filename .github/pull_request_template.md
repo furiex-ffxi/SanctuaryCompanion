@@ -21,5 +21,9 @@
 
 ## Checklist
 - [ ] Tests pass locally
-- [ ] Documentation updated
+- [ ] `npm run lint` passes
+- [ ] `npm run build` passes
+- [ ] `npm run test:browser` passes
+- [ ] Documentation updated, or N/A — not needed
+- [ ] Screenshots updated when the UI changes, or N/A — not needed
 - [ ] Self-reviewed the code

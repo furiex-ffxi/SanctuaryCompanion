@@ -58,6 +58,28 @@ export function getItemTypeDisplayName(item = {}) {
   return getFriendlyBaseName(item);
 }
 
+export function getItemDisplayName(item) {
+  if (!item) return '';
+  if (item.runeword_name) return item.runeword_name;
+  const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
+    ? getItemTypeDisplayName(item)
+    : null;
+  const baseType = typeName || getFriendlyBaseName(item) || 'Item';
+  if (item.quality === 5 && item.unique_name) return item.unique_name;
+  if (item.quality === 5 && item.set_name) return item.set_name;
+  if (item.quality === 7 && item.unique_name) return item.unique_name;
+  if (item.unique_name) return item.unique_name;
+  if (item.set_name) return item.set_name;
+  const rare = [item.rare_name, item.rare_name2].filter(Boolean).join(' ');
+  if (rare) return rare;
+  const prefix = item.magic_prefix_name || '';
+  const suffix = item.magic_suffix_name || '';
+  if (prefix && suffix) return `${prefix} ${baseType} ${suffix}`;
+  if (prefix) return `${prefix} ${baseType}`;
+  if (suffix) return `${baseType} ${suffix}`;
+  return baseType;
+}
+
 export function formatStat(attribute = {}) {
   const numericId = Number(attribute?.id);
   const values = Array.isArray(attribute.values) ? attribute.values.map(Number) : [];

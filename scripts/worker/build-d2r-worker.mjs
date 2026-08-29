@@ -4,7 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const repoRoot = path.resolve(import.meta.dirname, '..');
+const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const d2rSharpRoot = process.env.D2R_SHARP_ROOT || path.resolve(repoRoot, '..', 'D2SSharp');
 const lock = JSON.parse(await readFile(path.join(repoRoot, 'D2SSharp.lock.json'), 'utf8'));
 const { stdout } = await execFileAsync('git', ['-C', d2rSharpRoot, 'rev-parse', 'HEAD']);

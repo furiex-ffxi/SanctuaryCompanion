@@ -131,7 +131,8 @@ test('rehydrates a legacy vault page through the worker contract and journals it
 
   try {
     const first = await fetch(origin + '/__vault/items').then((response) => response.json())
-    assert.equal(first.items[0].itemData.displayed_combined_magic_attributes[0].description, 'Adds 25 poison damage over 5 seconds')
+    assert.equal(first.items[0].itemData.displayed_combined_magic_attributes[0].description, '%+d poison damage over 25 seconds')
+    for (let attempt = 0; attempt < 50 && calls === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 10))
     assert.equal(repository.get('legacy-ring').itemData.stat_display_version, 1)
     assert.equal(calls, 1)
 

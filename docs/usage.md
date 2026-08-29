@@ -44,7 +44,7 @@ If a transfer reports an ambiguous failure, keep the vault entry and review the 
 Game artwork is not bundled because the extracted assets do not have a redistribution license. To use artwork privately, run:
 
 ```powershell
-python scripts/extract-d2r-item-assets.py
+python scripts/assets/extract-d2r-item-assets.py
 npm run dev
 ```
 
@@ -56,4 +56,4 @@ The default cache is `.d2r-item-assets/`. You can choose another local cache wit
 - **No character appears:** verify that the save is a `.d2s` file in the configured save directory, or upload it with **Browse...**.
 - **Shared stash is empty:** choose the correct `.d2i` variant or upload the file directly.
 - **Missing item images:** install the optional private artwork cache; parsing and item management still work without it.
-- **Worker errors:** verify the sibling D2SSharp checkout and pinned commit, then rebuild the worker with `scripts/build-d2r-worker.ps1`.
+- **Worker errors:** verify the sibling D2SSharp checkout and pinned commit, then rebuild the worker with `scripts/worker/build-d2r-worker.ps1`.

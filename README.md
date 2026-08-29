@@ -51,7 +51,7 @@ Before moving items, exit D2R to unlock save mutations. On first use, select a c
 To enable private local item artwork, run:
 
 ```powershell
-python scripts/extract-d2r-item-assets.py
+python scripts/assets/extract-d2r-item-assets.py
 ```
 
 The artwork cache is intentionally ignored by Git and should not be redistributed.
@@ -68,6 +68,10 @@ npm run build
 npm run lint
 npm test
 ```
+
+`npm test` includes a production-browser smoke test. If Chrome is not installed locally, run `npx puppeteer browsers install chrome` first (or set `PUPPETEER_EXECUTABLE_PATH`).
+
+If an interrupted dev server or test run leaves local processes behind, run `npm run cleanup:dev` before restarting the app. It only targets this repository's Node processes and port 5173.
 
 The worker integration tests use isolated copies of save fixtures and clean up their temporary directories after each run. See the [architecture notes](docs/architecture.md) for the full validation matrix.
 

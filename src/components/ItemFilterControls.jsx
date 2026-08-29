@@ -1,15 +1,17 @@
 import React, { useState } from 'react'
-import { projectVaultEntry } from '../../server/vault/vaultProjection.js'
+import { getItemSlotCategory } from '../domain/entities/VaultCatalog.js'
+import { getVaultCategory } from '../domain/entities/VaultProjection.js'
 
 export const EMPTY_ITEM_FILTERS = Object.freeze({ q: '', category: 'All', slot: 'All', setName: 'All', quality: 'All', minLevel: '', maxLevel: '' })
 
 export function getItemFilterFacets(items = []) {
   const values = { categories: new Set(), slots: new Set(), sets: new Set() }
   for (const item of items) {
-    const projection = projectVaultEntry({ itemData: item })
-    if (projection.category) values.categories.add(projection.category)
-    if (projection.slot) values.slots.add(projection.slot)
-    if (projection.setName) values.sets.add(projection.setName)
+    const slot = getItemSlotCategory(item)
+    const category = getVaultCategory(item, slot)
+    if (category) values.categories.add(category)
+    if (slot) values.slots.add(slot)
+    if (item.set_name) values.sets.add(item.set_name)
   }
   return Object.fromEntries(Object.entries(values).map(([key, set]) => [key, [...set].sort()]))
 }
