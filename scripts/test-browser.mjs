@@ -70,7 +70,7 @@ try {
     })
     page.on('requestfailed', request => pageErrors.push(`Request failed: ${request.url()} (${request.failure()?.errorText || 'unknown error'})`))
 
-    const response = await page.goto(url, { waitUntil: 'commit', timeout: 30000 })
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     if (!response?.ok()) throw new Error(`Expected HTTP 2xx from ${url}, got ${response?.status()}`)
     await page.waitForSelector('#root > .app-container', { timeout: 10000 })
     if (pageErrors.length > 0) throw new Error(`Browser reported errors:\n${pageErrors.join('\n')}`)
