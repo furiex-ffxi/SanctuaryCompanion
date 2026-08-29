@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Continue'
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path.TrimEnd('\')
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path.TrimEnd('\')
 $currentProcessId = $PID
 $stopped = @()
 

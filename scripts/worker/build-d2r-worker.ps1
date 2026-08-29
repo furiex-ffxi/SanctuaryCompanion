@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $D2SSharpRoot) { $D2SSharpRoot = Join-Path (Split-Path -Parent $repoRoot) 'D2SSharp' }
 $lock = Get-Content (Join-Path $repoRoot 'D2SSharp.lock.json') -Raw | ConvertFrom-Json
 $resolvedLibraryRoot = (Resolve-Path $D2SSharpRoot).Path
