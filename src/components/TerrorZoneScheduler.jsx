@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 
 export function TerrorZoneScheduler({ onClose, addToast }) {
   const [selectedZone, setSelectedZone] = useState('');
   const [showRestoreHelp, setShowRestoreHelp] = useState(false);
   const [tzMaxTime, setTzMaxTime] = useState(() => parseInt(localStorage.getItem('tz_max_time') || '0', 10));
   const [mfTimerDir, setMfTimerDir] = useState(() => localStorage.getItem('mf_timer_dir') || '');
-  const queryClient = useQueryClient();
 
   const { data: schedule, isLoading } = useQuery({
     queryKey: ['tzSchedule'],
@@ -15,16 +14,6 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       if (!res.ok) throw new Error('Failed to load schedule');
       return res.json();
     }
-  });
-
-  const { data: timeStatus } = useQuery({
-    queryKey: ['windowsTimeStatus'],
-    queryFn: async () => {
-      const res = await fetch('/__d2r_set_time');
-      if (!res.ok) throw new Error('Failed to load Windows time status');
-      return res.json();
-    },
-    staleTime: 0,
   });
 
   const uniqueZones = React.useMemo(() => {
@@ -57,7 +46,6 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       setTzMaxTime(targetTime);
       localStorage.setItem('tz_max_time', targetTime.toString());
       addToast(`System time changed! ${selectedZone} is now active.`, 'success');
-      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     },
     onError: (err) => {
       addToast(`Failed to change time: ${err.message}`, 'error');
@@ -79,17 +67,15 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       localStorage.removeItem('tz_max_time');
       addToast('Clock restored and synced to present time.', 'success');
       setShowRestoreHelp(false);
-      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     },
     onError: (err) => {
       addToast(`Failed to restore time: ${err.message}`, 'error');
-      queryClient.invalidateQueries({ queryKey: ['windowsTimeStatus'] });
     }
   });
 
   const repairMutation = useMutation({
     mutationFn: async () => {
-      if (!mfTimerDir) throw new Error("Please enter your MF Timer folder path first.");
+      if (!mfTimerDir) throw new Error('Please enter your MF Timer folder path first.');
       const res = await fetch('/__mf_timer_repair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,25 +131,19 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           <br/><br/>
           To protect your save files, we ensure the clock only moves FORWARD into the future.
           <br/><br/>
-          <strong>Close MF Timer before the jump, reopen it after the clock is forward, and close it again before restoring the clock.</strong>{' '}
-          This keeps its time.time() clock from seeing a discontinuity.
+          <strong>Close MF Timer before changing the clock.</strong>{' '}
+          You can reopen it after the jump; close it again before restoring the clock.
         </p>
 
-        {timeStatus?.recoveryNeeded && (
-          <div className="game-running-warning-banner" role="alert">
-            A previous clock pin still needs recovery. Restore Windows time before starting another jump.
-          </div>
-        )}
-        
         <div className="form-group">
           <label>MF Timer folder</label>
-          <input 
-            type="text" 
-            value={mfTimerDir} 
-            onChange={e => setMfTimerDir(e.target.value)} 
+          <input
+            type="text"
+            value={mfTimerDir}
+            onChange={e => setMfTimerDir(e.target.value)}
             onBlur={handleMfTimerDirBlur}
-            placeholder="C:\\path\\to\\mf_timer" 
-            disabled={isWorking} 
+            placeholder="C:\\path\\to\\mf_timer"
+            disabled={isWorking}
           />
           <small>Saved on blur. Used to locate mf_config.ini and the active profile JSON.</small>
         </div>
@@ -211,15 +191,10 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           <div className="tz-restore-help">
             <h4>🔄 Safely Returning to Present Time</h4>
             <ol>
-              <li>Close MF Timer before the jump, then reopen it once the clock is forward.</li>
-              <li>Before restoring the clock, close MF Timer again. After restoring it, use Repair MF Timer if needed, then reopen it.</li>
-              <li>While you are <strong>IN-GAME</strong> with your character (standing in town), leave the game running.</li>
-              <li>Click the button below to sync your clock back to the present.</li>
-              <li>Return to D2R and click <strong>"Save and Exit"</strong>.</li>
+              <li>Close MF Timer before changing the clock, then reopen it after the jump if desired.</li>
+              <li>You can jump to another zone without restoring the clock first; each target must be in the future.</li>
+              <li>When you are finished, close MF Timer and click the button below to sync the clock back to the present.</li>
             </ol>
-            <p>
-              By saving <em>after</em> restoring the clock, you force D2R to create a brand-new save file with the present timestamp, avoiding any rollback issues.
-            </p>
             <button className="btn-d2r" style={{backgroundColor: '#800000'}} onClick={() => restoreMutation.mutate()} disabled={isWorking}>
               {restoreMutation.isPending ? 'Restoring...' : 'Restore Windows Clock to Present'}
             </button>

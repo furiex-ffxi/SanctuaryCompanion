@@ -37,11 +37,11 @@ function pinScript(safeDatetime) {
   return `$ErrorActionPreference = 'Stop'
 $service = Get-CimInstance Win32_Service -Filter "Name='W32Time'"
 if (-not $service) { throw 'W32Time service was not found' }
+$targetDate = [datetime]${quotePowerShell(safeDatetime)}
+if ($targetDate -le [DateTime]::Now) { throw 'Target datetime must be in the future' }
 if (Test-Path -LiteralPath ${statePath}) {
   try {
     $existingState = Get-Content -LiteralPath ${statePath} -Raw | ConvertFrom-Json
-    $stateAge = ([DateTime]::UtcNow - [DateTime]::Parse($existingState.PinnedAt)).TotalHours
-    if ($stateAge -gt 24 -or $stateAge -lt -1) { throw 'Existing W32Time state is stale; restore it before starting a new pin' }
   } catch {
     throw "Cannot safely reuse existing W32Time state: $($_.Exception.Message)"
   }
@@ -58,7 +58,7 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
   Start-Sleep -Milliseconds 100
 }
 if ((Get-Service -Name W32Time).Status -ne 'Stopped') { throw 'W32Time did not stop; clock was not changed' }
-Set-Date -Date ([datetime]${quotePowerShell(safeDatetime)})`;
+Set-Date -Date $targetDate`;
 }
 
 function restoreScript() {

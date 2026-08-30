@@ -78,8 +78,8 @@ function startSession() {
     }
     const helperScript = `& ${quotePowerShell(process.execPath)} ${quotePowerShell(path.resolve(HELPER_PATH))} --port ${quotePowerShell(address.port)} --token ${quotePowerShell(token)} --state-dir ${quotePowerShell(STATE_DIRECTORY)}`
     const encodedHelperScript = encodePowerShell(helperScript)
-    const command = `powershell -NoProfile -Command "$ErrorActionPreference = 'Stop'; Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList @('-NoProfile', '-EncodedCommand', '${encodedHelperScript}')"`
-    exec(command, error => { if (error && !socket) readyReject(error) })
+    const command = `powershell -NoProfile -WindowStyle Hidden -Command "$ErrorActionPreference = 'Stop'; Start-Process -FilePath powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList @('-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', '${encodedHelperScript}')"`
+    exec(command, { windowsHide: true }, error => { if (error && !socket) readyReject(error) })
   }
 
   server.listen(0, '127.0.0.1', launch)
@@ -98,12 +98,22 @@ function startSession() {
 }
 
 export async function runWithElevatedHelper({ operation, datetime }) {
-  if (!sessionPromise) sessionPromise = startSession().catch(error => { sessionPromise = null; throw error })
-  try {
-    const session = await sessionPromise
-    return await session.request(operation, datetime)
-  } catch (error) {
-    sessionPromise = null
-    throw error
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!sessionPromise) sessionPromise = startSession().catch(error => { sessionPromise = null; throw error })
+    const currentSessionPromise = sessionPromise
+    try {
+      const session = await currentSessionPromise
+      return await session.request(operation, datetime)
+    } catch (error) {
+      sessionPromise = null
+      // The helper can disconnect between the hello handshake and the first
+      // request. Reconnect once when no operation was sent; do not retry
+      // errors returned by PowerShell because those operations may have run.
+      if (attempt === 0 && error?.message === 'Elevated time helper is not connected') {
+        currentSessionPromise.then(session => session.close()).catch(() => {})
+        continue
+      }
+      throw error
+    }
   }
 }
