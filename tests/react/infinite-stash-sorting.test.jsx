@@ -110,6 +110,27 @@ describe('Infinite Stash sorting', () => {
     expect(screen.getByRole('button', { name: 'Sort by rarity' })).toHaveAttribute('aria-sort', 'ascending');
   });
 
+  test('applies Infinite Stash filters through the vault query', () => {
+    const onQuery = vi.fn(async () => {});
+    render(<InfiniteStashPanel {...props({
+      onQuery,
+      vaultFacets: { categories: ['Set Items'], slots: ['Boots'], sets: ["Natalya's Odium"] },
+    })} />);
+
+    fireEvent.change(screen.getByLabelText('Category:'), { target: { value: 'Set Items' } });
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
+      category: 'Set Items',
+      sort: 'dateAdded',
+      direction: 'desc',
+    }));
+
+    fireEvent.change(screen.getByLabelText('Search:'), { target: { value: 'natal' } });
+    expect(onQuery).toHaveBeenLastCalledWith(expect.objectContaining({
+      q: 'natal',
+      category: 'Set Items',
+    }));
+  });
+
   test('renders canonical rehydrated stat wording through the Infinite Stash tooltip path', async () => {
     render(<InfiniteStashPanel {...props({
       vaultTotal: 1,

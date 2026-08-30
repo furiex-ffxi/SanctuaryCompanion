@@ -558,6 +558,7 @@ export function useCharacterCompanion() {
     STORAGE_META,
     loadError,
     vaultItems,
+    vaultFilters,
     vaultTotal,
     vaultCount,
     vaultCountError,

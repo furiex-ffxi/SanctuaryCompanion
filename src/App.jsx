@@ -10,6 +10,7 @@ import { GlobalItemSearch } from './components/GlobalItemSearch';
 import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
 import { getItemFilterFacets } from './components/ItemFilterControls.jsx';
+import { BackupRestorePanel } from './components/BackupRestorePanel.jsx';
 
 
 import './App.css';
@@ -64,6 +65,7 @@ function MainContent() {
     handleFileUpload,
     STORAGE_META,
     vaultItems,
+    vaultFilters,
     vaultTotal,
     vaultCount,
     vaultCountError,
@@ -237,6 +239,14 @@ function MainContent() {
 
         <div className="controls-row">
           <GlobalItemSearch sharedFile={sharedStashFile || ""} facets={searchFacets} onSelect={handleSearchSelect} />
+          <BackupRestorePanel
+            isGameRunning={isGameRunning}
+            onRestored={() => {
+              refreshFromServer(activeFile);
+              refreshSharedStash(sharedStashFile);
+              refreshVault();
+            }}
+          />
           {saveFiles.length > 0 && (
             <select
               className="header-control save-picker"
@@ -300,6 +310,8 @@ function MainContent() {
       {mainTab === 'stash' ? (
         <InfiniteStashPanel
           vaultItems={vaultItems}
+          vaultFilters={vaultFilters}
+          vaultFacets={vaultFacets}
           vaultTotal={vaultTotal}
           vaultNextCursor={vaultNextCursor}
           vaultLoading={vaultLoading}

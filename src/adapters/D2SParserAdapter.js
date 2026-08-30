@@ -99,5 +99,22 @@ export class D2SParserAdapter {
     }
     return await res.json();
   }
+
+  static async listBackups() {
+    const res = await fetch('/__d2s_backups_list');
+    if (!res.ok) throw new Error('Failed to list backups');
+    return await res.json();
+  }
+
+  static async restoreBackup(timestamp, files) {
+    const res = await fetch('/__d2s_restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp, files }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to restore backup');
+    return data;
+  }
 }
 

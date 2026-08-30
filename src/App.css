@@ -86,6 +86,7 @@ h1 {
 .global-search-group h3 span { color: #8c8270; font: .75rem 'Outfit', sans-serif; }
 .stash-toolbar .vault-search-filter, .stash-toolbar .filter-selects > .filter-group:not(.vault-sort-controls) { display: none; }
 .stash-toolbar { display: none; }
+.infinite-stash-filters { margin-bottom: 14px; }
 .list-sort-header { display: inline-flex; align-items: center; gap: 5px; border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; text-align: left; }
 .list-sort-header button { border: 0; color: inherit; background: transparent; cursor: pointer; font: inherit; padding: 0; }
 .list-sort-header button:hover, .list-sort-header button.active { color: var(--color-border-gold); }
@@ -1285,6 +1286,11 @@ header {
   color: #fff;
 }
 
+.item-filter-controls input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .filter-selects {
   display: flex;
   gap: 15px;
@@ -1603,6 +1609,12 @@ header {
   justify-content: center;
   padding: 10px 0;
 }
+
+.backup-restore-control { position: relative; }
+.backup-restore-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 10001; width: min(420px, 88vw); display: grid; gap: 8px; padding: 14px; background: #15120d; border: 1px solid #8b6b2f; border-radius: 6px; box-shadow: 0 10px 28px #000c; color: #ddd; }
+.backup-restore-menu p, .backup-restore-menu small { color: #aaa; font-size: .8rem; margin: 0; }
+.backup-restore-menu select { background: #0e0a07; border: 1px solid var(--color-border-dim); color: var(--color-border-gold); padding: 7px; }
+.backup-restore-warning { color: #ff7777 !important; }
 
 .col-added {
   min-width: 0;

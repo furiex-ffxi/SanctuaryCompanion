@@ -675,9 +675,11 @@ function d2sWatcherPlugin() {
             fs.copyFileSync(srcPath, destPath)
             copied.push(f)
           }
+          const vaultReference = await vaultRepository.getRecoveryReference()
+          fs.writeFileSync(path.join(backupSubdir, 'vault-reference.json'), JSON.stringify(vaultReference, null, 2), 'utf8')
 
           res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ success: true, timestamp, backupSubdir, count: copied.length, files: copied }))
+          res.end(JSON.stringify({ success: true, timestamp, backupSubdir, count: copied.length, files: copied, vaultReference }))
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err.message }))
@@ -695,15 +697,75 @@ function d2sWatcherPlugin() {
           }
           const subdirs = fs.readdirSync(backupsDir, { withFileTypes: true })
             .filter(d => d.isDirectory())
-            .map(d => d.name)
-            .sort()
-            .reverse()
+            .map(d => {
+              const directory = path.join(backupsDir, d.name)
+              const files = fs.readdirSync(directory)
+                .filter(file => ['.d2s', '.d2i'].includes(path.extname(file).toLowerCase()))
+              const referencePath = path.join(directory, 'vault-reference.json')
+              const vaultReference = fs.existsSync(referencePath) ? JSON.parse(fs.readFileSync(referencePath, 'utf8')) : null
+              return files.length || vaultReference ? { timestamp: d.name, files, vaultReference } : null
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify(subdirs))
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: err.message }))
         }
+      })
+
+      // Restore selected save files from a timestamped snapshot. This is
+      // deliberately explicit and always creates a new safety snapshot first.
+      server.middlewares.use('/__d2s_restore', (req, res) => {
+        if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        let body = ''
+        req.on('data', chunk => { body += chunk })
+        req.on('end', async () => {
+          try {
+            if (rejectWhileD2RRunning(res)) return
+            const { timestamp, files: requestedFiles } = JSON.parse(body || '{}')
+            if (typeof timestamp !== 'string' || !/^[A-Za-z0-9_-]+$/.test(timestamp)) throw new Error('Invalid backup timestamp')
+            const backupsDir = path.join(SAVES_DIR, 'backups')
+            const snapshotDir = path.join(backupsDir, timestamp)
+            if (!fs.existsSync(snapshotDir) || !fs.statSync(snapshotDir).isDirectory()) throw new Error('Backup snapshot not found')
+            const snapshotFiles = fs.readdirSync(snapshotDir).filter(file => ['.d2s', '.d2i'].includes(path.extname(file).toLowerCase()))
+            const files = requestedFiles == null ? snapshotFiles : [...new Set(requestedFiles)]
+            if (!files.length) throw new Error('Backup snapshot contains no save files')
+            if (files.some(file => path.basename(file) !== file || !['.d2s', '.d2i'].includes(path.extname(file).toLowerCase()) || !snapshotFiles.includes(file))) {
+              throw new Error('Restore files must be save files contained in the selected snapshot')
+            }
+
+            const safetyTimestamp = `restore-before-${new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)}`
+            const safetyDir = path.join(backupsDir, safetyTimestamp)
+            fs.mkdirSync(safetyDir, { recursive: true })
+            const restored = []
+            const referencePath = path.join(snapshotDir, 'vault-reference.json')
+            const vaultReference = fs.existsSync(referencePath) ? JSON.parse(fs.readFileSync(referencePath, 'utf8')) : null
+            try {
+              for (const file of files) {
+                const livePath = path.join(SAVES_DIR, file)
+                if (fs.existsSync(livePath)) fs.copyFileSync(livePath, path.join(safetyDir, file))
+              }
+              for (const file of files) {
+                fs.copyFileSync(path.join(snapshotDir, file), path.join(SAVES_DIR, file))
+                restored.push(file)
+              }
+              if (vaultReference) await vaultRepository.restoreRecoveryReference(vaultReference)
+            } catch (error) {
+              for (const file of restored) {
+                const safetyPath = path.join(safetyDir, file)
+                if (fs.existsSync(safetyPath)) fs.copyFileSync(safetyPath, path.join(SAVES_DIR, file))
+              }
+              throw error
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: true, timestamp, restored, vaultRestored: Boolean(vaultReference), safetyTimestamp }))
+          } catch (err) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: err.message }))
+          }
+        })
       })
 
       // Expose a listing endpoint so the UI can list available saves
