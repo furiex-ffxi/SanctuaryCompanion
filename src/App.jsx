@@ -65,6 +65,7 @@ function MainContent() {
     handleFileUpload,
     STORAGE_META,
     vaultItems,
+    vaultFilters,
     vaultTotal,
     vaultCount,
     vaultCountError,
@@ -309,6 +310,8 @@ function MainContent() {
       {mainTab === 'stash' ? (
         <InfiniteStashPanel
           vaultItems={vaultItems}
+          vaultFilters={vaultFilters}
+          vaultFacets={vaultFacets}
           vaultTotal={vaultTotal}
           vaultNextCursor={vaultNextCursor}
           vaultLoading={vaultLoading}

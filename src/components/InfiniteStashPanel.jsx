@@ -5,6 +5,7 @@ import { getItemSlotCategory, resolveVaultBaseType } from '../domain/entities/Va
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { TooltipTrigger } from './TooltipTrigger';
 import { getVirtualRange } from '../domain/virtualList';
+import { EMPTY_ITEM_FILTERS, ItemFilterControls } from './ItemFilterControls';
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 8;
@@ -25,6 +26,8 @@ export function InfiniteStashPanel({
   onWithdrawShared,
   onRecover,
   highlightIdentity,
+  vaultFilters,
+  vaultFacets = {},
   movingItemKeys = new Set(),
 }) {
   const [sort, setSort] = useState('dateAdded');
@@ -40,6 +43,17 @@ export function InfiniteStashPanel({
   const loadMoreTriggerRef = useRef(null);
   const loadMoreRef = useRef(null);
   const backupTimerRef = useRef(null);
+  const [filterDraft, setFilterDraft] = useState(() => ({ ...EMPTY_ITEM_FILTERS }));
+  const filters = filterDraft;
+
+  useEffect(() => {
+    setFilterDraft({ ...EMPTY_ITEM_FILTERS, ...(vaultFilters || {}) });
+  }, [vaultFilters]);
+
+  const handleFilterChange = (nextFilters) => {
+    setFilterDraft(nextFilters);
+    Promise.resolve(onQuery?.({ ...nextFilters, sort, direction })).catch(() => {});
+  };
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -185,6 +199,17 @@ export function InfiniteStashPanel({
       </div>
 
       {backupMessage && <div className="backup-banner-success">{backupMessage}</div>}
+      <div className="infinite-stash-filters" aria-label="Infinite Stash filters">
+        <ItemFilterControls
+          prefix="vault"
+          filters={filters}
+          facets={vaultFacets}
+          showQuery
+          query={filters.q}
+          onQueryChange={(q) => handleFilterChange({ ...filters, q })}
+          onChange={handleFilterChange}
+        />
+      </div>
       {vaultError && <div className="game-running-warning-banner" role="alert">Vault error: {vaultError}</div>}
       <div className="stash-status" role="status" aria-live="polite">{vaultLoading ? (vaultItems.length ? `Loading more items… ${vaultItems.length} shown` : "Loading vault…") : ""}</div>
 
