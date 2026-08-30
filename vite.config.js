@@ -23,6 +23,18 @@ const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item
 const require = createRequire(import.meta.url)
 const { parseD2S, parseD2I } = require('./src/domain/parsers/CustomD2Parser.cjs');
 
+function transferTimingMiddleware(req, res, next) {
+  const pathName = req.url?.split('?')[0] || ''
+  if (!['/__d2s_backup', '/__d2i_remove_item', '/__d2s_remove_item', '/__d2i_add_item', '/__d2s_add_item'].includes(pathName)) {
+    return next()
+  }
+  const started = performance.now()
+  res.on('finish', () => {
+    console.log(`[transfer-timing] ${req.method} ${pathName} status=${res.statusCode} total=${Math.round(performance.now() - started)}ms`)
+  })
+  next()
+}
+
 
 function getItemDimensions(type) {
   const t = (type || '').toLowerCase().trim()
@@ -43,6 +55,7 @@ function d2sWatcherPlugin() {
     name: 'd2s-watcher',
 
     configureServer(server) {
+      server.middlewares.use(transferTimingMiddleware)
       // Keep track of last parsed data per file so we can re-serve on reconnect
       const cache = {}
 
@@ -167,6 +180,8 @@ function d2sWatcherPlugin() {
           try {
             if (!body) throw new Error('Empty request body')
             const { file, item } = JSON.parse(body)
+            const phaseStarted = performance.now()
+            const phase = (label) => console.log(`[transfer-timing] d2i-remove ${file || 'unknown'} ${label}=${Math.round(performance.now() - phaseStarted)}ms`)
             if (!item) throw new Error('Missing item object in request body')
             
             if (rejectWhileD2RRunning(res)) return
@@ -199,9 +214,18 @@ function d2sWatcherPlugin() {
 
             // Atomic rename swap
             fs.renameSync(tempFilePath, fullPath)
+            phase('worker-and-swap')
 
             // Re-parse for UI using our display parser
             const uiStash = await parseD2I(fullPath)
+            phase('verification-parse')
+
+            const removedId = String(item.id ?? item.item_seed ?? '')
+            const stillPresent = (uiStash.pages || []).some((page) =>
+              (page.items || []).some((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === removedId))
+            if (stillPresent) {
+              throw new Error(`D2SSharp did not remove item ${removedId} from the shared stash`)
+            }
             
             // Reconstruct item bytes hex (rawBytesHex) from the requested item to return to Vault
             const itemBytesHex = item.rawBytesHex || ''
@@ -259,6 +283,16 @@ function d2sWatcherPlugin() {
 
             // Re-parse for UI using Go WASM
             const char = await parseD2S(fullPath)
+            const removedId = String(item.id ?? item.item_seed ?? '')
+            const remainingItems = [
+              ...(char.items || []),
+              ...(char.contained_items || []),
+              ...(char.merc_items || []),
+              ...(char.corpse_items || []),
+            ]
+            if (remainingItems.some((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === removedId)) {
+              throw new Error(`D2SSharp did not remove item ${removedId} from the character save`)
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true, char }))
           } catch (err) {
@@ -410,24 +444,39 @@ function d2sWatcherPlugin() {
         req.on('end', async () => {
           try {
             const { file, item } = JSON.parse(body)
+            const phaseStarted = performance.now()
+            const phase = (label) => console.log(`[transfer-timing] d2s-add ${file || 'unknown'} ${label}=${Math.round(performance.now() - phaseStarted)}ms`)
             if (rejectWhileD2RRunning(res)) return
             if (!file) throw new Error('Missing file parameter')
             const fullPath = safeSavePath(SAVES_DIR, file, ".d2s")
             if (!fs.existsSync(fullPath)) throw new Error(`File ${file} not found`)
 
             const char = await parseD2S(fullPath)
+            phase('initial-parse')
 
-            // Deep clone item & place into character Stash (location_id: 0, alt_position_id: 1)
+            const requestedId = String(item.id ?? item.item_seed ?? '')
+            const existingItem = (char.items || []).find((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === requestedId)
+            if (existingItem) {
+              if (existingItem.location_id === 0 && existingItem.alt_position_id === 5) {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, char, placedX: existingItem.position_x, placedY: existingItem.position_y, alreadyPresent: true }))
+                return
+              }
+              throw new Error(`Item ${requestedId} already exists in the character save outside the stash`)
+            }
+
+            // Deep clone item & place into the character Stash (10x10 grid).
+            // Keep this in sync with D2RStashWorker's StorePage.Stash target.
             const newItem = JSON.parse(JSON.stringify(item))
             newItem.location_id = 0
-            newItem.alt_position_id = 1 // Stash grid
+            newItem.alt_position_id = 5 // Character stash grid
             newItem.equipped_id = 0
 
             // Find an open space in Stash grid (10 cols x 10 rows) respecting item width/height
             const stashGrid = Array.from({ length: 10 }, () => Array(10).fill(false))
             if (char.items) {
               char.items.forEach(i => {
-                if (i.location_id === 0 && i.alt_position_id === 1) {
+                if (i.location_id === 0 && i.alt_position_id === 5) {
                   const x = i.position_x ?? 0
                   const y = i.position_y ?? 0
                   const [w, h] = getItemDimensions(i.type)
@@ -497,9 +546,16 @@ function d2sWatcherPlugin() {
 
             // Atomic rename swap
             fs.renameSync(tempFilePath, fullPath)
+            phase('worker-and-swap')
 
             // Re-parse for UI using Go WASM
             const updatedChar = await parseD2S(fullPath)
+            phase('verification-parse')
+            const placedId = String(item.id ?? item.item_seed ?? '')
+            const placedItem = (updatedChar.items || []).find((candidate) => String(candidate.id ?? candidate.item_seed ?? '') === placedId)
+            if (!placedItem || placedItem.location_id !== 0 || placedItem.alt_position_id !== 5) {
+              throw new Error(`D2SSharp did not confirm item ${placedId} in the character stash`)
+            }
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: true, char: updatedChar, placedX, placedY }))
           } catch (err) {
@@ -510,7 +566,7 @@ function d2sWatcherPlugin() {
       })
 
       // Expose endpoint to trigger backup of all save files (.d2s & .d2i)
-      server.middlewares.use('/__d2s_backup', async (_req, res) => {
+      server.middlewares.use('/__d2s_backup', async (req, res) => {
         try {
           if (rejectWhileD2RRunning(res)) return
           if (!fs.existsSync(SAVES_DIR)) {
@@ -521,8 +577,17 @@ function d2sWatcherPlugin() {
           const backupSubdir = path.join(SAVES_DIR, 'backups', timestamp)
           fs.mkdirSync(backupSubdir, { recursive: true })
 
+          const requestedFiles = new URL(req.url, 'http://localhost').searchParams.getAll('file')
           const allFiles = fs.readdirSync(SAVES_DIR)
-          const saveFiles = allFiles.filter(f => f.endsWith('.d2s') || f.endsWith('.d2i'))
+          const saveFiles = requestedFiles.length
+            ? [...new Set(requestedFiles)].map((file) => {
+              if (path.basename(file) !== file || !['.d2s', '.d2i'].includes(path.extname(file).toLowerCase())) {
+                throw new Error(`Invalid backup file: ${file}`)
+              }
+              if (!allFiles.includes(file)) throw new Error(`Backup file not found: ${file}`)
+              return file
+            })
+            : allFiles.filter(f => f.endsWith('.d2s') || f.endsWith('.d2i'))
           const copied = []
 
           for (const f of saveFiles) {

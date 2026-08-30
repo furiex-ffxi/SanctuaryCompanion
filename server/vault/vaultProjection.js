@@ -1,4 +1,5 @@
 import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
+import { canonicalizeUniqueName } from './itemImageResolver.js'
 
 function normalizeText(value) {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -50,12 +51,13 @@ export function getVaultCategory(item, slot = getVaultItemSlot(item)) {
 
 export function projectVaultEntry(entry) {
   const item = entry.itemData || {}
+  const uniqueName = canonicalizeUniqueName(item.unique_name)
   const slot = getVaultItemSlot(item)
   const typeName = resolveVaultBaseType(item)
   const displayName = normalizeText(
     item.given_runeword_name
       || item.runeword_name
-      || item.unique_name
+      || uniqueName
       || item.set_name
       || [item.rare_name, item.rare_name2].filter(Boolean).join(' ')
       || item.personalized_name
@@ -78,7 +80,7 @@ export function projectVaultEntry(entry) {
     slot,
     getVaultCategory(item, slot),
     item.set_name,
-    item.unique_name,
+    uniqueName,
     item.rare_name,
     item.rare_name2,
     item.magic_prefix_name,
