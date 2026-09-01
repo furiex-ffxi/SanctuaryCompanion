@@ -4,7 +4,10 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 export function TerrorZoneScheduler({ onClose, addToast }) {
   const [selectedZone, setSelectedZone] = useState('');
   const [showRestoreHelp, setShowRestoreHelp] = useState(false);
-  const [tzMaxTime, setTzMaxTime] = useState(() => parseInt(localStorage.getItem('tz_max_time') || '0', 10));
+  const [tzMaxTime, setTzMaxTime] = useState(() => {
+    const stored = Number(localStorage.getItem('tz_max_time'));
+    return Number.isFinite(stored) && stored > 0 ? stored : 0;
+  });
   const [mfTimerDir, setMfTimerDir] = useState(() => localStorage.getItem('mf_timer_dir') || '');
 
   const { data: schedule, isLoading } = useQuery({
@@ -14,7 +17,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
       try {
-        res = await fetch('/__tz_schedule', { signal: controller.signal });
+        res = await fetch('/__tz_schedule', { signal: controller.signal, cache: 'no-cache' });
       } catch {
         // Fall back to the static asset if the development middleware is absent
         // or unavailable during server startup.
@@ -23,7 +26,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       }
       // Keep static preview/deployment builds compatible when the dev middleware
       // is not available.
-      if (!res?.ok) res = await fetch('/data/tz-2023-localized.json');
+      if (!res?.ok) res = await fetch('/data/tz-2023-localized.json', { cache: 'no-cache' });
       if (!res.ok) throw new Error('Failed to load schedule');
       return res.json();
     }
@@ -111,10 +114,14 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
     }
   });
 
-  const handlePinZone = () => {
+  const handlePinZone = async () => {
     if (!schedule) return;
-    let nextOccurrences = schedule.filter(item => item.zone.enUS === selectedZone);
+    const nextOccurrences = schedule.filter(item => item.zone.enUS === selectedZone);
     if (nextOccurrences.length === 0) {
+      console.warn('[TerrorZoneScheduler] Selected zone is absent from schedule', {
+        selectedZone,
+        scheduleRecords: schedule.length,
+      });
       addToast('No schedule found for this zone.', 'error');
       return;
     }
@@ -124,7 +131,41 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
 
     let target = nextOccurrences.find(item => new Date(item.datetime).getTime() > minRequiredTime);
     if (!target) {
-      addToast('No future occurrences of this zone found after the latest simulated time.', 'error');
+      // A zone may be exhausted even when the overall schedule still has
+      // entries. Ask the server to refresh from the remote source once before
+      // reporting that the jump is unavailable.
+      try {
+        const refreshResponse = await fetch('/__tz_schedule?refresh=1', { cache: 'no-cache' });
+        if (refreshResponse.ok) {
+          const refreshedSchedule = await refreshResponse.json();
+          target = refreshedSchedule
+            .filter(item => item.zone?.enUS === selectedZone)
+            .find(item => new Date(item.datetime).getTime() > minRequiredTime);
+          if (target) {
+            jumpMutation.mutate(target.datetime);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn('[TerrorZoneScheduler] Forced schedule refresh failed', error);
+      }
+      const latestOccurrence = nextOccurrences.at(-1)?.datetime || 'none';
+      const scheduleEnd = schedule.at(-1)?.datetime || 'none';
+      const details = {
+        selectedZone,
+        now: new Date(now).toISOString(),
+        tzMaxTime: tzMaxTime > 0 ? new Date(tzMaxTime).toISOString() : null,
+        cutoff: new Date(minRequiredTime).toISOString(),
+        matchingOccurrences: nextOccurrences.length,
+        latestOccurrence,
+        scheduleEnd,
+      };
+      console.warn('[TerrorZoneScheduler] No future Terror Zone occurrence', details);
+      addToast(
+        `No future occurrences of this zone found after the latest simulated time. ` +
+        `Cutoff: ${details.cutoff}; latest listed: ${latestOccurrence}; schedule ends: ${scheduleEnd}.`,
+        'error'
+      );
       return;
     }
 
@@ -169,7 +210,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
         </div>
 
         <div className="modal-actions" style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-          {tzMaxTime > Date.now() && (
+          {(
             <button 
               className="btn-d2r btn-secondary" 
               style={{ marginRight: 'auto', borderColor: '#800' }}

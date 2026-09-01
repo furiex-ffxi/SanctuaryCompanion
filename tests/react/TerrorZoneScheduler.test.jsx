@@ -86,7 +86,7 @@ describe('TerrorZoneScheduler', () => {
     await waitFor(() => {
       // It should NOT pick the one 1 hr ahead because max_time is 1.5 hrs ahead. 
       // It should error because there is no 'Future Zone' after 1.5 hrs ahead in mock data
-      expect(addToastMock).toHaveBeenCalledWith('No future occurrences of this zone found after the latest simulated time.', 'error');
+      expect(addToastMock).toHaveBeenCalledWith(expect.stringContaining('No future occurrences of this zone found after the latest simulated time.'), 'error');
     });
   });
 
@@ -134,7 +134,7 @@ describe('TerrorZoneScheduler', () => {
       }));
     });
     expect(addToastMock).not.toHaveBeenCalledWith(
-      'No future occurrences of this zone found after the latest simulated time.',
+      expect.stringContaining('No future occurrences of this zone found after the latest simulated time.'),
       'error'
     );
   });

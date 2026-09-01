@@ -18,6 +18,9 @@ import { constants } from './src/domain/entities/static_constant_data.js'
 // Path to D2R saves directory
 const SAVES_DIR = 'C:/Users/chang/Saved Games/Diablo II Resurrected'
 const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item-assets')
+const TZ_SCHEDULE_PATH = path.resolve('public/data/tz-2023-localized.json')
+const TZ_REMOTE_URL = process.env.SANCTUARY_TZ_REMOTE_URL || 'https://d2emu.com/data/tz-2023-localized.json'
+const TZ_REMOTE_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
 
 // D2SSharp owns all .d2s/.d2i parsing and writing through this thin process adapter.
 const require = createRequire(import.meta.url)
@@ -95,7 +98,61 @@ function d2sWatcherPlugin() {
       const cache = {}
       const itemAssetCache = new Map()
       const missingItemAssets = new Set()
-      let compactTzSchedulePromise
+      let compactTzScheduleCache
+      let tzRemoteRefreshAt = 0
+      let tzRemoteRefreshPromise
+
+      const compactTzSchedule = (text) => {
+        const records = JSON.parse(text.replace(/^\uFEFF/, ''))
+        if (!Array.isArray(records) || records.length === 0) throw new Error('Terror Zone schedule is empty')
+        const compact = records.map((item) => ({
+          datetime: item.datetime,
+          zone: { enUS: item.zone?.enUS || '' }
+        }))
+        const latestDatetime = compact.at(-1)?.datetime
+        if (!latestDatetime || !Number.isFinite(Date.parse(latestDatetime))) {
+          throw new Error('Terror Zone schedule has no valid ending date')
+        }
+        const scheduleJson = JSON.stringify(compact)
+        return {
+          scheduleJson,
+          latestDatetime,
+          etag: `"${crypto.createHash('sha1').update(scheduleJson).digest('hex')}"`
+        }
+      }
+
+      const loadLocalTzSchedule = async () => {
+        if (compactTzScheduleCache?.source === 'remote') return compactTzScheduleCache
+        const sourceStat = await fs.promises.stat(TZ_SCHEDULE_PATH)
+        const sourceVersion = `${sourceStat.size}:${sourceStat.mtimeMs}`
+        if (!compactTzScheduleCache || compactTzScheduleCache.source !== 'local' || compactTzScheduleCache.sourceVersion !== sourceVersion) {
+          compactTzScheduleCache = {
+            source: 'local',
+            sourceVersion,
+            ...compactTzSchedule(await fs.promises.readFile(TZ_SCHEDULE_PATH, 'utf8'))
+          }
+        }
+        return compactTzScheduleCache
+      }
+
+      const refreshTzScheduleFromRemote = async () => {
+        if (tzRemoteRefreshPromise) return tzRemoteRefreshPromise
+        tzRemoteRefreshAt = Date.now() + TZ_REMOTE_REFRESH_COOLDOWN_MS
+        tzRemoteRefreshPromise = (async () => {
+          const response = await fetch(TZ_REMOTE_URL, { headers: { Accept: 'application/json' } })
+          if (!response.ok) throw new Error(`Remote schedule returned HTTP ${response.status}`)
+          const remote = compactTzSchedule(await response.text())
+          compactTzScheduleCache = { source: 'remote', ...remote }
+          console.log(`[tz-schedule] refreshed from ${TZ_REMOTE_URL}; latest=${remote.latestDatetime}`)
+          return compactTzScheduleCache
+        })().catch((error) => {
+          console.warn(`[tz-schedule] remote refresh failed: ${error.message}`)
+          return compactTzScheduleCache
+        }).finally(() => {
+          tzRemoteRefreshPromise = undefined
+        })
+        return tzRemoteRefreshPromise
+      }
 
       // Proprietary D2R artwork is opt-in and served only from a local cache.
       server.middlewares.use('/__d2r_item_image', async (req, res) => {
@@ -126,25 +183,30 @@ function d2sWatcherPlugin() {
 
       // The source schedule contains localization and metadata that the UI does not
       // use. Keep that parsing server-side and send only the date and English zone.
-      server.middlewares.use('/__tz_schedule', async (_req, res) => {
+      server.middlewares.use('/__tz_schedule', async (req, res) => {
         try {
-          if (!compactTzSchedulePromise) {
-            compactTzSchedulePromise = fs.promises.readFile(
-              path.resolve('public/data/tz-2023-localized.json'),
-              'utf8'
-            ).then((text) => JSON.stringify(JSON.parse(text.replace(/^\uFEFF/, '')).map((item) => ({
-              datetime: item.datetime,
-              zone: { enUS: item.zone?.enUS || '' }
-            }))))
+          await loadLocalTzSchedule()
+          const forceRefresh = new URL(req.url, 'http://localhost').searchParams.get('refresh') === '1'
+          if ((forceRefresh || Date.parse(compactTzScheduleCache.latestDatetime) <= Date.now()) && Date.now() >= tzRemoteRefreshAt) {
+            await refreshTzScheduleFromRemote()
           }
-          const scheduleJson = await compactTzSchedulePromise
-          res.writeHead(200, {
+          const { scheduleJson, etag } = compactTzScheduleCache
+          const headers = {
             'Content-Type': 'application/json',
-            'Cache-Control': 'private, max-age=3600'
+            'Cache-Control': 'no-cache',
+            ETag: etag
+          }
+          if (req.headers['if-none-match'] === etag) {
+            res.writeHead(304, headers)
+            res.end()
+            return
+          }
+          res.writeHead(200, {
+            ...headers
           })
           res.end(scheduleJson)
         } catch (err) {
-          compactTzSchedulePromise = undefined
+          compactTzScheduleCache = undefined
           res.writeHead(500, { 'Content-Type': 'text/plain' })
           res.end(`Failed to load schedule: ${err.message}`)
         }
