@@ -207,6 +207,7 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
   })
 
   server.httpServer?.once('close', () => {
+    if (repository) repository.close()
     for (const v of vaults.values()) v.close()
   })
   
