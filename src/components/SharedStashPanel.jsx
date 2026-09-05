@@ -1,3 +1,4 @@
+import { LocalStashPreviewWrapper } from "./LocalStashPreviewWrapper";
 import React from 'react';
 import { StorageGrid } from './StorageGrid';
 import { AdvancedStashPanel } from './AdvancedStashPanel';
@@ -9,6 +10,7 @@ export function SharedStashPanel({
   sharedStashLoading,
   sharedStashError,
   refreshSharedStash,
+  refreshVault,
   depositItemToVault,
   setSharedStash,
   sharedStashLoadedFile,
@@ -33,12 +35,15 @@ export function SharedStashPanel({
     try {
       const buf = await file.arrayBuffer();
       const parsed = await D2SParserAdapter.parseSharedStashBuffer(buf);
-      setSharedStash(parsed);
+      parsed.originalFileName = file.name;
       setSharedStashFile('');
+      setSharedStash(parsed);
       setSharedStashLoadedFile('');
       setSharedStashError(null);
     } catch (err) {
       alert('Error parsing uploaded .d2i file: ' + err.message);
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -153,3 +158,6 @@ export function SharedStashPanel({
     </div>
   );
 }
+
+
+

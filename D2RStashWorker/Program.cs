@@ -1014,7 +1014,72 @@ namespace D2RStashWorker
 
                 if (mode == "parse_stash")
                 {
-                    var stash = D2StashSave.Read(bytes);
+                    D2StashSave stash;
+                    if (bytes.Length >= 4 && bytes[0] == 'S' && bytes[1] == 'S' && bytes[2] == 'S')
+                    {
+                        stash = new D2StashSave();
+                        var reader = new D2SSharp.IO.BitReader(bytes);
+                        reader.ReadUInt32(); // SSS\0
+                        
+                        ushort version = reader.ReadUInt16(); // "01" (0x3130) or "02" (0x3230)
+                        
+                        if (version == 0x3130) // "01"
+                        {
+                            reader.ReadUInt32(); // Unknown
+                        }
+                        else if (version == 0x3230) // "02"
+                        {
+                            reader.ReadUInt32(); // Shared Gold
+                        }
+                        else
+                        {
+                            // If it's something else, try to skip 4 bytes
+                            reader.ReadUInt32();
+                        }
+                        
+                        uint pages = reader.ReadUInt32();
+                        var externalData = D2SSharp.Data.TxtFileExternalData.Default;
+                        for (uint p = 0; p < pages; p++)
+                        {
+                            var tab = new D2StashTab { StashFormat = 2, ItemFormat = 96, TabType = 0 };
+                            ushort stHeader = reader.ReadUInt16();
+                            if (stHeader != 0x5453) 
+                                throw new Exception($"Invalid ST header in PlugY stash at page {p}. Expected 0x5453, got 0x{stHeader:X4}. Offset: {reader.BytePosition} bytes.");
+                            reader.ReadUInt32(); // flags
+                            while (reader.ReadByte() != 0) { } // null terminator
+                            
+                            ushort jmHeader = reader.ReadUInt16();
+                            if (jmHeader != 0x4D4A) 
+                                throw new Exception($"Invalid JM header in PlugY stash page {p}. Expected 0x4D4A, got 0x{jmHeader:X4}.");
+                                
+                            ushort numItems = reader.ReadUInt16();
+                            for (int i = 0; i < numItems; i++)
+                            {
+                                tab.Items.Add(Item.Read(ref reader, externalData, 96));
+                            }
+                            reader.AlignToByte();
+                            stash.Add(tab);
+                        }
+                    }
+                    else if (bytes.Length >= 2 && bytes[0] == 'J' && bytes[1] == 'M')
+                    {
+                        stash = new D2StashSave();
+                        var tab = new D2StashTab { StashFormat = 2, ItemFormat = 96, TabType = 0 };
+                        var reader = new D2SSharp.IO.BitReader(bytes);
+                        reader.ReadUInt16(); // JM
+                        ushort numItems = reader.ReadUInt16();
+                        var externalData = D2SSharp.Data.TxtFileExternalData.Default;
+                        for (int i = 0; i < numItems; i++)
+                        {
+                            tab.Items.Add(Item.Read(ref reader, externalData, 96));
+                        }
+                        stash.Add(tab);
+                    }
+                    else
+                    {
+                        stash = D2StashSave.Read(bytes);
+                    }
+
                     var parsed = new
                     {
                         type = 0,

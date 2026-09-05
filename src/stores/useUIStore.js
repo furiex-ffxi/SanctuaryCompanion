@@ -27,6 +27,9 @@ export const useUIStore = create(
       sharedStashFile: 'ModernSharedStashSoftCoreV2.d2i',
       setSharedStashFile: (file) => set({ sharedStashFile: file }),
 
+      vaultRealm: 'expansion',
+      setVaultRealm: (realm) => set({ vaultRealm: realm }),
+
       vaultSearchQuery: '',
       setVaultSearchQuery: (query) => set({ vaultSearchQuery: query }),
       itemSearchDraft: { q: '', category: 'All', slot: 'All', setName: 'All', quality: 'All', minLevel: '', maxLevel: '', scope: 'all' },
@@ -43,7 +46,8 @@ export const useUIStore = create(
         isSwapped: state.isSwapped,
         sharedStashFile: state.sharedStashFile,
         sharedStashTab: state.sharedStashTab,
-        activeFile: state.activeFile
+        activeFile: state.activeFile,
+        vaultRealm: state.vaultRealm
       }),
     }
   )

@@ -34,6 +34,8 @@ export function useCharacterCompanion() {
   
   const [vaultFilters, setVaultFilters] = useState(null);
 
+  const vaultRealm = useUIStore((state) => state.vaultRealm);
+
   const {
     data: vaultData,
     fetchNextPage,
@@ -41,7 +43,7 @@ export function useCharacterCompanion() {
     isFetching: vaultLoading,
     error: vaultErrorObj,
   } = useInfiniteQuery({
-    queryKey: ['vault', vaultFilters],
+    queryKey: ['vault', vaultFilters, vaultRealm],
     queryFn: ({ pageParam = null }) => InfiniteStashAdapter.list(vaultFilters || {}, { cursor: pageParam, limit: 100 }),
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     enabled: vaultFilters !== null,
@@ -53,7 +55,7 @@ export function useCharacterCompanion() {
   const vaultError = vaultErrorObj ? vaultErrorObj.message : null;
 
   const { data: vaultCountData, error: vaultCountErrorObj } = useQuery({
-    queryKey: ['vaultCount'],
+    queryKey: ['vaultCount', vaultRealm],
     queryFn: async () => {
       const res = await InfiniteStashAdapter.count();
       return res.total;
@@ -139,21 +141,22 @@ export function useCharacterCompanion() {
   const refreshSharedStash = useCallback(async (filename) => {
     if (filename !== undefined) {
       useUIStore.getState().setSharedStashFile(filename);
+      return queryClient.fetchQuery({
+        queryKey: ['sharedStash', filename],
+        queryFn: async () => await D2SParserAdapter.fetchSharedStash(filename)
+      });
     }
-    return refreshSharedStashQuery();
-  }, [refreshSharedStashQuery]);
+    const res = await refreshSharedStashQuery();
+    return res.data;
+  }, [queryClient, refreshSharedStashQuery]);
 
   // We no longer need setSharedStash since it's driven by React Query. 
   // However, local optimistic updates in mutations will update the query cache.
   const setSharedStash = useCallback((updater) => {
-    queryClient.setQueryData(['sharedStash', sharedStashFile], updater);
-  }, [queryClient, sharedStashFile]);
-
-  useEffect(() => {
-    if (!sharedStashFile) {
-      useUIStore.getState().setSharedStashFile(DEFAULT_SHARED_STASH_FILE);
-    }
-  }, [sharedStashFile]);
+    // Must use current state because we might update state during an upload
+    const currentFile = useUIStore.getState().sharedStashFile;
+    queryClient.setQueryData(['sharedStash', currentFile], updater);
+  }, [queryClient]);
 
   const [isGameRunning, setIsGameRunning] = useState(false);
 
@@ -198,6 +201,21 @@ export function useCharacterCompanion() {
       const itemId = item?.id ?? item?.item_seed;
       const transferKey = `deposit:${sourceName || activeFile || 'uploaded'}:${itemId ?? item?.rawBytesHex ?? ''}`;
       if (transferInFlight.current.has(transferKey)) return;
+      
+      const currentVaultRealm = useUIStore.getState().vaultRealm;
+      
+      if (sourceName !== '__shared_stash__' && charData) {
+        const isCharExpansion = charData?.header?.status?.expansion;
+        if (currentVaultRealm === 'expansion' && isCharExpansion === false) {
+          emitToast('Cannot move items between realms (Classic to Expansion).', 'error');
+          return;
+        }
+        if (currentVaultRealm === 'rotw' && isCharExpansion === true) {
+          emitToast('Cannot move items between realms (Expansion to Classic).', 'error');
+          return;
+        }
+      }
+
       transferInFlight.current.add(transferKey);
       setMovingItemKeys((current) => new Set(current).add(transferKey));
       try {
@@ -333,6 +351,18 @@ export function useCharacterCompanion() {
         emitToast('Select a character save before withdrawing an item.', 'error');
         return;
       }
+      
+      const isCharExpansion = charData?.header?.status?.expansion;
+      const currentVaultRealm = useUIStore.getState().vaultRealm;
+      
+      if (currentVaultRealm === 'expansion' && isCharExpansion === false) {
+        emitToast('Cannot move items between realms (Expansion to Classic).', 'error');
+        return;
+      }
+      if (currentVaultRealm === 'rotw' && isCharExpansion === true) {
+        emitToast('Cannot move items between realms (Classic to Expansion).', 'error');
+        return;
+      }
 
       const backup = await triggerSaveBackup([activeFile]);
       if (!backup?.success) {
@@ -394,6 +424,9 @@ export function useCharacterCompanion() {
         emitToast('Select a loaded disk-backed Shared Stash before withdrawing from the vault.', 'error');
         return;
       }
+      
+      const currentVaultRealm = useUIStore.getState().vaultRealm;
+      // We no longer block Shared Stash to Classic Vault because the global Realm toggle controls both.
 
       const backup = await triggerSaveBackup([sharedStashFile]);
       if (!backup?.success) {
