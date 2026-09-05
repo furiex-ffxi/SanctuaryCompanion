@@ -23,6 +23,10 @@ Observed symptoms included:
 - If a recovery state exists, restore uses the state-aware script.
 - Restore temporarily sets W32Time to `Manual`, starts it, forces `w32tm /resync /force`, then restores the saved startup mode and running/stopped state.
 - The recovery file is removed only after the restore sequence succeeds.
+- Restoring the clock also clears the scheduler's safety tracker, so the next
+  Terror Zone jump starts from the current time.
+- **Repair MF Timer & Saves** repairs a negative MF Timer session time when
+  needed and resets only future `.ctl`, `.ctlo`, and `.d2x` save timestamps.
 
 ## Recovery procedure
 
@@ -31,5 +35,9 @@ Observed symptoms included:
 3. Open the Terror Zone dialog and choose **How to restore time**.
 4. Click **Restore Windows Clock to Present** and accept the UAC prompt.
 5. If restore fails, inspect `%LOCALAPPDATA%\SanctuaryCompanion\W32Time-error.txt` and keep `W32Time-state.json` intact for another recovery attempt.
+
+If MF Timer still ignores a later save after a clock jump, close Diablo II
+Resurrected and MF Timer, enter the MF Timer folder in the Terror Zone dialog,
+and use **Repair MF Timer & Saves**. The save contents are not rewritten.
 
 Do not delete the recovery state or manually edit the save files while the system clock is still pinned.

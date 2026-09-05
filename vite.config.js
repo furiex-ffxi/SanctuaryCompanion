@@ -8,7 +8,7 @@ import crypto from 'node:crypto'
 import { exec } from 'child_process'
 import { registerVaultRoutes } from './server/vault/vaultRoutes.js'
 import { registerItemSearchRoute } from './server/search/ItemSearchService.js'
-import { repairMfTimerProfile } from './server/mfTimerRepair.js'
+import { repairFutureD2RSaveTimestamps, repairMfTimerProfile } from './server/mfTimerRepair.js'
 import { getWindowsTimeStatus, setWindowsTime } from './server/timeJumper.js'
 import { safeSavePath } from './server/savePath.js'
 import { isD2RRunning, rejectWhileD2RRunning } from './server/processLock.js'
@@ -845,14 +845,16 @@ function d2sWatcherPlugin() {
       // Repair an MF Timer profile after a system-clock jump.
       server.middlewares.use('/__mf_timer_repair', (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        if (rejectWhileD2RRunning(res)) return
         let body = ''
         req.on('data', chunk => { body += chunk })
         req.on('end', () => {
           try {
             const { directory } = JSON.parse(body || '{}')
-            const result = repairMfTimerProfile({ directory })
+            const profileResult = repairMfTimerProfile({ directory })
+            const timestampResult = repairFutureD2RSaveTimestamps({ directory: SAVES_DIR })
             res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ success: true, ...result }))
+            res.end(JSON.stringify({ success: true, ...profileResult, timestampRepair: timestampResult }))
           } catch (err) {
             res.writeHead(400, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ success: false, error: err.message }))

@@ -109,6 +109,7 @@ describe('TerrorZoneScheduler', () => {
     });
 
     expect(localStorage.getItem('tz_max_time')).toBeNull();
+    expect(screen.queryByText('Reset Safety Tracker')).not.toBeInTheDocument();
   });
 
   it('allows another future jump after restoring time', async () => {
