@@ -102,10 +102,11 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       return data;
     },
     onSuccess: (data) => {
+      const timestampCount = data.timestampRepair?.count || 0;
       addToast(
-        data.repaired
-          ? `MF Timer repaired: ${data.profile} (${data.runCount} runs).`
-          : `MF Timer profile ${data.profile} does not need repair.`,
+        data.repaired || timestampCount > 0
+          ? `MF Timer repaired: ${data.profile} (${data.runCount} runs); reset ${timestampCount} future save timestamp${timestampCount === 1 ? '' : 's'}.`
+          : `MF Timer profile ${data.profile} and save timestamps do not need repair.`,
         'success'
       );
     },
@@ -210,24 +211,9 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
         </div>
 
         <div className="modal-actions" style={{ marginTop: 20, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-          {(
-            <button 
-              className="btn-d2r btn-secondary" 
-              style={{ marginRight: 'auto', borderColor: '#800' }}
-              onClick={() => {
-                setTzMaxTime(0);
-                localStorage.removeItem('tz_max_time');
-                addToast('Safety tracker reset! You can now jump from your current time.', 'success');
-              }}
-              title="Click this if you manually changed your Windows clock back to normal and want to start jumping from today again."
-            >
-              Reset Safety Tracker
-            </button>
-          )}
-
           <div className="tz-action-buttons">
             <button className="btn-d2r btn-secondary" onClick={() => repairMutation.mutate()} disabled={isWorking}>
-              {repairMutation.isPending ? 'Repairing...' : 'Repair MF Timer'}
+              {repairMutation.isPending ? 'Repairing...' : 'Repair MF Timer & Saves'}
             </button>
             <button className="btn-d2r" onClick={handlePinZone} disabled={isWorking || !selectedZone || isLoading}>
               {jumpMutation.isPending ? 'Changing...' : 'Jump to Zone'}
@@ -247,7 +233,7 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
             <ol>
               <li>Close MF Timer before changing the clock, then reopen it after the jump if desired.</li>
               <li>You can jump to another zone without restoring the clock first; each target must be in the future.</li>
-              <li>When you are finished, close MF Timer and click the button below to sync the clock back to the present.</li>
+              <li>When you are finished, close MF Timer and click the button below to sync the clock back to the present. This also resets the safety tracker so the next jump starts from the current time.</li>
             </ol>
             <button className="btn-d2r" style={{backgroundColor: '#800000'}} onClick={() => restoreMutation.mutate()} disabled={isWorking}>
               {restoreMutation.isPending ? 'Restoring...' : 'Restore Windows Clock to Present'}

@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { isD2RRunning } from './processLock.js'
 
 function activeProfileFromConfig(configText) {
   const match = configText.match(/^active_profile\s*=\s*(.+?)\s*$/mi)
@@ -20,6 +21,26 @@ function estimateSessionTime(laps) {
     if (idle > 0 && idle <= 300) total += idle
   }
   return total
+}
+
+const D2R_TIMESTAMP_EXTENSIONS = new Set(['.ctl', '.ctlo', '.d2x'])
+
+export function repairFutureD2RSaveTimestamps({ directory, now = new Date(), isRunning = isD2RRunning } = {}) {
+  if (!directory || !path.isAbsolute(directory)) throw new Error('D2R save directory must be an absolute path')
+  if (isRunning()) throw new Error('Cannot repair D2R save timestamps while Diablo II Resurrected is running')
+  const currentTime = now instanceof Date ? now : new Date(now)
+  if (Number.isNaN(currentTime.getTime())) throw new Error('Invalid timestamp')
+
+  const repaired = []
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (!entry.isFile() || !D2R_TIMESTAMP_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue
+    const filePath = path.join(directory, entry.name)
+    const stats = fs.statSync(filePath)
+    if (stats.mtime <= currentTime) continue
+    fs.utimesSync(filePath, stats.atime, currentTime)
+    repaired.push({ name: entry.name, previousLastWriteTime: stats.mtime.toISOString(), lastWriteTime: currentTime.toISOString() })
+  }
+  return { repaired, count: repaired.length }
 }
 
 export function repairMfTimerProfile({ directory, now = new Date() } = {}) {
