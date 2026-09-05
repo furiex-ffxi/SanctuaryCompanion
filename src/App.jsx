@@ -6,6 +6,7 @@ import { EquipmentPanel } from './components/EquipmentPanel';
 import { StorageGrid } from './components/StorageGrid';
 import { InfiniteStashPanel } from './components/InfiniteStashPanel';
 import { SharedStashPanel } from './components/SharedStashPanel';
+import { LocalStashPreviewWrapper } from './components/LocalStashPreviewWrapper';
 import { GlobalItemSearch } from './components/GlobalItemSearch';
 import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
@@ -106,6 +107,8 @@ function MainContent() {
   const sharedStashTab = useUIStore((state) => state.sharedStashTab);
   const setSharedStashTab = useUIStore((state) => state.setSharedStashTab);
   const setIsSwapped = useUIStore((state) => state.setIsSwapped);
+  const vaultRealm = useUIStore((state) => state.vaultRealm);
+  const setVaultRealm = useUIStore((state) => state.setVaultRealm);
 
   const { toasts, addToast, dismissToast } = useToasts();
   const [searchHighlight, setSearchHighlight] = React.useState(null);
@@ -205,6 +208,47 @@ function MainContent() {
       window.history.pushState(null, '', '#infinite-stash');
     }
   };
+
+  const handleUnifiedUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    try {
+      if (name.endsWith('.json')) {
+        if (isGameRunning) {
+          alert('Cannot import while Diablo II: Resurrected is running.');
+          return;
+        }
+        const entries = JSON.parse(await file.text());
+        if (!Array.isArray(entries)) throw new Error('Expected a JSON array');
+        const { InfiniteStashAdapter } = await import('./adapters/InfiniteStashAdapter');
+        const result = await InfiniteStashAdapter.import(entries);
+        refreshVault();
+        alert(`Successfully imported ${result.addedCount} items into ${vaultRealm} vault.`);
+        handleNavClick('stash');
+      } else if (name.endsWith('.d2i') || name.endsWith('.sss') || name.endsWith('.d2x')) {
+        const buf = await file.arrayBuffer();
+        const { D2SParserAdapter } = await import('./adapters/D2SParserAdapter');
+        const parsed = await D2SParserAdapter.parseSharedStashBuffer(buf);
+        parsed.originalFileName = name;
+        useUIStore.getState().setSharedStashFile('');
+        setSharedStashLoadedFile('');
+        setSharedStashError(null);
+        setSharedStash(parsed);
+        handleNavClick('preview');
+      } else if (name.endsWith('.d2s')) {
+        await handleFileUpload(e);
+        handleNavClick('character');
+      } else {
+        alert('Unsupported file extension. Please upload .d2s, .d2i, .sss, .d2x, or .json.');
+      }
+    } catch (err) {
+      alert(`Error processing ${file.name}: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="app-container">
       <header>
@@ -232,72 +276,96 @@ function MainContent() {
             >
               Infinite Stash ({vaultCount ?? (vaultCountError ? '?' : '…')})
             </button>
+            {mainTab === 'preview' && (
+              <button className={`main-nav-btn active`}>
+                Import Preview
+              </button>
+            )}
           </nav>
+
           {loadError && <div className="error-banner" role="alert">{loadError}</div>}
           {!charData && !loadError && <div className="loading-banner">Loading {activeFile || 'character save'}...</div>}
         </div>
 
-        <div className="controls-row">
-          <GlobalItemSearch sharedFile={sharedStashFile || ""} facets={searchFacets} onSelect={handleSearchSelect} />
-          <BackupRestorePanel
-            isGameRunning={isGameRunning}
-            onRestored={() => {
-              refreshFromServer(activeFile);
-              refreshSharedStash(sharedStashFile);
-              refreshVault();
-            }}
-          />
-          {saveFiles.length > 0 && (
-            <select
-              className="header-control save-picker"
-              value={activeFile || ''}
-              onChange={(e) => setActiveFile(e.target.value)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+          
+          <div className="controls-row" style={{ alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span style={{ color: 'var(--color-border-gold)', marginRight: '8px', fontSize: '0.9rem', fontFamily: 'Cinzel, serif', fontWeight: 'bold' }}>Realm:</span>
+              <select
+                className="header-control save-picker"
+                value={vaultRealm}
+                onChange={(e) => setVaultRealm(e.target.value)}
+                title="Toggle between Expansion and ROTW realms across all stashes"
+                style={{ width: 140 }}
+              >
+                <option value="expansion">Expansion</option>
+                <option value="rotw">ROTW</option>
+              </select>
+            </div>
+
+            <BackupRestorePanel
+              isGameRunning={isGameRunning}
+              onRestored={() => {
+                refreshFromServer(activeFile);
+                refreshSharedStash(sharedStashFile);
+                refreshVault();
+              }}
+            />
+            
+            {saveFiles.length > 0 && (
+              <select
+                className="header-control save-picker"
+                value={activeFile || ''}
+                onChange={(e) => setActiveFile(e.target.value)}
+              >
+                {saveFiles.map((f) => (
+                  <option key={f} value={f}>
+                    {f.replace('.d2s', '')}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div className="file-input-wrapper" title="Upload character (.d2s), stash (.d2i, .sss, .d2x), or vault backup (.json)">
+              <button className="header-control btn-d2r btn-secondary">Upload File...</button>
+              <input type="file" accept=".d2s,.d2i,.sss,.d2x,.json" onChange={handleUnifiedUpload} />
+            </div>
+
+            {syncedAt && (
+              <span className="header-control sync-badge">
+                Synced {syncedAt.toLocaleTimeString()}
+              </span>
+            )}
+
+            {isGameRunning ? (
+              <span className="header-control game-running-badge" title="Game is running - save/stash edits are locked">
+                Game Running (Locked)
+              </span>
+            ) : (
+              <span className="header-control game-idle-badge" title="Game is closed - full save/stash edit access active">
+                Game Closed (Unlocked)
+              </span>
+            )}
+
+            <button 
+              className="header-control btn-d2r btn-secondary" 
+              title="Pin an offline Terror Zone"
+              onClick={() => setShowTZ(true)}
             >
-              {saveFiles.map((f) => (
-                <option key={f} value={f}>
-                  {f.replace('.d2s', '')}
-                </option>
-              ))}
-            </select>
-          )}
+              Terror Zone
+            </button>
 
-          <div className="file-input-wrapper" title="Or load any .d2s file manually">
-            <button className="header-control btn-d2r btn-secondary">Browse...</button>
-            <input type="file" accept=".d2s" onChange={handleFileUpload} />
+            <button
+              className={`header-control btn-d2r btn-refresh ${syncing ? 'spinning' : ''}`}
+              title="Refresh from disk"
+              onClick={() => refreshFromServer(activeFile)}
+              disabled={!activeFile || syncing}
+            >
+              {syncing ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
-
-          {syncedAt && (
-            <span className="header-control sync-badge">
-              Synced {syncedAt.toLocaleTimeString()}
-            </span>
-          )}
-
-          {isGameRunning ? (
-            <span className="header-control game-running-badge" title="Game is running - save/stash edits are locked">
-              Game Running (Locked)
-            </span>
-          ) : (
-            <span className="header-control game-idle-badge" title="Game is closed - full save/stash edit access active">
-              Game Closed (Unlocked)
-            </span>
-          )}
-
-          <button 
-            className="header-control btn-d2r btn-secondary" 
-            title="Pin an offline Terror Zone"
-            onClick={() => setShowTZ(true)}
-          >
-            Terror Zone
-          </button>
-
-          <button
-            className={`header-control btn-d2r btn-refresh ${syncing ? 'spinning' : ''}`}
-            title="Refresh from disk"
-            onClick={() => refreshFromServer(activeFile)}
-            disabled={!activeFile || syncing}
-          >
-            {syncing ? 'Refreshing...' : 'Refresh'}
-          </button>
+          <GlobalItemSearch sharedFile={sharedStashFile || ""} facets={searchFacets} onSelect={handleSearchSelect} />
         </div>
       </header>
 
@@ -328,12 +396,15 @@ function MainContent() {
           highlightIdentity={searchHighlight}
           movingItemKeys={movingItemKeys}
         />
+      ) : mainTab === 'preview' ? (
+        <LocalStashPreviewWrapper sharedStash={sharedStash} refreshVault={refreshVault} />
       ) : mainTab === 'shared_stash' ? (
         <SharedStashPanel
           sharedStash={sharedStash}
           sharedStashLoading={sharedStashLoading}
           sharedStashError={sharedStashError}
           refreshSharedStash={refreshSharedStash}
+          refreshVault={refreshVault}
           depositItemToVault={depositItemToVault}
           setSharedStash={setSharedStash}
           sharedStashLoadedFile={sharedStashLoadedFile}
@@ -431,3 +502,6 @@ function MainContent() {
     </div>
   );
 }
+
+
+

@@ -1,3 +1,5 @@
+import { useUIStore } from '../stores/useUIStore';
+
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -6,6 +8,16 @@ async function parseResponse(response) {
     throw error
   }
   return data
+}
+
+function getRealmParams() {
+  const realm = useUIStore.getState().vaultRealm;
+  return `realm=${encodeURIComponent(realm)}`;
+}
+
+function appendRealm(url) {
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}${getRealmParams()}`;
 }
 
 export const InfiniteStashAdapter = {
@@ -22,30 +34,32 @@ export const InfiniteStashAdapter = {
     if (filters.status && filters.status !== 'active') params.set('status', filters.status)
     params.set('sort', sort || 'dateAdded')
     params.set('direction', direction || 'desc')
+    params.set('realm', useUIStore.getState().vaultRealm)
     return parseResponse(await fetch(`/__vault/items?${params}`))
   },
-  async count() { return parseResponse(await fetch('/__vault/count')) },
-  async facets() { return parseResponse(await fetch('/__vault/facets')) },
+  async count() { return parseResponse(await fetch(appendRealm('/__vault/count'))) },
+  async facets() { return parseResponse(await fetch(appendRealm('/__vault/facets'))) },
   async add(entry) {
-    return parseResponse(await fetch('/__vault/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))
+    return parseResponse(await fetch(appendRealm('/__vault/items'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))
   },
   async update(entry) {
-    return parseResponse(await fetch('/__vault/items', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))
+    return parseResponse(await fetch(appendRealm('/__vault/items'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }))
   },
   async markPendingWithdraw(vaultId, reason = 'withdraw') {
-    return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}/intent?reason=${encodeURIComponent(reason)}`, { method: 'POST' }))
+    return parseResponse(await fetch(appendRealm(`/__vault/items/${encodeURIComponent(vaultId)}/intent?reason=${encodeURIComponent(reason)}`), { method: 'POST' }))
   },
   async recover(vaultId) {
-    return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}/recover`, { method: 'POST' }))
+    return parseResponse(await fetch(appendRealm(`/__vault/items/${encodeURIComponent(vaultId)}/recover`), { method: 'POST' }))
   },
   async remove(vaultId, reason = 'delete') {
-    return parseResponse(await fetch(`/__vault/items/${encodeURIComponent(vaultId)}?reason=${encodeURIComponent(reason)}`, { method: 'DELETE' }))
+    return parseResponse(await fetch(appendRealm(`/__vault/items/${encodeURIComponent(vaultId)}?reason=${encodeURIComponent(reason)}`), { method: 'DELETE' }))
   },
-  async import(entries) {
-    return parseResponse(await fetch('/__vault/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entries) }))
+  async import(entries, customRealm = null) {
+    const url = customRealm ? `/__vault/import?realm=${encodeURIComponent(customRealm)}` : appendRealm('/__vault/import');
+    return parseResponse(await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entries) }))
   },
   async export() {
-    const response = await fetch('/__vault/export')
+    const response = await fetch(appendRealm('/__vault/export'))
     if (!response.ok) return parseResponse(response)
     const blob = await response.blob()
     const disposition = response.headers.get('Content-Disposition') || ''

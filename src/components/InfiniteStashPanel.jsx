@@ -6,6 +6,7 @@ import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { TooltipTrigger } from './TooltipTrigger';
 import { getVirtualRange } from '../domain/virtualList';
 import { EMPTY_ITEM_FILTERS, ItemFilterControls } from './ItemFilterControls';
+import { useUIStore } from '../stores/useUIStore';
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 8;
@@ -25,6 +26,10 @@ export function InfiniteStashPanel({
   onWithdraw,
   onWithdrawShared,
   onRecover,
+  onImport,
+  title = "📦 Infinite Stash Vault",
+  hideActions = false,
+  customActions = null,
   highlightIdentity,
   vaultFilters,
   vaultFacets = {},
@@ -122,25 +127,7 @@ export function InfiniteStashPanel({
     }
   };
 
-  const handleImportFile = async (event) => {
-    if (isGameRunning) {
-      alert('Cannot import while Diablo II: Resurrected is running.');
-      return;
-    }
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const entries = JSON.parse(await file.text());
-      if (!Array.isArray(entries)) throw new Error('Expected a JSON array');
-      const result = await InfiniteStashAdapter.import(entries);
-      await onRefresh();
-      alert(`Successfully imported ${result.addedCount} items.`);
-    } catch (error) {
-      alert(`Failed to import vault: ${error.message}`);
-    } finally {
-      event.target.value = '';
-    }
-  };
+
 
   const handleTriggerBackup = async () => {
     try {
@@ -185,17 +172,23 @@ export function InfiniteStashPanel({
     <div className="infinite-stash-container">
       <div className="stash-header-bar">
         <div className="stash-title-group">
-          <h2>📦 Infinite Stash Vault</h2>
+          <h2>{title}</h2>
           <span className="stash-count-badge">
             {vaultItems.length} loaded ({vaultTotal} matching)
           </span>
         </div>
-        <div className="stash-actions">
-          <button className="btn-d2r btn-secondary" onClick={handleTriggerBackup}>🛡️ Backup Save Files</button>
-          <button className="btn-d2r btn-secondary" onClick={() => InfiniteStashAdapter.export().catch((error) => alert(error.message))}>💾 Export Vault JSON</button>
-          <button className="btn-d2r btn-secondary" onClick={() => fileInputRef.current?.click()}>📥 Import Vault JSON</button>
-          <input type="file" accept=".json" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImportFile} />
-        </div>
+        {!hideActions && (
+          <div className="stash-actions">
+            {customActions}
+            <button className="btn-d2r btn-secondary" onClick={handleTriggerBackup}>🛡️ Backup Save Files</button>
+            <button className="btn-d2r btn-secondary" onClick={() => InfiniteStashAdapter.export().catch((error) => alert(error.message))}>💾 Export Vault JSON</button>
+          </div>
+        )}
+        {hideActions && customActions && (
+          <div className="stash-actions">
+            {customActions}
+          </div>
+        )}
       </div>
 
       {backupMessage && <div className="backup-banner-success">{backupMessage}</div>}
@@ -246,18 +239,20 @@ export function InfiniteStashPanel({
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span></div>
                   <div className="col-added source-cell"><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {moving ? (
-                      <button className="btn-d2r btn-secondary" disabled>Moving…</button>
-                    ) : entry.status === 'pending_withdraw' ? (
-                      <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>🔄 Recover</button>
-                    ) : (
-                      <>
-                        <button className="btn-d2r btn-secondary" onClick={() => onWithdraw?.(entry.vaultId, item)}>👤 Personal Stash</button>
-                        <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>🪙 Shared Stash</button>
-                      </>
-                    )}
-                    {!moving && <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑️</button>}
-                  </div>
+                      {moving ? (
+                        <button className="btn-d2r btn-secondary" disabled>Moving...</button>
+                      ) : entry.status === 'pending_withdraw' ? (
+                        <button className="btn-d2r btn-secondary" onClick={() => onRecover?.(entry.vaultId)}>Recover</button>
+                      ) : onImport ? (
+                        <button className="btn-d2r btn-secondary" onClick={() => onImport(entry.itemData)}>📥 Import to Vault</button>
+                      ) : (
+                        <>
+                          <button className="btn-d2r btn-secondary" onClick={() => onWithdraw?.(entry.vaultId, item)}>Personal Stash</button>
+                          <button className="btn-d2r btn-secondary" onClick={() => onWithdrawShared?.(entry.vaultId, item)}>Shared Stash</button>
+                        </>
+                      )}
+                      {!moving && !onImport && <button className="btn-remove" aria-label={`Remove ${getItemDisplayName(item)} from Infinite Stash`} onClick={() => handleRemove(entry.vaultId)}>🗑</button>}
+                    </div>
                 </TooltipTrigger>
               );
             })}

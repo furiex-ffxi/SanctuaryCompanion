@@ -62,10 +62,29 @@ export async function rehydrateVaultEntries(vault, entries, rehydrateItem = rehy
   return entries.map((entry) => refreshed.get(entry.vaultId) || entry)
 }
 
+import path from 'node:path'
+
 export function registerVaultRoutes(server, { savesDir, repository, processCheck = isD2Running, rehydrateItem = rehydrateVaultItem } = {}) {
-  const vault = repository || new VaultRepository({ savesDir })
-  const migration = vault.migrateLegacyJson()
-  if (migration.migrated) console.log(`Migrated ${migration.count} Infinite Stash items to SQLite`)
+  const vaults = new Map()
+
+  function getVault(url) {
+    if (repository) return repository
+    const realm = url.searchParams.get('realm')
+    const safeRealm = (realm || 'expansion').replace(/[^a-zA-Z0-9_-]/g, '')
+    const key = safeRealm === 'expansion' ? 'expansion' : safeRealm
+    if (!vaults.has(key)) {
+      const databasePath = key === 'expansion' 
+        ? path.join(savesDir, 'infinite_stash_vault.sqlite3')
+        : path.join(savesDir, `infinite_stash_vault_${key}.sqlite3`)
+      const v = new VaultRepository({ savesDir, databasePath })
+      if (key === 'expansion') {
+        const migration = v.migrateLegacyJson()
+        if (migration.migrated) console.log(`Migrated ${migration.count} Infinite Stash items to SQLite`)
+      }
+      vaults.set(key, v)
+    }
+    return vaults.get(key)
+  }
 
   let mutationQueue = Promise.resolve()
   const rehydrationInFlight = new Set()
@@ -74,7 +93,7 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
     mutationQueue = pending.catch(() => {})
     return pending
   }
-  const scheduleVaultRehydration = (entries) => {
+  const scheduleVaultRehydration = (vault, entries) => {
     const stale = entries.filter((entry) => (
       needsVaultItemRehydration(entry.itemData) && !rehydrationInFlight.has(entry.vaultId)
     ))
@@ -97,6 +116,8 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
     if (!url.pathname.startsWith('/__vault/')) return next()
 
     try {
+      const vault = getVault(url)
+      
       if (req.method === 'GET' && url.pathname === '/__vault/items') {
         const result = vault.list({
           limit: url.searchParams.get('limit'), cursor: url.searchParams.get('cursor'),
@@ -109,15 +130,14 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
           direction: url.searchParams.has('direction') ? url.searchParams.get('direction') : undefined,
           status: url.searchParams.get('status') || 'active'
         })
-        // Return the page immediately. Legacy stat display repair invokes the
-        // worker and can take seconds per item; it must not block pagination.
-        scheduleVaultRehydration(result.items)
+        scheduleVaultRehydration(vault, result.items)
         return sendJson(res, 200, result)
       }
       if (req.method === 'GET' && url.pathname === '/__vault/count') return sendJson(res, 200, { total: vault.count() })
       if (req.method === 'GET' && url.pathname === '/__vault/facets') return sendJson(res, 200, vault.facets())
       if (req.method === 'GET' && url.pathname === '/__vault/export') {
-        const filename = `sanctuary_infinite_stash_${new Date().toISOString().slice(0, 10)}.json`
+        const realmStr = url.searchParams.get('realm') || 'expansion'
+        const filename = `sanctuary_infinite_stash_${realmStr}_${new Date().toISOString().slice(0, 10)}.json`
         res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${filename}"` })
         return res.end(JSON.stringify(vault.exportEntries(), null, 2))
       }
@@ -186,6 +206,12 @@ export function registerVaultRoutes(server, { savesDir, repository, processCheck
     }
   })
 
-  server.httpServer?.once('close', () => vault.close())
-  return vault
+  server.httpServer?.once('close', () => {
+    if (repository) repository.close()
+    for (const v of vaults.values()) v.close()
+  })
+  
+  // Return the default repository for backwards compatibility, if it exists
+  if (repository) return repository
+  return vaults.get('expansion') || new VaultRepository({ savesDir })
 }
