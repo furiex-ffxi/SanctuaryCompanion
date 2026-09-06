@@ -139,4 +139,48 @@ describe('TerrorZoneScheduler', () => {
       'error'
     );
   });
+
+  it('dispatches to desktop agent on port 5174 when agent is connected', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url === '/__tz_schedule') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockSchedule),
+        });
+      }
+      if (url === 'http://127.0.0.1:5174/status') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, role: 'desktop-agent', machineId: 'DESKTOP-TEST' }),
+        });
+      }
+      if (url === 'http://127.0.0.1:5174/set_time') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        });
+      }
+      return Promise.reject(new Error('Unknown url: ' + url));
+    });
+
+    render(<TerrorZoneScheduler onClose={() => {}} addToast={addToastMock} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Future Zone')).toBeInTheDocument();
+      expect(screen.getByText(/Desktop Agent Connected/i)).toBeInTheDocument();
+    });
+
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'Future Zone' } });
+
+    const jumpBtn = screen.getByText('Jump to Zone');
+    fireEvent.click(jumpBtn);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('http://127.0.0.1:5174/set_time', expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining(mockSchedule[1].datetime),
+      }));
+    });
+  });
 });

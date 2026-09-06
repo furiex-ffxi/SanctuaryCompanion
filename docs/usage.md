@@ -39,6 +39,15 @@ For any operation that changes a save:
 
 If a transfer reports an ambiguous failure, keep the vault entry and review the backup/recovery information before retrying. The app favors a recoverable duplicate over silently losing an item.
 
+## Multi-Machine Save Sync
+
+When playing across multiple devices (e.g. desktop and laptop):
+
+1. **Host machine**: In `.env`, configure `SANCTUARY_SYNC_HOST=true` and start `npm run dev`. This exposes the sync API and single-source SQLite vault to your LAN (`0.0.0.0:5173`).
+2. **Client machine**: In `.env`, configure `SANCTUARY_SYNC_URL=http://<host-ip>:5173` and start `npm run dev`.
+3. **Trigger sync**: In the header toolbar on the client machine, ensure the indicator shows **Host: [machine-id]**, then click **🔄 Sync Now**.
+4. Both machines enforce that D2R is closed before allowing saves to be overwritten, and timestamped backups are automatically placed under `backups/pre-sync-*` on each machine.
+
 ## Item artwork
 
 Game artwork is not bundled because the extracted assets do not have a redistribution license. To use artwork privately, run:

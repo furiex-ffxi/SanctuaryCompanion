@@ -12,6 +12,7 @@ import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
 import { getItemFilterFacets } from './components/ItemFilterControls.jsx';
 import { BackupRestorePanel } from './components/BackupRestorePanel.jsx';
+import { SyncPanel } from './components/SyncPanel.jsx';
 
 
 import './App.css';
@@ -88,6 +89,7 @@ function MainContent() {
     sharedStashLoading,
     sharedStashError,
     refreshSharedStash,
+    refreshSaveFiles,
     setSharedStash,
     sharedStashLoadedFile,
     setSharedStashLoadedFile,
@@ -249,6 +251,15 @@ function MainContent() {
     }
   };
 
+  const handleSyncComplete = React.useCallback(() => {
+    const currentActiveFile = useUIStore.getState().activeFile;
+    const currentSharedStash = useUIStore.getState().sharedStashFile;
+    if (currentActiveFile) refreshFromServer(currentActiveFile);
+    if (currentSharedStash) refreshSharedStash(currentSharedStash);
+    refreshVault();
+    refreshSaveFiles();
+  }, [refreshFromServer, refreshSharedStash, refreshVault, refreshSaveFiles]);
+
   return (
     <div className="app-container">
       <header>
@@ -303,6 +314,11 @@ function MainContent() {
                 <option value="rotw">ROTW</option>
               </select>
             </div>
+
+            <SyncPanel
+              isGameRunning={isGameRunning}
+              onSyncComplete={handleSyncComplete}
+            />
 
             <BackupRestorePanel
               isGameRunning={isGameRunning}

@@ -38,6 +38,9 @@ export const useUIStore = create(
       setItemSearchOpen: (open) => set({ itemSearchOpen: open }),
       itemSearchFiltersOpen: false,
       setItemSearchFiltersOpen: (open) => set({ itemSearchFiltersOpen: open }),
+
+      autoSyncOnExit: true,
+      setAutoSyncOnExit: (enabled) => set({ autoSyncOnExit: enabled }),
     }),
     {
       name: 'sc-ui-storage',
@@ -47,7 +50,8 @@ export const useUIStore = create(
         sharedStashFile: state.sharedStashFile,
         sharedStashTab: state.sharedStashTab,
         activeFile: state.activeFile,
-        vaultRealm: state.vaultRealm
+        vaultRealm: state.vaultRealm,
+        autoSyncOnExit: state.autoSyncOnExit,
       }),
     }
   )
