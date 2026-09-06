@@ -236,6 +236,72 @@ header {
   font-family: 'Outfit', sans-serif;
 }
 
+/* Multi-Machine Sync Panel */
+.sync-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(20, 15, 10, 0.7);
+  border: 1px solid var(--color-border-dim);
+  border-radius: 4px;
+  padding: 0 10px;
+}
+
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text-normal);
+}
+
+.sync-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.sync-indicator.connected {
+  background-color: #5fde7a;
+  box-shadow: 0 0 6px #5fde7a;
+}
+
+.sync-indicator.disconnected {
+  background-color: #e04030;
+  box-shadow: 0 0 6px #e04030;
+}
+
+.sync-label {
+  font-size: 0.8rem;
+  font-family: 'Cinzel', serif;
+  color: var(--color-border-gold);
+  white-space: nowrap;
+}
+
+.btn-sync {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sync-result-badge {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sync-result-badge .sync-pulled { color: #60c0f0; }
+.sync-result-badge .sync-pushed { color: #ffd700; }
+.sync-result-badge .sync-conflicts { color: #f06060; }
+.sync-result-badge .sync-ok { color: #5fde7a; }
+
 /* Secondary action button (Browse) */
 .btn-secondary {
   background: linear-gradient(180deg, #1a1a1a 0%, #0e0e0e 100%);

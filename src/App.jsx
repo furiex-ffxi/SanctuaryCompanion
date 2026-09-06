@@ -12,6 +12,7 @@ import { TerrorZoneScheduler } from './components/TerrorZoneScheduler';
 import { containsCanonicalItem, planItemSearchNavigation } from './domain/search/itemSearchNavigation';
 import { getItemFilterFacets } from './components/ItemFilterControls.jsx';
 import { BackupRestorePanel } from './components/BackupRestorePanel.jsx';
+import { SyncPanel } from './components/SyncPanel.jsx';
 
 
 import './App.css';
@@ -303,6 +304,8 @@ function MainContent() {
                 <option value="rotw">ROTW</option>
               </select>
             </div>
+
+            <SyncPanel />
 
             <BackupRestorePanel
               isGameRunning={isGameRunning}

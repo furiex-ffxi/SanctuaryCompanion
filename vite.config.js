@@ -13,10 +13,14 @@ import { getWindowsTimeStatus, setWindowsTime } from './server/timeJumper.js'
 import { safeSavePath } from './server/savePath.js'
 import { isD2RRunning, rejectWhileD2RRunning } from './server/processLock.js'
 
+import { loadConfig } from './server/config.js'
+import { registerSyncRoutes } from './server/sync/syncRoutes.js'
 import { constants } from './src/domain/entities/static_constant_data.js'
 
+const config = loadConfig()
+
 // Path to D2R saves directory
-const SAVES_DIR = 'C:/Users/chang/Saved Games/Diablo II Resurrected'
+const SAVES_DIR = config.savesDir
 const ITEM_ASSET_DIR = path.resolve(process.env.D2R_ITEM_ASSET_DIR || '.d2r-item-assets')
 const TZ_SCHEDULE_PATH = path.resolve('public/data/tz-2023-localized.json')
 const TZ_REMOTE_URL = process.env.SANCTUARY_TZ_REMOTE_URL || 'https://d2emu.com/data/tz-2023-localized.json'
@@ -212,8 +216,47 @@ function d2sWatcherPlugin() {
         }
       })
 
-      const vaultRepository = registerVaultRoutes(server, { savesDir: SAVES_DIR })
-      registerItemSearchRoute(server, { savesDir: SAVES_DIR, repository: vaultRepository, parseD2S, parseD2I })
+      if (config.isClient && config.syncUrl) {
+        // Proxy vault + item search requests to the host machine
+        server.middlewares.use(async (req, res, next) => {
+          const pathname = req.url?.split('?')[0] || ''
+          if (!pathname.startsWith('/__vault/') && pathname !== '/__item_search') return next()
+
+          try {
+            let body = null
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+              const chunks = []
+              await new Promise((resolve, reject) => {
+                req.on('data', (c) => chunks.push(c))
+                req.on('end', resolve)
+                req.on('error', reject)
+              })
+              body = Buffer.concat(chunks)
+            }
+
+            const targetUrl = `${config.syncUrl}${req.url}`
+            const headers = { ...req.headers }
+            delete headers.host
+
+            const proxyRes = await fetch(targetUrl, { method: req.method, headers, body })
+            const responseHeaders = {}
+            for (const [key, value] of proxyRes.headers) responseHeaders[key] = value
+            res.writeHead(proxyRes.status, responseHeaders)
+            res.end(Buffer.from(await proxyRes.arrayBuffer()))
+          } catch (err) {
+            res.writeHead(502, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ success: false, error: `Vault proxy error: ${err.message}. Is the host running?` }))
+          }
+        })
+      }
+
+      let vaultRepository = null
+      if (!config.isClient) {
+        vaultRepository = registerVaultRoutes(server, { savesDir: SAVES_DIR })
+        registerItemSearchRoute(server, { savesDir: SAVES_DIR, repository: vaultRepository, parseD2S, parseD2I })
+      }
+
+      registerSyncRoutes(server, { savesDir: SAVES_DIR, config })
 
       // Endpoint to check if Diablo II Resurrected process is currently running
       server.middlewares.use('/__d2r_status', (_req, res) => {
@@ -737,8 +780,10 @@ function d2sWatcherPlugin() {
             fs.copyFileSync(srcPath, destPath)
             copied.push(f)
           }
-          const vaultReference = await vaultRepository.getRecoveryReference()
-          fs.writeFileSync(path.join(backupSubdir, 'vault-reference.json'), JSON.stringify(vaultReference, null, 2), 'utf8')
+          const vaultReference = vaultRepository ? await vaultRepository.getRecoveryReference() : null
+          if (vaultReference) {
+            fs.writeFileSync(path.join(backupSubdir, 'vault-reference.json'), JSON.stringify(vaultReference, null, 2), 'utf8')
+          }
 
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: true, timestamp, backupSubdir, count: copied.length, files: copied, vaultReference }))
@@ -813,7 +858,7 @@ function d2sWatcherPlugin() {
                 fs.copyFileSync(path.join(snapshotDir, file), path.join(SAVES_DIR, file))
                 restored.push(file)
               }
-              if (vaultReference) await vaultRepository.restoreRecoveryReference(vaultReference)
+              if (vaultReference && vaultRepository) await vaultRepository.restoreRecoveryReference(vaultReference)
             } catch (error) {
               for (const file of restored) {
                 const safetyPath = path.join(safetyDir, file)
@@ -894,5 +939,5 @@ function d2sWatcherPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), d2sWatcherPlugin()],
-  server: { host: '127.0.0.1', port: 5173, strictPort: true },
+  server: { host: config.serverHost, port: 5173, strictPort: true },
 })
