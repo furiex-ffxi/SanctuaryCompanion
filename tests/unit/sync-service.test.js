@@ -3,7 +3,8 @@ import test from 'node:test'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
-import { SyncService, hashFile } from '../../server/sync/SyncService.js'
+import { SyncService, hashFile, compareFiles } from '../../server/sync/SyncService.js'
+import { inspectSaveFile, clearMetadataCache } from '../../server/sync/saveMetadata.js'
 
 function createTempDir(prefix = 'sanctuary-sync-test-') {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix))
@@ -212,3 +213,298 @@ test('ping returns connected state and handles network failures', async () => {
   assert.equal(failPing.connected, false)
   assert.match(failPing.error, /Connection refused/)
 })
+
+test('compareFiles evaluates level progression and detects warnings/conflicts', () => {
+  const baseTime = new Date('2026-09-06T12:00:00.000Z').getTime()
+
+  // 1. Client character higher level
+  const pushComp = compareFiles(
+    {
+      filename: 'Paladin.d2s',
+      hash: 'hash-client',
+      modifiedAt: new Date(baseTime + 1000).toISOString(),
+      metadata: { type: 'character', level: 95, itemCount: 60 },
+    },
+    {
+      filename: 'Paladin.d2s',
+      hash: 'hash-host',
+      modifiedAt: new Date(baseTime).toISOString(),
+      metadata: { type: 'character', level: 92, itemCount: 55 },
+    }
+  )
+  assert.equal(pushComp.action, 'push')
+  assert.match(pushComp.reason, /Lvl 95 vs Lvl 92/)
+  assert.equal(pushComp.warnings.length, 0)
+
+  // 2. Host character higher level
+  const pullComp = compareFiles(
+    {
+      filename: 'Sorc.d2s',
+      hash: 'hash-client',
+      modifiedAt: new Date(baseTime).toISOString(),
+      metadata: { type: 'character', level: 80, itemCount: 40 },
+    },
+    {
+      filename: 'Sorc.d2s',
+      hash: 'hash-host',
+      modifiedAt: new Date(baseTime + 2000).toISOString(),
+      metadata: { type: 'character', level: 88, itemCount: 45 },
+    }
+  )
+  assert.equal(pullComp.action, 'pull')
+  assert.match(pullComp.reason, /Lvl 88 vs Lvl 80/)
+  assert.equal(pullComp.warnings.length, 0)
+
+  // 3. Conflict: host timestamp is newer, but client is higher level
+  const conflictComp = compareFiles(
+    {
+      filename: 'Barb.d2s',
+      hash: 'hash-client',
+      modifiedAt: new Date(baseTime).toISOString(),
+      metadata: { type: 'character', level: 90, itemCount: 50 },
+    },
+    {
+      filename: 'Barb.d2s',
+      hash: 'hash-host',
+      modifiedAt: new Date(baseTime + 5000).toISOString(),
+      metadata: { type: 'character', level: 85, itemCount: 48 },
+    }
+  )
+  assert.equal(conflictComp.action, 'conflict')
+  assert.ok(conflictComp.warnings.some((w) => w.includes('Level and timestamp conflict')))
+
+  // 4. Warning: client newer but has fewer items
+  const fewerItemsComp = compareFiles(
+    {
+      filename: 'Amazon.d2s',
+      hash: 'hash-client',
+      modifiedAt: new Date(baseTime + 1000).toISOString(),
+      metadata: { type: 'character', level: 85, itemCount: 30 },
+    },
+    {
+      filename: 'Amazon.d2s',
+      hash: 'hash-host',
+      modifiedAt: new Date(baseTime).toISOString(),
+      metadata: { type: 'character', level: 85, itemCount: 45 },
+    }
+  )
+  assert.equal(fewerItemsComp.action, 'push')
+  assert.ok(fewerItemsComp.warnings.some((w) => w.includes('fewer items (30 vs 45)')))
+
+  // 5. Shared stash: client newer but fewer items
+  const stashComp = compareFiles(
+    {
+      filename: 'SharedStashSoftCoreV2.d2i',
+      hash: 'stash-client',
+      modifiedAt: new Date(baseTime + 3000).toISOString(),
+      metadata: { type: 'shared_stash', pageCount: 7, itemCount: 180 },
+    },
+    {
+      filename: 'SharedStashSoftCoreV2.d2i',
+      hash: 'stash-host',
+      modifiedAt: new Date(baseTime).toISOString(),
+      metadata: { type: 'shared_stash', pageCount: 7, itemCount: 200 },
+    }
+  )
+  assert.equal(stashComp.action, 'push')
+  assert.ok(stashComp.warnings.some((w) => w.includes('fewer items (180 vs 200)')))
+
+  // 6. In sync
+  const inSyncComp = compareFiles(
+    { filename: 'Shared.d2i', hash: 'same-hash', modifiedAt: new Date().toISOString() },
+    { filename: 'Shared.d2i', hash: 'same-hash', modifiedAt: new Date().toISOString() }
+  )
+  assert.equal(inSyncComp.action, 'inSync')
+})
+
+test('previewSync aggregates comparison across local and remote manifests', async (t) => {
+  const clientDir = createTempDir('preview-client-')
+  t.after(() => fs.rmSync(clientDir, { recursive: true, force: true }))
+
+  fs.writeFileSync(path.join(clientDir, 'Char1.d2s'), Buffer.from('c1-client'))
+  fs.writeFileSync(path.join(clientDir, 'Char2.d2s'), Buffer.from('c2-client'))
+
+  const mockFetch = async () => ({
+    ok: true,
+    json: async () => ({
+      machineId: 'remote-host',
+      files: [
+        {
+          filename: 'Char1.d2s',
+          hash: 'c1-remote-hash',
+          sizeBytes: 100,
+          modifiedAt: new Date(Date.now() - 50000).toISOString(),
+          metadata: { type: 'character', level: 50, itemCount: 20 },
+        },
+        {
+          filename: 'Char3.d2s',
+          hash: 'c3-remote-hash',
+          sizeBytes: 120,
+          modifiedAt: new Date().toISOString(),
+          metadata: { type: 'character', level: 70, itemCount: 30 },
+        },
+      ],
+    }),
+  })
+
+  const mockOverrides = {
+    parseD2S: async (filePath) => {
+      if (filePath.includes('Char1')) return { level: 55, items: new Array(25) }
+      if (filePath.includes('Char2')) return { level: 40, items: new Array(15) }
+      return {}
+    },
+  }
+
+  const service = new SyncService({
+    savesDir: clientDir,
+    syncUrl: 'http://mock-host:5173',
+    machineId: 'local-client',
+    isRunningCheck: () => false,
+    fetchImpl: mockFetch,
+    parserOverrides: mockOverrides,
+  })
+
+  const preview = await service.previewSync()
+  assert.equal(preview.clientMachineId, 'local-client')
+  assert.equal(preview.hostMachineId, 'remote-host')
+  assert.equal(preview.summary.total, 3)
+  assert.equal(preview.summary.toPush, 2) // Char1 (lvl 55 vs 50) + Char2 (client only)
+  assert.equal(preview.summary.toPull, 1) // Char3 (host only)
+
+  const char1 = preview.files.find((f) => f.filename === 'Char1.d2s')
+  assert.equal(char1.action, 'push')
+  assert.match(char1.reason, /Lvl 55 vs Lvl 50/)
+})
+
+test('sync accepts selectedFiles and only synchronizes chosen files', async (t) => {
+  const clientDir = createTempDir('sync-sel-client-')
+  const hostDir = createTempDir('sync-sel-host-')
+  t.after(() => {
+    fs.rmSync(clientDir, { recursive: true, force: true })
+    fs.rmSync(hostDir, { recursive: true, force: true })
+  })
+
+  fs.writeFileSync(path.join(clientDir, 'A.d2s'), Buffer.from('client-A-newer'))
+  fs.writeFileSync(path.join(hostDir, 'A.d2s'), Buffer.from('host-A-older'))
+  fs.writeFileSync(path.join(clientDir, 'B.d2s'), Buffer.from('client-B-newer'))
+  fs.writeFileSync(path.join(hostDir, 'B.d2s'), Buffer.from('host-B-older'))
+
+  const now = Date.now() / 1000
+  fs.utimesSync(path.join(hostDir, 'A.d2s'), now - 1000, now - 1000)
+  fs.utimesSync(path.join(clientDir, 'A.d2s'), now - 10, now - 10)
+  fs.utimesSync(path.join(hostDir, 'B.d2s'), now - 1000, now - 1000)
+  fs.utimesSync(path.join(clientDir, 'B.d2s'), now - 10, now - 10)
+
+  const mockFetch = async (url, options = {}) => {
+    const urlStr = String(url)
+    const method = options.method || 'GET'
+    if (urlStr.endsWith('/__sync/manifest')) {
+      return {
+        ok: true,
+        json: async () => ({
+          machineId: 'host-pc',
+          files: [
+            {
+              filename: 'A.d2s',
+              hash: 'host-A-hash',
+              sizeBytes: 12,
+              modifiedAt: new Date((now - 1000) * 1000).toISOString(),
+            },
+            {
+              filename: 'B.d2s',
+              hash: 'host-B-hash',
+              sizeBytes: 12,
+              modifiedAt: new Date((now - 1000) * 1000).toISOString(),
+            },
+          ],
+        }),
+      }
+    }
+    if (urlStr.includes('/__sync/files/')) {
+      const filename = decodeURIComponent(urlStr.split('/__sync/files/')[1])
+      if (method === 'PUT') {
+        fs.writeFileSync(path.join(hostDir, filename), options.body)
+        return { ok: true, json: async () => ({ success: true, filename }) }
+      }
+    }
+    return { ok: false, status: 404 }
+  }
+
+  const service = new SyncService({
+    savesDir: clientDir,
+    syncUrl: 'http://mock-host:5173',
+    machineId: 'client-pc',
+    isRunningCheck: () => false,
+    fetchImpl: mockFetch,
+  })
+
+  // Only select A.d2s, skip B.d2s
+  const result = await service.sync({ selectedFiles: ['A.d2s'] })
+  assert.deepEqual(result.pushed, ['A.d2s'])
+
+  // A.d2s was pushed to host, B.d2s was NOT pushed
+  assert.equal(fs.readFileSync(path.join(hostDir, 'A.d2s'), 'utf8'), 'client-A-newer')
+  assert.equal(fs.readFileSync(path.join(hostDir, 'B.d2s'), 'utf8'), 'host-B-older')
+})
+
+test('inspectSaveFile extracts metadata and caches results', async (t) => {
+  clearMetadataCache()
+  const tempDir = createTempDir('inspect-save-')
+  t.after(() => {
+    clearMetadataCache()
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  })
+
+  const d2sPath = path.join(tempDir, 'Hero.d2s')
+  const d2iPath = path.join(tempDir, 'SharedStashSoftCoreV2.d2i')
+  fs.writeFileSync(d2sPath, Buffer.from('dummy-hero-data'))
+  fs.writeFileSync(d2iPath, Buffer.from('dummy-stash-data'))
+
+  let parseD2SCallCount = 0
+  let parseD2ICallCount = 0
+
+  const mockOverrides = {
+    parseD2S: async () => {
+      parseD2SCallCount++
+      return {
+        name: 'Hero',
+        class: 'Paladin',
+        level: 89,
+        items: [1, 2, 3],
+        contained_items: [4],
+        merc_items: [5],
+        corpse_items: [],
+        attributes: { gold: 50000, stashed_gold: 150000 },
+      }
+    },
+    parseD2I: async () => {
+      parseD2ICallCount++
+      return {
+        pages: [
+          { items: [1, 2] },
+          { items: [3, 4, 5] },
+        ],
+      }
+    },
+  }
+
+  const d2sMeta1 = await inspectSaveFile(d2sPath, mockOverrides)
+  assert.equal(d2sMeta1.type, 'character')
+  assert.equal(d2sMeta1.level, 89)
+  assert.equal(d2sMeta1.itemCount, 5)
+  assert.equal(d2sMeta1.gold, 200000)
+  assert.equal(parseD2SCallCount, 1)
+
+  // Second call with unchanged file must hit cache
+  const d2sMeta2 = await inspectSaveFile(d2sPath, mockOverrides)
+  assert.equal(parseD2SCallCount, 1)
+  assert.deepEqual(d2sMeta1, d2sMeta2)
+
+  const d2iMeta = await inspectSaveFile(d2iPath, mockOverrides)
+  assert.equal(d2iMeta.type, 'shared_stash')
+  assert.equal(d2iMeta.pageCount, 2)
+  assert.equal(d2iMeta.itemCount, 5)
+  assert.equal(parseD2ICallCount, 1)
+})
+
+

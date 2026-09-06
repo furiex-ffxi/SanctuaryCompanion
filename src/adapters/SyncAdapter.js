@@ -5,8 +5,22 @@ export const SyncAdapter = {
     return res.json()
   },
 
-  async syncNow() {
-    const res = await fetch('/__sync/now', { method: 'POST' })
+  async preview() {
+    const res = await fetch('/__sync/preview')
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.error || `Failed to get sync preview (${res.status})`)
+    }
+    return res.json()
+  },
+
+  async syncNow(selectedFiles = null) {
+    const options = {
+      method: 'POST',
+      headers: selectedFiles ? { 'Content-Type': 'application/json' } : {},
+      body: selectedFiles ? JSON.stringify({ selectedFiles }) : undefined,
+    }
+    const res = await fetch('/__sync/now', options)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       throw new Error(data.error || `Sync failed (${res.status})`)

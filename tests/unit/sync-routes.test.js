@@ -164,3 +164,53 @@ test('registerSyncRoutes status endpoint behaves correctly for host and client',
   assert.equal(clientBody.syncUrl, 'http://192.168.1.50:5173')
   assert.equal(clientBody.host.connected, true)
 })
+
+test('registerSyncRoutes preview and selective sync endpoints for client', async (t) => {
+  const tempDir = createTempDir('client-routes-')
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }))
+
+  let previewCalled = false
+  let syncArg = null
+
+  const mockSyncService = {
+    ping: async () => ({ connected: true }),
+    previewSync: async () => {
+      previewCalled = true
+      return {
+        hostMachineId: 'remote-host',
+        summary: { total: 1, toPush: 1, toPull: 0 },
+        files: [{ filename: 'Hero.d2s', action: 'push' }],
+      }
+    },
+    sync: async (arg) => {
+      syncArg = arg
+      return { pushed: arg?.selectedFiles || ['Hero.d2s'], pulled: [], conflicts: [], errors: [] }
+    },
+  }
+
+  const clientServer = new MockServer()
+  registerSyncRoutes(clientServer, {
+    savesDir: tempDir,
+    config: { isClient: true, isHost: false, syncUrl: 'http://remote-host:5173', machineId: 'laptop' },
+    syncService: mockSyncService,
+  })
+
+  // 1. GET /__sync/preview
+  const prevRes = await clientServer.dispatch('GET', '/__sync/preview')
+  assert.equal(prevRes.status, 200)
+  assert.equal(previewCalled, true)
+  const prevData = JSON.parse(prevRes.body)
+  assert.equal(prevData.summary.toPush, 1)
+
+  // 2. POST /__sync/now with selectedFiles
+  const syncRes = await clientServer.dispatch(
+    'POST',
+    '/__sync/now',
+    JSON.stringify({ selectedFiles: ['Hero.d2s'] })
+  )
+  assert.equal(syncRes.status, 200)
+  assert.deepEqual(syncArg, { selectedFiles: ['Hero.d2s'] })
+  const syncData = JSON.parse(syncRes.body)
+  assert.deepEqual(syncData.pushed, ['Hero.d2s'])
+})
+

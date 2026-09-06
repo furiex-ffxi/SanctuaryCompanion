@@ -3,6 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { isD2RRunning } from '../processLock.js'
 import { SyncService, hashFile } from './SyncService.js'
+import { inspectSaveFile } from './saveMetadata.js'
 
 function sendJson(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' })
@@ -20,13 +21,14 @@ function isValidSaveFilename(filename) {
  * Register synchronization routes on the Vite dev server.
  *
  * Always available:
- *   GET  /__sync/manifest          — save file listing with hashes
+ *   GET  /__sync/manifest          — save file listing with hashes and game metadata
  *   GET  /__sync/files/:filename   — download a save file (.d2s / .d2i)
  *   PUT  /__sync/files/:filename   — upload a save file (backs up before overwrite)
  *   GET  /__sync/status            — returns sync client/host status and connectivity
  *
  * Client-triggered:
- *   POST /__sync/now               — runs bidirectional synchronization
+ *   GET  /__sync/preview           — preview file comparison, level progression, and item deltas
+ *   POST /__sync/now               — runs bidirectional synchronization (optionally with selectedFiles)
  */
 export function registerSyncRoutes(server, { savesDir, config, syncService = null }) {
   const service = syncService || new SyncService({
@@ -62,6 +64,29 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     })
   })
 
+  // GET /__sync/preview
+  server.middlewares.use('/__sync/preview', async (req, res) => {
+    if (req.method !== 'GET') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+
+    if (!config.isClient) {
+      sendJson(res, 400, {
+        error: 'This machine is not configured as a sync client (SANCTUARY_SYNC_URL is not set).',
+      })
+      return
+    }
+
+    try {
+      const preview = await service.previewSync()
+      sendJson(res, 200, preview)
+    } catch (err) {
+      sendJson(res, 500, { error: err.message })
+    }
+  })
+
   // POST /__sync/now
   server.middlewares.use('/__sync/now', async (req, res) => {
     if (req.method !== 'POST') {
@@ -78,8 +103,27 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
       return
     }
 
+    let selectedFiles = null
     try {
-      const result = await service.sync()
+      const chunks = []
+      await new Promise((resolve, reject) => {
+        req.on('data', (c) => chunks.push(c))
+        req.on('end', resolve)
+        req.on('error', reject)
+      })
+      const raw = Buffer.concat(chunks).toString('utf8').trim()
+      if (raw) {
+        const body = JSON.parse(raw)
+        if (Array.isArray(body.selectedFiles)) {
+          selectedFiles = body.selectedFiles
+        }
+      }
+    } catch {
+      // Ignore body parsing errors
+    }
+
+    try {
+      const result = await service.sync({ selectedFiles })
       sendJson(res, 200, result)
     } catch (err) {
       sendJson(res, 500, { success: false, error: err.message })
@@ -110,11 +154,13 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
           const stat = await fs.promises.stat(filePath)
           if (!stat.isFile()) continue
           const hash = await hashFile(filePath)
+          const metadata = await inspectSaveFile(filePath)
           manifest.push({
             filename,
             hash,
             sizeBytes: stat.size,
             modifiedAt: stat.mtime.toISOString(),
+            metadata,
           })
         } catch (err) {
           console.warn(`[sync-manifest] Skipping ${filename}: ${err.message}`)
