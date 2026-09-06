@@ -51,14 +51,23 @@ export function SyncPanel() {
   if (!isClient) return null
 
   return (
-    <div className="sync-panel header-control" title={syncStatus?.syncUrl ? `Syncing with ${syncStatus.syncUrl}` : undefined}>
-      <div className="sync-status">
+    <div
+      className="sync-panel header-control"
+      title={
+        syncStatus?.syncUrl
+          ? `Sync target: ${syncStatus.syncUrl}${syncStatus?.host?.error ? ` (Error: ${syncStatus.host.error})` : ''}`
+          : undefined
+      }
+    >
+      <div className="sync-status" title={syncStatus?.host?.error ? `Error: ${syncStatus.host.error}` : undefined}>
         <span
           className={`sync-indicator ${isConnected ? 'connected' : 'disconnected'}`}
           aria-label={isConnected ? 'Host connected' : 'Host unreachable'}
         />
         <span className="sync-label">
-          {isConnected ? (hostName ? `Host: ${hostName}` : 'Host connected') : 'Host unreachable'}
+          {isConnected
+            ? (hostName ? `Host: ${hostName}` : 'Host connected')
+            : (syncStatus?.host?.error ? `Host unreachable: ${syncStatus.host.error}` : 'Host unreachable')}
         </span>
       </div>
 

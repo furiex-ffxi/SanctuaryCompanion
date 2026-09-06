@@ -38,7 +38,7 @@ describe('SyncPanel Component', () => {
     render(<SyncPanel />)
 
     await waitFor(() => {
-      expect(screen.getByText('Host unreachable')).toBeInTheDocument()
+      expect(screen.getByText(/Host unreachable/i)).toBeInTheDocument()
     })
 
     const syncButton = screen.getByRole('button', { name: /Sync Now/i })
