@@ -939,5 +939,11 @@ function d2sWatcherPlugin() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), d2sWatcherPlugin()],
-  server: { host: config.serverHost, port: 5173, strictPort: true },
+  server: {
+    host: config.serverHost,
+    port: 5173,
+    strictPort: true,
+    allowedHosts: true,
+    cors: true,
+  },
 })
