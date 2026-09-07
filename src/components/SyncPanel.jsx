@@ -23,7 +23,15 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   const [browserDirHandle, setBrowserDirHandle] = useState(null)
   const [showFsaHelp, setShowFsaHelp] = useState(false)
   const queryClient = useQueryClient()
-  const { isAgentConnected, agentStatus, triggerAgentSync, getAgentPreview } = useDesktopAgent()
+
+  const { data: syncStatus } = useQuery({
+    queryKey: ['syncStatus'],
+    queryFn: () => SyncAdapter.status(),
+    refetchInterval: 10_000,
+    retry: false,
+  })
+
+  const { isAgentConnected, agentStatus, triggerAgentSync, getAgentPreview } = useDesktopAgent(syncStatus?.agent)
 
   useEffect(() => {
     getStoredDirectoryHandle().then((handle) => {
@@ -33,13 +41,6 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
 
   const autoSyncOnExit = useUIStore((state) => state.autoSyncOnExit)
   const setAutoSyncOnExit = useUIStore((state) => state.setAutoSyncOnExit)
-
-  const { data: syncStatus } = useQuery({
-    queryKey: ['syncStatus'],
-    queryFn: () => SyncAdapter.status(),
-    refetchInterval: 10_000,
-    retry: false,
-  })
 
   const isClient = syncStatus?.isClient
   const isConnected = Boolean(syncStatus?.host?.connected)
@@ -638,3 +639,4 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
 
   return null
 }
+

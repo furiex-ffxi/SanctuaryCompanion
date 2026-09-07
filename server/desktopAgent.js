@@ -189,13 +189,45 @@ export function startDesktopAgent(options = {}) {
 
   const server = http.createServer(handler)
 
-  // Background watcher for D2R exit
+  const sendHeartbeat = async () => {
+    try {
+      let running = false
+      try {
+        running = isD2RRunning()
+      } catch {
+        running = false
+      }
+      const body = JSON.stringify({
+        machineId,
+        hostname: os.hostname(),
+        agentPort: port,
+        d2rRunning: running,
+        lastSync: lastSyncResult,
+        lastSyncTime,
+      })
+      await fetch(`${syncUrl}/__sync/agent-heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {})
+    } catch {}
+  }
+
+  // Background watcher for D2R exit and host heartbeat
+  let heartbeatTick = 0
   const pollTimer = setInterval(async () => {
     let currentlyRunning = false
     try {
       currentlyRunning = isD2RRunning()
     } catch {
       currentlyRunning = false
+    }
+
+    // Send heartbeat to host every ~8 seconds (or immediately on state change)
+    heartbeatTick++
+    if (heartbeatTick % 4 === 0) {
+      sendHeartbeat()
     }
 
     // Detect transition: running -> exited
@@ -210,6 +242,7 @@ export function startDesktopAgent(options = {}) {
           `[Desktop Agent] Auto-sync complete: ${result.pulled?.length || 0} pulled, ` +
           `${result.pushed?.length || 0} pushed, ${result.conflicts?.length || 0} conflicts`
         )
+        sendHeartbeat()
       } catch (err) {
         console.error(`[Desktop Agent] Auto-sync failed: ${err.message}`)
       } finally {
@@ -230,6 +263,9 @@ export function startDesktopAgent(options = {}) {
       console.log(` Saves Folder:  ${savesDir}`)
       console.log(` Auto-sync:     Enabled (triggers when D2R.exe exits)`)
       console.log(`=======================================================`)
+
+      // Initial heartbeat to register with host server
+      sendHeartbeat()
 
       resolve({
         server,
