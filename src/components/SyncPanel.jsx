@@ -588,16 +588,57 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   if (!isLocalHost) {
     return (
       <>
-        <div className="sync-panel header-control">
+        <div className="sync-panel header-control" title="Desktop Save Synchronization">
           <button
             type="button"
             className="btn-d2r btn-sync"
-            onClick={handleConnectDirectory}
-            title="Connect your local Diablo II Resurrected save folder on this computer to sync saves directly in this browser"
+            onClick={async () => {
+              try {
+                await handleAgentSync()
+              } catch (err) {
+                emitToast(`Desktop Agent not responding: ${err.message}. Opening sync diff...`, 'warning')
+                handleOpenAgentPreview()
+              }
+            }}
+            disabled={syncing || isGameRunning}
+            title="Synchronize saves between Desktop and Laptop"
           >
-            📁 Connect Local Saves
+            {syncing ? 'Syncing…' : '🔄 Sync Now'}
+          </button>
+
+          <button
+            type="button"
+            className="btn-d2r btn-sync-diff"
+            onClick={handleOpenAgentPreview}
+            disabled={syncing || isGameRunning}
+            title="Review save differences, levels, and resolve conflicts"
+            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+          >
+            Diff
+          </button>
+
+          <button
+            type="button"
+            className="btn-d2r"
+            onClick={handleConnectDirectory}
+            title="Or connect your local save folder directly in this browser"
+            style={{ padding: '4px 8px', fontSize: '0.8rem', opacity: 0.8 }}
+          >
+            📁
           </button>
         </div>
+
+        <SyncModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            if (!syncing) setIsModalOpen(false)
+          }}
+          previewData={previewData}
+          isLoading={previewLoading}
+          error={previewError}
+          isSyncing={syncing}
+          onConfirmSync={handleConfirmAgentSync}
+        />
 
         {showFsaHelp && (
           <div className="sync-modal-backdrop" onClick={() => setShowFsaHelp(false)}>
