@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { isD2RRunning } from '../processLock.js'
+import { safeSavePath } from '../savePath.js'
 import { SyncService, hashFile } from './SyncService.js'
 import { inspectSaveFile } from './saveMetadata.js'
 
@@ -10,11 +11,13 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data))
 }
 
-function isValidSaveFilename(filename) {
-  if (!filename || typeof filename !== 'string') return false
-  if (path.basename(filename) !== filename) return false
-  const ext = path.extname(filename).toLowerCase()
-  return ext === '.d2s' || ext === '.d2i'
+function isValidSaveFilename(filename, savesDir = process.cwd()) {
+  try {
+    safeSavePath(savesDir, filename, ['.d2s', '.d2i'])
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -139,13 +142,14 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     }
 
     try {
+      const d2rRunning = isD2RRunning()
       if (!fs.existsSync(savesDir)) {
-        sendJson(res, 200, { machineId: config.machineId, files: [] })
+        sendJson(res, 200, { machineId: config.machineId, d2rRunning, files: [] })
         return
       }
 
       const entries = await fs.promises.readdir(savesDir)
-      const saveFilenames = entries.filter((f) => isValidSaveFilename(f))
+      const saveFilenames = entries.filter((f) => isValidSaveFilename(f, savesDir))
       const manifest = []
 
       for (const filename of saveFilenames) {
@@ -154,7 +158,7 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
           const stat = await fs.promises.stat(filePath)
           if (!stat.isFile()) continue
           const hash = await hashFile(filePath)
-          const metadata = await inspectSaveFile(filePath)
+          const metadata = d2rRunning ? null : await inspectSaveFile(filePath)
           manifest.push({
             filename,
             hash,
@@ -167,7 +171,7 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         }
       }
 
-      sendJson(res, 200, { machineId: config.machineId, files: manifest })
+      sendJson(res, 200, { machineId: config.machineId, d2rRunning, files: manifest })
     } catch (err) {
       sendJson(res, 500, { error: err.message })
     }
@@ -176,17 +180,31 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
   // GET /__sync/files/:filename & PUT /__sync/files/:filename
   server.middlewares.use('/__sync/files/', async (req, res) => {
     const rawPath = req.url.replace(/^\/+/, '').split('?')[0]
-    const filename = decodeURIComponent(rawPath)
-
-    if (!isValidSaveFilename(filename)) {
-      res.writeHead(400)
-      res.end('Invalid save filename')
+    let filename
+    try {
+      filename = decodeURIComponent(rawPath)
+    } catch {
+      sendJson(res, 400, { success: false, error: 'Invalid URI encoding' })
       return
     }
 
-    const filePath = path.join(savesDir, filename)
+    let filePath
+    try {
+      filePath = safeSavePath(savesDir, filename, ['.d2s', '.d2i'])
+    } catch (err) {
+      sendJson(res, 400, { success: false, error: err.message })
+      return
+    }
 
     if (req.method === 'GET') {
+      if (isD2RRunning()) {
+        sendJson(res, 423, {
+          success: false,
+          error: 'D2R is running on this machine — cannot read save files during active gameplay.',
+        })
+        return
+      }
+
       if (!fs.existsSync(filePath)) {
         res.writeHead(404)
         res.end('File not found')
@@ -219,6 +237,7 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         return
       }
 
+      let tempPath = null
       try {
         const chunks = []
         await new Promise((resolve, reject) => {
@@ -228,6 +247,27 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         })
         const data = Buffer.concat(chunks)
 
+        if (!data || data.length === 0) {
+          sendJson(res, 400, { success: false, error: 'Cannot upload empty save file' })
+          return
+        }
+
+        // D2S magic header check if file is >= 100 bytes
+        if (filename.toLowerCase().endsWith('.d2s') && data.length >= 100) {
+          if (data.readUInt32LE(0) !== 0xAA55AA55) {
+            sendJson(res, 400, { success: false, error: 'Invalid D2S file signature' })
+            return
+          }
+        }
+
+        // Verify hash if X-File-Hash header is present
+        const clientHash = req.headers['x-file-hash']
+        const computedHash = crypto.createHash('sha256').update(data).digest('hex')
+        if (clientHash && computedHash !== clientHash) {
+          sendJson(res, 400, { success: false, error: `Hash mismatch: expected ${clientHash}, got ${computedHash}` })
+          return
+        }
+
         // Safety backup existing file before replacing
         if (fs.existsSync(filePath)) {
           const backupDir = path.join(savesDir, 'backups', `pre-sync-receive-${Date.now()}`)
@@ -236,19 +276,31 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         }
 
         // Atomic write via temporary file
-        const tempPath = path.join(savesDir, `${filename}.sync-tmp-${crypto.randomUUID()}`)
+        tempPath = path.join(savesDir, `${filename}.sync-tmp-${crypto.randomUUID()}`)
         await fs.promises.writeFile(tempPath, data)
         await fs.promises.rename(tempPath, filePath)
 
-        const hash = crypto.createHash('sha256').update(data).digest('hex')
+        // Preserve mtime if provided
+        const clientModified = req.headers['x-file-modified']
+        if (clientModified) {
+          const mtime = new Date(clientModified)
+          if (!isNaN(mtime.getTime())) {
+            await fs.promises.utimes(filePath, mtime, mtime).catch(() => {})
+          }
+        }
+
         sendJson(res, 200, {
           success: true,
           filename,
-          hash,
+          hash: computedHash,
           sizeBytes: data.length,
         })
       } catch (err) {
         sendJson(res, 500, { success: false, error: err.message })
+      } finally {
+        if (tempPath) {
+          await fs.promises.unlink(tempPath).catch(() => {})
+        }
       }
       return
     }
@@ -257,3 +309,4 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     res.end('Method Not Allowed')
   })
 }
+

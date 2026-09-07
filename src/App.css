@@ -287,6 +287,23 @@ header {
   align-items: center;
 }
 
+.sync-auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  color: #c7b38d;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sync-auto-toggle input[type="checkbox"] {
+  accent-color: #c79c5e;
+  cursor: pointer;
+  margin: 0;
+}
+
 .sync-result-badge {
   display: inline-flex;
   gap: 4px;
@@ -2094,6 +2111,12 @@ header {
   background: rgba(50, 15, 15, 0.95);
   border-color: #7a2020;
   color: #f08080;
+}
+
+.toast-warning {
+  background: rgba(45, 35, 10, 0.95);
+  border-color: #8c6e20;
+  color: #ffd280;
 }
 
 .toast-info {

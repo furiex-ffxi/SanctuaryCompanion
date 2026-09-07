@@ -69,6 +69,18 @@ export function SyncModal({
   onConfirmSync,
 }) {
   const [selectedFilenames, setSelectedFilenames] = useState(new Set())
+  const selectAllRef = React.useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !isSyncing) {
+        onClose?.()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, isSyncing, onClose])
 
   // Default selection: select all files that have action 'push' or 'pull'
   useEffect(() => {
@@ -88,6 +100,13 @@ export function SyncModal({
   }, [previewData])
 
   const allActionSelected = actionFiles.length > 0 && actionFiles.every((f) => selectedFilenames.has(f.filename))
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      const someSelected = actionFiles.some((f) => selectedFilenames.has(f.filename))
+      selectAllRef.current.indeterminate = someSelected && !allActionSelected
+    }
+  }, [actionFiles, selectedFilenames, allActionSelected])
 
   const handleToggleSelectAll = () => {
     if (allActionSelected) {
@@ -199,6 +218,7 @@ export function SyncModal({
                     <tr>
                       <th className="th-check">
                         <input
+                          ref={selectAllRef}
                           type="checkbox"
                           checked={allActionSelected}
                           onChange={handleToggleSelectAll}

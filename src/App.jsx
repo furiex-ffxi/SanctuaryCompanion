@@ -89,6 +89,7 @@ function MainContent() {
     sharedStashLoading,
     sharedStashError,
     refreshSharedStash,
+    refreshSaveFiles,
     setSharedStash,
     sharedStashLoadedFile,
     setSharedStashLoadedFile,
@@ -250,6 +251,15 @@ function MainContent() {
     }
   };
 
+  const handleSyncComplete = React.useCallback(() => {
+    const currentActiveFile = useUIStore.getState().activeFile;
+    const currentSharedStash = useUIStore.getState().sharedStashFile;
+    if (currentActiveFile) refreshFromServer(currentActiveFile);
+    if (currentSharedStash) refreshSharedStash(currentSharedStash);
+    refreshVault();
+    refreshSaveFiles();
+  }, [refreshFromServer, refreshSharedStash, refreshVault, refreshSaveFiles]);
+
   return (
     <div className="app-container">
       <header>
@@ -305,7 +315,10 @@ function MainContent() {
               </select>
             </div>
 
-            <SyncPanel />
+            <SyncPanel
+              isGameRunning={isGameRunning}
+              onSyncComplete={handleSyncComplete}
+            />
 
             <BackupRestorePanel
               isGameRunning={isGameRunning}

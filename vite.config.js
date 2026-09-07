@@ -78,7 +78,8 @@ function d2sWatcherPlugin() {
       let transferMutationQueue = Promise.resolve()
       server.middlewares.use((req, res, next) => {
         const pathName = req.url?.split('?')[0] || ''
-        if (!transferMutationPaths.has(pathName)) return next()
+        const isSyncPut = pathName.startsWith('/__sync/files/') && req.method === 'PUT'
+        if (!transferMutationPaths.has(pathName) && !isSyncPut) return next()
 
         let release
         const previous = transferMutationQueue
@@ -822,10 +823,20 @@ function d2sWatcherPlugin() {
         }
       })
 
+      const isLoopback = (req) => {
+        const ip = req.socket?.remoteAddress || ''
+        return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
+      }
+
       // Restore selected save files from a timestamped snapshot. This is
       // deliberately explicit and always creates a new safety snapshot first.
       server.middlewares.use('/__d2s_restore', (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        if (!isLoopback(req)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: 'Endpoint restricted to localhost' }))
+          return
+        }
         let body = ''
         req.on('data', chunk => { body += chunk })
         req.on('end', async () => {
@@ -890,6 +901,11 @@ function d2sWatcherPlugin() {
       // Repair an MF Timer profile after a system-clock jump.
       server.middlewares.use('/__mf_timer_repair', (req, res) => {
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        if (!isLoopback(req)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: 'Endpoint restricted to localhost' }))
+          return
+        }
         if (rejectWhileD2RRunning(res)) return
         let body = ''
         req.on('data', chunk => { body += chunk })
@@ -914,6 +930,11 @@ function d2sWatcherPlugin() {
           return;
         }
         if (req.method !== 'POST') { res.writeHead(405); res.end('Method Not Allowed'); return }
+        if (!isLoopback(req)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Endpoint restricted to localhost' }));
+          return;
+        }
         let body = '';
         req.on('data', chunk => { body += chunk });
         req.on('end', async () => {

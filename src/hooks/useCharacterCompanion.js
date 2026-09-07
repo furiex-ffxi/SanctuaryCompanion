@@ -502,18 +502,21 @@ export function useCharacterCompanion() {
   }, [recoverMutation]);
 
   // Fetch list of files
+  const refreshSaveFiles = useCallback(async () => {
+    try {
+      const files = await D2SParserAdapter.fetchList();
+      if (!vaultMountedRef.current) return;
+      setSaveFiles(files);
+      const currentActive = useUIStore.getState().activeFile;
+      if (currentActive && files.includes(currentActive)) return;
+      const preferred = files.find((f) => f.toLowerCase().includes('furisorc')) || files[0];
+      if (preferred) setActiveFile(preferred);
+    } catch {}
+  }, [setActiveFile]);
+
   useEffect(() => {
-    D2SParserAdapter.fetchList()
-      .then((files) => {
-        if (!vaultMountedRef.current) return;
-        setSaveFiles(files);
-        // If the store already has a valid activeFile, keep it
-        if (activeFile && files.includes(activeFile)) return;
-        const preferred = files.find((f) => f.toLowerCase().includes('furisorc')) || files[0];
-        if (preferred) setActiveFile(preferred);
-      })
-      .catch(() => {});
-  }, [activeFile, setActiveFile]);
+    refreshSaveFiles();
+  }, [refreshSaveFiles]);
 
   // Refresh active file from server
   const refreshFromServer = useCallback(async (file) => {
@@ -617,6 +620,7 @@ export function useCharacterCompanion() {
     sharedStashLoading,
     sharedStashError,
     refreshSharedStash,
+    refreshSaveFiles,
     isGameRunning,
     movingItemKeys,
   };

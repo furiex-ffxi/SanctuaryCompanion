@@ -507,4 +507,67 @@ test('inspectSaveFile extracts metadata and caches results', async (t) => {
   assert.equal(parseD2ICallCount, 1)
 })
 
+test('compareFiles flags conflict when corrupt save attempts to overwrite valid save', () => {
+  const baseTime = new Date('2026-09-06T12:00:00.000Z').getTime()
+
+  // 1. Client save is corrupt, host save is valid
+  const corruptClient = compareFiles(
+    {
+      filename: 'Sorceress.d2s',
+      hash: 'corrupt-hash',
+      modifiedAt: new Date(baseTime + 10000).toISOString(),
+      sizeBytes: 500,
+      metadata: { error: 'D2RStashWorker parse_save failed' },
+    },
+    {
+      filename: 'Sorceress.d2s',
+      hash: 'valid-host-hash',
+      modifiedAt: new Date(baseTime).toISOString(),
+      sizeBytes: 4200,
+      metadata: { type: 'character', level: 85, itemCount: 40 },
+    }
+  )
+  assert.equal(corruptClient.action, 'conflict')
+  assert.match(corruptClient.reason, /Corrupted client save/)
+
+  // 2. Host save is corrupt, client save is valid
+  const corruptHost = compareFiles(
+    {
+      filename: 'Paladin.d2s',
+      hash: 'valid-client-hash',
+      modifiedAt: new Date(baseTime).toISOString(),
+      sizeBytes: 4200,
+      metadata: { type: 'character', level: 90, itemCount: 50 },
+    },
+    {
+      filename: 'Paladin.d2s',
+      hash: 'corrupt-host-hash',
+      modifiedAt: new Date(baseTime + 10000).toISOString(),
+      sizeBytes: 200,
+      metadata: { error: 'Corrupt header' },
+    }
+  )
+  assert.equal(corruptHost.action, 'conflict')
+  assert.match(corruptHost.reason, /Corrupted host save/)
+
+  // 3. 0-byte file cannot overwrite valid file
+  const zeroBytePush = compareFiles(
+    {
+      filename: 'Barb.d2s',
+      hash: 'empty-hash',
+      modifiedAt: new Date(baseTime + 10000).toISOString(),
+      sizeBytes: 0,
+    },
+    {
+      filename: 'Barb.d2s',
+      hash: 'host-hash',
+      modifiedAt: new Date(baseTime).toISOString(),
+      sizeBytes: 3500,
+    }
+  )
+  assert.equal(zeroBytePush.action, 'conflict')
+  assert.match(zeroBytePush.reason, /0 bytes/)
+})
+
+
 
