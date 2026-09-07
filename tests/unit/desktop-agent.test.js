@@ -151,7 +151,7 @@ test('desktopAgent handler POST /sync invokes syncService when D2R is stopped', 
   const { req, res, getResponse } = createMockReqRes({
     method: 'POST',
     url: '/sync',
-    body: JSON.stringify({ selectedFiles: ['A.d2s'] }),
+    body: JSON.stringify({ selectedFiles: ['A.d2s'], resolutions: { 'B.d2s': 'push' } }),
   })
   await handler(req, res)
 
@@ -160,6 +160,30 @@ test('desktopAgent handler POST /sync invokes syncService when D2R is stopped', 
   const data = response.json()
   assert.equal(data.success, true)
   assert.deepEqual(data.pulled, ['A.d2s'])
-  assert.deepEqual(syncArgs, { selectedFiles: ['A.d2s'] })
+  assert.deepEqual(syncArgs, { selectedFiles: ['A.d2s'], resolutions: { 'B.d2s': 'push' } })
   assert.deepEqual(notifiedResult, mockSyncResult)
 })
+
+test('desktopAgent handler GET /preview returns sync preview', async () => {
+  const mockPreview = {
+    summary: { total: 2, toPush: 1, toPull: 1, conflicts: 0 },
+    files: [{ filename: 'Sorceress.d2s', action: 'pull' }],
+  }
+
+  const handler = createAgentHandler({
+    syncService: {
+      previewSync: async () => mockPreview,
+    },
+  })
+
+  const { req, res, getResponse } = createMockReqRes({
+    method: 'GET',
+    url: '/preview',
+  })
+  await handler(req, res)
+
+  const response = getResponse()
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.json(), mockPreview)
+})
+

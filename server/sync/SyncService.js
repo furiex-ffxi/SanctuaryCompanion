@@ -158,7 +158,7 @@ export class SyncService {
     }
   }
 
-  async sync({ selectedFiles = null } = {}) {
+  async sync({ selectedFiles = null, resolutions = null } = {}) {
     if (this.isRunningCheck()) {
       throw new Error('D2R is running on this machine. Exit the game before syncing.')
     }
@@ -168,6 +168,15 @@ export class SyncService {
 
     const preview = await this.previewSync()
     let planFiles = preview.files
+
+    if (resolutions && typeof resolutions === 'object') {
+      planFiles = planFiles.map((f) => {
+        if (f.action === 'conflict' && (resolutions[f.filename] === 'push' || resolutions[f.filename] === 'pull')) {
+          return { ...f, action: resolutions[f.filename], force: true }
+        }
+        return f
+      })
+    }
 
     if (selectedFiles && Array.isArray(selectedFiles)) {
       const selectedSet = new Set(selectedFiles)
@@ -278,6 +287,13 @@ export class SyncService {
       pushed,
       pulled,
       conflicts: conflicts.map((c) => c.filename),
+      conflictDetails: conflicts.map((c) => ({
+        filename: c.filename,
+        reason: c.reason,
+        warnings: c.warnings,
+        local: c.local,
+        server: c.server,
+      })),
       inSync: inSync.map((i) => i.filename),
       errors,
       timestamp: new Date().toISOString(),

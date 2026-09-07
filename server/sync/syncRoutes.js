@@ -40,6 +40,155 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     machineId: config.machineId,
   })
 
+  let activeAgent = null
+  let activeAgentLastSeen = 0
+
+  // POST /__sync/agent-heartbeat
+  server.middlewares.use('/__sync/agent-heartbeat', async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+    try {
+      const chunks = []
+      await new Promise((resolve, reject) => {
+        req.on('data', (c) => chunks.push(c))
+        req.on('end', resolve)
+        req.on('error', reject)
+      })
+      const raw = Buffer.concat(chunks).toString('utf8').trim()
+      const body = raw ? JSON.parse(raw) : {}
+      const rawIp = req.socket.remoteAddress || ''
+      const ip = rawIp.replace(/^::ffff:/, '') || '127.0.0.1'
+      const port = body.agentPort || 5174
+
+      activeAgent = {
+        machineId: body.machineId || 'desktop',
+        hostname: body.hostname || body.machineId || 'desktop',
+        ip,
+        agentPort: port,
+        agentUrl: `http://${ip}:${port}`,
+        d2rRunning: Boolean(body.d2rRunning),
+        lastSync: body.lastSync || null,
+        lastSyncTime: body.lastSyncTime || Date.now(),
+      }
+      activeAgentLastSeen = Date.now()
+      sendJson(res, 200, { ok: true, registered: true })
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: err.message })
+    }
+  })
+
+  // Proxy agent preview: GET /__sync/agent/preview
+  server.middlewares.use('/__sync/agent/preview', async (req, res) => {
+    if (req.method !== 'GET') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+    if (!activeAgent?.agentUrl) {
+      sendJson(res, 503, { error: 'No desktop agent currently connected' })
+      return
+    }
+    try {
+      const resp = await fetch(`${activeAgent.agentUrl}/preview`, { signal: AbortSignal.timeout(5000) })
+      const data = await resp.json()
+      sendJson(res, resp.status, data)
+    } catch (err) {
+      sendJson(res, 502, { error: `Desktop agent unreachable: ${err.message}` })
+    }
+  })
+
+  // Proxy agent sync: POST /__sync/agent/sync
+  server.middlewares.use('/__sync/agent/sync', async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+    if (!activeAgent?.agentUrl) {
+      sendJson(res, 503, { error: 'No desktop agent currently connected' })
+      return
+    }
+    try {
+      const chunks = []
+      await new Promise((resolve, reject) => {
+        req.on('data', (c) => chunks.push(c))
+        req.on('end', resolve)
+        req.on('error', reject)
+      })
+      const resp = await fetch(`${activeAgent.agentUrl}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: Buffer.concat(chunks),
+        signal: AbortSignal.timeout(15000),
+      })
+      const data = await resp.json()
+      if (data.success && activeAgent) {
+        activeAgent.lastSync = data
+        activeAgent.lastSyncTime = Date.now()
+      }
+      sendJson(res, resp.status, data)
+    } catch (err) {
+      sendJson(res, 502, { error: `Desktop agent sync failed: ${err.message}` })
+    }
+  })
+
+  // Proxy agent set_time: POST /__sync/agent/set_time
+  server.middlewares.use('/__sync/agent/set_time', async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+    if (!activeAgent?.agentUrl) {
+      sendJson(res, 503, { error: 'No desktop agent currently connected' })
+      return
+    }
+    try {
+      const chunks = []
+      await new Promise((resolve, reject) => {
+        req.on('data', (c) => chunks.push(c))
+        req.on('end', resolve)
+        req.on('error', reject)
+      })
+      const resp = await fetch(`${activeAgent.agentUrl}/set_time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: Buffer.concat(chunks),
+        signal: AbortSignal.timeout(10000),
+      })
+      const data = await resp.json()
+      sendJson(res, resp.status, data)
+    } catch (err) {
+      sendJson(res, 502, { error: `Desktop agent set_time failed: ${err.message}` })
+    }
+  })
+
+  // Proxy agent repair: POST /__sync/agent/repair
+  server.middlewares.use('/__sync/agent/repair', async (req, res) => {
+    if (req.method !== 'POST') {
+      res.writeHead(405)
+      res.end('Method Not Allowed')
+      return
+    }
+    if (!activeAgent?.agentUrl) {
+      sendJson(res, 503, { error: 'No desktop agent currently connected' })
+      return
+    }
+    try {
+      const resp = await fetch(`${activeAgent.agentUrl}/repair`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(10000),
+      })
+      const data = await resp.json()
+      sendJson(res, resp.status, data)
+    } catch (err) {
+      sendJson(res, 502, { error: `Desktop agent repair failed: ${err.message}` })
+    }
+  })
+
   // GET /__sync/status
   server.middlewares.use('/__sync/status', async (req, res) => {
     if (req.method !== 'GET') {
@@ -48,23 +197,30 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
       return
     }
 
+    const isAgentActive = Boolean(activeAgent && (Date.now() - activeAgentLastSeen < 30_000))
+    const agentPayload = isAgentActive ? { ...activeAgent, connected: true } : null
+
     if (!config.isClient) {
-      sendJson(res, 200, {
+      const response = {
         isClient: false,
         isHost: config.isHost,
         machineId: config.machineId,
-      })
+      }
+      if (agentPayload) response.agent = agentPayload
+      sendJson(res, 200, response)
       return
     }
 
     const hostPing = await service.ping()
-    sendJson(res, 200, {
+    const clientResponse = {
       isClient: true,
       isHost: false,
       syncUrl: config.syncUrl,
       machineId: config.machineId,
       host: hostPing,
-    })
+    }
+    if (agentPayload) clientResponse.agent = agentPayload
+    sendJson(res, 200, clientResponse)
   })
 
   // GET /__sync/preview
@@ -107,6 +263,7 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     }
 
     let selectedFiles = null
+    let resolutions = null
     try {
       const chunks = []
       await new Promise((resolve, reject) => {
@@ -120,13 +277,18 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         if (Array.isArray(body.selectedFiles)) {
           selectedFiles = body.selectedFiles
         }
+        if (body.resolutions && typeof body.resolutions === 'object') {
+          resolutions = body.resolutions
+        }
       }
     } catch {
       // Ignore body parsing errors
     }
 
     try {
-      const result = await service.sync({ selectedFiles })
+      const syncArgs = { selectedFiles }
+      if (resolutions) syncArgs.resolutions = resolutions
+      const result = await service.sync(syncArgs)
       sendJson(res, 200, result)
     } catch (err) {
       sendJson(res, 500, { success: false, error: err.message })

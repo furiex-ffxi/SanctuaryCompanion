@@ -14,11 +14,15 @@ export const SyncAdapter = {
     return res.json()
   },
 
-  async syncNow(selectedFiles = null) {
+  async syncNow(selectedFiles = null, resolutions = null) {
+    const payload = {}
+    if (selectedFiles) payload.selectedFiles = selectedFiles
+    if (resolutions) payload.resolutions = resolutions
+    const hasBody = Boolean(selectedFiles || resolutions)
     const options = {
       method: 'POST',
-      headers: selectedFiles ? { 'Content-Type': 'application/json' } : {},
-      body: selectedFiles ? JSON.stringify({ selectedFiles }) : undefined,
+      headers: hasBody ? { 'Content-Type': 'application/json' } : {},
+      body: hasBody ? JSON.stringify(payload) : undefined,
     }
     const res = await fetch('/__sync/now', options)
     if (!res.ok) {

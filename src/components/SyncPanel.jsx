@@ -23,7 +23,15 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   const [browserDirHandle, setBrowserDirHandle] = useState(null)
   const [showFsaHelp, setShowFsaHelp] = useState(false)
   const queryClient = useQueryClient()
-  const { isAgentConnected, agentStatus, triggerAgentSync } = useDesktopAgent()
+
+  const { data: syncStatus } = useQuery({
+    queryKey: ['syncStatus'],
+    queryFn: () => SyncAdapter.status(),
+    refetchInterval: 10_000,
+    retry: false,
+  })
+
+  const { isAgentConnected, agentStatus, triggerAgentSync, getAgentPreview } = useDesktopAgent(syncStatus?.agent)
 
   useEffect(() => {
     getStoredDirectoryHandle().then((handle) => {
@@ -33,13 +41,6 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
 
   const autoSyncOnExit = useUIStore((state) => state.autoSyncOnExit)
   const setAutoSyncOnExit = useUIStore((state) => state.setAutoSyncOnExit)
-
-  const { data: syncStatus } = useQuery({
-    queryKey: ['syncStatus'],
-    queryFn: () => SyncAdapter.status(),
-    refetchInterval: 10_000,
-    retry: false,
-  })
 
   const isClient = syncStatus?.isClient
   const isConnected = Boolean(syncStatus?.host?.connected)
@@ -57,9 +58,9 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
 
   const handleOpenPreview = useCallback(async () => {
     if (isSyncDisabled) return
-    setIsModalOpen(true)
     setPreviewLoading(true)
     setPreviewError(null)
+    setIsModalOpen(true)
     try {
       const data = await SyncAdapter.preview()
       setPreviewData(data)
@@ -71,10 +72,10 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   }, [isSyncDisabled])
 
   const handleConfirmSync = useCallback(
-    async (selectedFiles) => {
+    async (selectedFiles, resolutions = null) => {
       setSyncing(true)
       try {
-        const result = await SyncAdapter.syncNow(selectedFiles)
+        const result = await SyncAdapter.syncNow(selectedFiles, resolutions)
         setLastResult(result)
 
         const parts = []
@@ -276,6 +277,57 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
     }
   }, [syncing, agentStatus?.d2rRunning, isGameRunning, triggerAgentSync, queryClient, onSyncComplete])
 
+  const handleOpenAgentPreview = useCallback(async () => {
+    if (syncing || agentStatus?.d2rRunning || isGameRunning) return
+    setPreviewLoading(true)
+    setPreviewError(null)
+    setIsModalOpen(true)
+    try {
+      const data = await getAgentPreview()
+      setPreviewData(data)
+    } catch (err) {
+      setPreviewError(err.message)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [syncing, agentStatus?.d2rRunning, isGameRunning, getAgentPreview])
+
+  const handleConfirmAgentSync = useCallback(
+    async (selectedFiles, resolutions = null) => {
+      setSyncing(true)
+      try {
+        const result = await triggerAgentSync(selectedFiles, resolutions)
+        setLastResult(result)
+
+        const parts = []
+        if (result.pulled?.length) parts.push(`↓ ${result.pulled.length} pulled`)
+        if (result.pushed?.length) parts.push(`↑ ${result.pushed.length} pushed`)
+        if (result.conflicts?.length) parts.push(`⚠ ${result.conflicts.length} conflicts`)
+        if (!parts.length) parts.push('Everything in sync')
+
+        const hasErrors = (result.errors?.length || 0) > 0
+        const hasConflicts = (result.conflicts?.length || 0) > 0
+        const toastType = hasErrors ? 'error' : hasConflicts ? 'warning' : 'success'
+        const toastMsg = hasErrors
+          ? `Agent sync finished with errors: ${result.errors.join('; ')}`
+          : `Agent sync complete: ${parts.join(', ')}`
+        emitToast(toastMsg, toastType)
+
+        queryClient.invalidateQueries({ queryKey: ['desktopAgentStatus'] })
+        if (result.pulled?.length) {
+          queryClient.invalidateQueries({ queryKey: ['sharedStash'] })
+          onSyncComplete?.()
+        }
+        setIsModalOpen(false)
+      } catch (err) {
+        emitToast(`Agent sync failed: ${err.message}`, 'error')
+      } finally {
+        setSyncing(false)
+      }
+    },
+    [triggerAgentSync, queryClient, onSyncComplete]
+  )
+
   // Server-to-server client mode
   if (isClient) {
     return (
@@ -425,10 +477,11 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
     const isAgentSyncDisabled = syncing || isAgentD2RRunning || isGameRunning
 
     return (
-      <div
-        className="sync-panel header-control"
-        title={`Desktop Agent active (${agentStatus?.machineId || 'desktop'}). Saves auto-sync when D2R closes.`}
-      >
+      <>
+        <div
+          className="sync-panel header-control"
+          title={`Desktop Agent active (${agentStatus?.machineId || 'desktop'}). Saves auto-sync when D2R closes.`}
+        >
         <div className="sync-status">
           <span className="sync-indicator connected" aria-label="Desktop Agent connected" />
           <span className="sync-label">
@@ -450,19 +503,83 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
           {syncing ? 'Syncing…' : '🔄 Sync Now'}
         </button>
 
-        {lastResult && (
-          <div className="sync-result-badge" title={new Date(lastResult.timestamp).toLocaleTimeString()}>
-            {lastResult.pulled?.length > 0 && <span className="sync-pulled">↓{lastResult.pulled.length}</span>}
-            {lastResult.pushed?.length > 0 && <span className="sync-pushed">↑{lastResult.pushed.length}</span>}
-            {lastResult.conflicts?.length > 0 && <span className="sync-conflicts">⚠{lastResult.conflicts.length}</span>}
-            {!lastResult.pulled?.length && !lastResult.pushed?.length && !lastResult.conflicts?.length && (
-              <span className="sync-ok">✓ In Sync</span>
-            )}
-          </div>
+        {isAgentSyncDisabled ? null : (
+          <button
+            type="button"
+            className="btn-d2r btn-sync-diff"
+            onClick={handleOpenAgentPreview}
+            disabled={isAgentSyncDisabled}
+            title="Review save differences, levels, and resolve conflicts"
+            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+          >
+            Diff
+          </button>
         )}
+
+        {(() => {
+          const displayResult = lastResult || agentStatus?.lastSync
+          if (!displayResult) return null
+
+          const hasConflicts = (displayResult.conflicts?.length || 0) > 0
+
+          return (
+            <>
+              {hasConflicts && (
+                <button
+                  type="button"
+                  className="btn-d2r btn-sync-conflict-resolve"
+                  onClick={handleOpenAgentPreview}
+                  title="Click to inspect conflicting files and choose whether to keep Client or Host save"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.8rem',
+                    background: '#8b0000',
+                    color: '#fff',
+                    borderColor: '#ff4444',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ⚠ Resolve {displayResult.conflicts.length} Conflict{displayResult.conflicts.length > 1 ? 's' : ''}
+                </button>
+              )}
+
+              <div
+                className="sync-result-badge"
+                title={displayResult.timestamp ? new Date(displayResult.timestamp).toLocaleTimeString() : undefined}
+                style={{ cursor: hasConflicts ? 'pointer' : 'default' }}
+                onClick={hasConflicts ? handleOpenAgentPreview : undefined}
+              >
+                {displayResult.pulled?.length > 0 && <span className="sync-pulled">↓{displayResult.pulled.length}</span>}
+                {displayResult.pushed?.length > 0 && <span className="sync-pushed">↑{displayResult.pushed.length}</span>}
+                {hasConflicts && (
+                  <span className="sync-conflicts" title="Click to view conflict details and resolve">
+                    ⚠{displayResult.conflicts.length}
+                  </span>
+                )}
+                {!displayResult.pulled?.length && !displayResult.pushed?.length && !hasConflicts && (
+                  <span className="sync-ok">✓ In Sync</span>
+                )}
+              </div>
+            </>
+          )
+        })()}
       </div>
-    )
-  }
+
+      <SyncModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          if (!syncing) setIsModalOpen(false)
+        }}
+        previewData={previewData}
+        isLoading={previewLoading}
+        error={previewError}
+        isSyncing={syncing}
+        onConfirmSync={handleConfirmAgentSync}
+      />
+    </>
+  )
+}
 
   // Browser-based client mode: prompt to connect local directory when visiting remotely
   const isLocalHost = typeof window !== 'undefined' &&
@@ -522,3 +639,4 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
 
   return null
 }
+
