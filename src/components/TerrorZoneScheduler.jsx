@@ -105,7 +105,8 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
   const repairMutation = useMutation({
     mutationFn: async () => {
       if (!mfTimerDir) throw new Error('Please enter your MF Timer folder path first.');
-      const res = await fetch('/__mf_timer_repair', {
+      const endpoint = isAgentConnected ? 'http://127.0.0.1:5174/repair' : '/__mf_timer_repair';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ directory: mfTimerDir })
@@ -115,11 +116,13 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       return data;
     },
     onSuccess: (data) => {
+      setTzMaxTime(0);
+      localStorage.removeItem('tz_max_time');
       const timestampCount = data.timestampRepair?.count || 0;
       addToast(
         data.repaired || timestampCount > 0
-          ? `MF Timer repaired: ${data.profile} (${data.runCount} runs); reset ${timestampCount} future save timestamp${timestampCount === 1 ? '' : 's'}.`
-          : `MF Timer profile ${data.profile} and save timestamps do not need repair.`,
+          ? `MF Timer repaired: ${data.profile} (${data.runCount} runs); reset ${timestampCount} future save timestamp${timestampCount === 1 ? '' : 's'}. Reset jump tracker to present.`
+          : `MF Timer profile ${data.profile} and save timestamps do not need repair. Reset jump tracker to present.`,
         'success'
       );
     },
@@ -219,6 +222,39 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
           <strong>Close MF Timer before changing the clock.</strong>{' '}
           You can reopen it after the jump; close it again before restoring the clock.
         </p>
+
+        {tzMaxTime > Date.now() && (
+          <div style={{
+            padding: '8px 12px',
+            background: '#332600',
+            border: '1px solid #ffaa00',
+            borderRadius: '4px',
+            color: '#ffd280',
+            fontSize: '0.85rem',
+            margin: '12px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px'
+          }}>
+            <div>
+              <strong>Simulated Time Active:</strong> Pinned to{' '}
+              {new Date(tzMaxTime).toLocaleDateString()} {new Date(tzMaxTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+            </div>
+            <button
+              type="button"
+              className="btn-d2r"
+              style={{ fontSize: '0.75rem', padding: '3px 8px', background: '#664d00' }}
+              onClick={() => {
+                setTzMaxTime(0);
+                localStorage.removeItem('tz_max_time');
+                addToast('Reset forward simulated time. Jumps will now start from current time.', 'info');
+              }}
+            >
+              Reset to Present
+            </button>
+          </div>
+        )}
 
         <div className="form-group">
           <label>MF Timer folder</label>

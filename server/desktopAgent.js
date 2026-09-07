@@ -95,6 +95,19 @@ export function createAgentHandler({
       return
     }
 
+    // GET /preview
+    if (req.method === 'GET' && url.pathname === '/preview') {
+      try {
+        const preview = await activeSyncService.previewSync()
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(preview))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+      return
+    }
+
     // POST /sync
     if (req.method === 'POST' && url.pathname === '/sync') {
       try {
@@ -105,7 +118,10 @@ export function createAgentHandler({
         }
         const body = await readJsonBody().catch(() => ({}))
         const selectedFiles = Array.isArray(body?.selectedFiles) ? body.selectedFiles : null
-        const result = await activeSyncService.sync({ selectedFiles })
+        const resolutions = body?.resolutions && typeof body.resolutions === 'object' ? body.resolutions : null
+        const syncArgs = { selectedFiles }
+        if (resolutions) syncArgs.resolutions = resolutions
+        const result = await activeSyncService.sync(syncArgs)
         onSyncComplete(result)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: true, ...result }))

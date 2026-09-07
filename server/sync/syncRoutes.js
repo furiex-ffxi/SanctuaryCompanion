@@ -107,6 +107,7 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
     }
 
     let selectedFiles = null
+    let resolutions = null
     try {
       const chunks = []
       await new Promise((resolve, reject) => {
@@ -120,13 +121,18 @@ export function registerSyncRoutes(server, { savesDir, config, syncService = nul
         if (Array.isArray(body.selectedFiles)) {
           selectedFiles = body.selectedFiles
         }
+        if (body.resolutions && typeof body.resolutions === 'object') {
+          resolutions = body.resolutions
+        }
       }
     } catch {
       // Ignore body parsing errors
     }
 
     try {
-      const result = await service.sync({ selectedFiles })
+      const syncArgs = { selectedFiles }
+      if (resolutions) syncArgs.resolutions = resolutions
+      const result = await service.sync(syncArgs)
       sendJson(res, 200, result)
     } catch (err) {
       sendJson(res, 500, { success: false, error: err.message })

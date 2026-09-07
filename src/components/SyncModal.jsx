@@ -69,6 +69,7 @@ export function SyncModal({
   onConfirmSync,
 }) {
   const [selectedFilenames, setSelectedFilenames] = useState(new Set())
+  const [resolutions, setResolutions] = useState({})
   const selectAllRef = React.useRef(null)
 
   useEffect(() => {
@@ -92,12 +93,13 @@ export function SyncModal({
       }
     }
     setSelectedFilenames(defaultSelected)
+    setResolutions({})
   }, [previewData])
 
   const actionFiles = useMemo(() => {
     if (!previewData?.files) return []
-    return previewData.files.filter((f) => f.action === 'push' || f.action === 'pull')
-  }, [previewData])
+    return previewData.files.filter((f) => f.action === 'push' || f.action === 'pull' || Boolean(resolutions[f.filename]))
+  }, [previewData, resolutions])
 
   const allActionSelected = actionFiles.length > 0 && actionFiles.every((f) => selectedFilenames.has(f.filename))
 
@@ -123,6 +125,24 @@ export function SyncModal({
         next.delete(filename)
       } else {
         next.add(filename)
+      }
+      return next
+    })
+  }
+
+  const handleResolveConflict = (filename, direction) => {
+    setResolutions((prev) => {
+      const next = { ...prev }
+      if (!direction) {
+        delete next[filename]
+        setSelectedFilenames((s) => {
+          const ns = new Set(s)
+          ns.delete(filename)
+          return ns
+        })
+      } else {
+        next[filename] = direction
+        setSelectedFilenames((s) => new Set(s).add(filename))
       }
       return next
     })
@@ -235,11 +255,16 @@ export function SyncModal({
                   </thead>
                   <tbody>
                     {previewData.files?.map((f) => {
-                      const isActionable = f.action === 'push' || f.action === 'pull'
+                      const isResolved = Boolean(resolutions[f.filename])
+                      const isActionable = f.action === 'push' || f.action === 'pull' || isResolved
                       const isSelected = selectedFilenames.has(f.filename)
 
                       let actionBadge = null
-                      if (f.action === 'push') {
+                      if (resolutions[f.filename] === 'push') {
+                        actionBadge = <span className="sync-badge badge-push">↑ Force Push</span>
+                      } else if (resolutions[f.filename] === 'pull') {
+                        actionBadge = <span className="sync-badge badge-pull">↓ Force Pull</span>
+                      } else if (f.action === 'push') {
                         actionBadge = <span className="sync-badge badge-push">↑ Push (to Host)</span>
                       } else if (f.action === 'pull') {
                         actionBadge = <span className="sync-badge badge-pull">↓ Pull (to Client)</span>
@@ -287,6 +312,43 @@ export function SyncModal({
                                 ))}
                               </div>
                             )}
+                            {f.action === 'conflict' && (
+                              <div className="sync-conflict-actions" style={{ marginTop: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#ffb74d' }}>Resolve:</span>
+                                <button
+                                  type="button"
+                                  className={`btn-d2r ${resolutions[f.filename] === 'push' ? 'btn-active' : 'btn-secondary'}`}
+                                  style={{ padding: '2px 8px', fontSize: '0.75rem', background: resolutions[f.filename] === 'push' ? '#2e7d32' : undefined }}
+                                  onClick={() => handleResolveConflict(f.filename, 'push')}
+                                  disabled={isSyncing}
+                                  title="Force push: overwrite host with this client save"
+                                >
+                                  Keep Client (Push)
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`btn-d2r ${resolutions[f.filename] === 'pull' ? 'btn-active' : 'btn-secondary'}`}
+                                  style={{ padding: '2px 8px', fontSize: '0.75rem', background: resolutions[f.filename] === 'pull' ? '#1565c0' : undefined }}
+                                  onClick={() => handleResolveConflict(f.filename, 'pull')}
+                                  disabled={isSyncing}
+                                  title="Force pull: overwrite client with host save"
+                                >
+                                  Keep Host (Pull)
+                                </button>
+                                {resolutions[f.filename] && (
+                                  <button
+                                    type="button"
+                                    className="btn-d2r"
+                                    style={{ padding: '2px 6px', fontSize: '0.75rem', color: '#ff8a80' }}
+                                    onClick={() => handleResolveConflict(f.filename, null)}
+                                    disabled={isSyncing}
+                                    title="Undo resolution"
+                                  >
+                                    ✕
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
@@ -315,7 +377,7 @@ export function SyncModal({
             <button
               type="button"
               className="btn-d2r btn-sync-confirm"
-              onClick={() => onConfirmSync(Array.from(selectedFilenames))}
+              onClick={() => onConfirmSync(Array.from(selectedFilenames), resolutions)}
               disabled={selectedFilenames.size === 0 || isSyncing || isLoading}
             >
               {isSyncing

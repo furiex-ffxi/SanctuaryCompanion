@@ -39,11 +39,22 @@ export function useDesktopAgent() {
     return data
   }
 
-  const triggerAgentSync = async (selectedFiles = null) => {
+  const getAgentPreview = async () => {
+    const res = await fetch(`${AGENT_BASE_URL}/preview`, {
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new Error(errData.error || `HTTP ${res.status}`)
+    }
+    return await res.json()
+  }
+
+  const triggerAgentSync = async (selectedFiles = null, resolutions = null) => {
     const res = await fetch(`${AGENT_BASE_URL}/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ selectedFiles }),
+      body: JSON.stringify({ selectedFiles, resolutions }),
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.error || 'Desktop agent sync failed')
@@ -54,6 +65,7 @@ export function useDesktopAgent() {
     isAgentConnected,
     agentStatus,
     setAgentTime,
+    getAgentPreview,
     triggerAgentSync,
     refetchAgent: refetch,
   }
