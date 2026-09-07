@@ -45,7 +45,7 @@ for (let i = 0; i < args.length; i++) {
   const arg = args[i]
   if (arg === '--port' && args[i + 1]) {
     options.port = Number(args[++i])
-  } else if (arg === '--sync-url' && args[i + 1]) {
+  } else if ((arg === '--sync-url' || arg === '--host') && args[i + 1]) {
     options.syncUrl = args[++i]
   } else if (arg === '--saves-dir' && args[i + 1]) {
     options.savesDir = args[++i]

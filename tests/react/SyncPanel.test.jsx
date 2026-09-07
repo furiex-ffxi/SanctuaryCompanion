@@ -11,21 +11,22 @@ describe('SyncPanel Component', () => {
     useUIStore.setState({ autoSyncOnExit: true })
   })
 
-  it('renders nothing when not in client mode', async () => {
+  it('renders sync controls in host mode', async () => {
     vi.spyOn(SyncAdapter, 'status').mockResolvedValue({
       isClient: false,
       isHost: true,
       machineId: 'desktop-host',
     })
 
-    const { container } = render(<SyncPanel />)
+    render(<SyncPanel />)
 
     // Wait for query to settle
     await waitFor(() => {
       expect(SyncAdapter.status).toHaveBeenCalled()
     })
 
-    expect(container.firstChild).toBeNull()
+    expect(screen.getByRole('button', { name: /Sync Now/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Diff/i })).toBeInTheDocument()
   })
 
   it('renders host disconnected state with disabled Sync Now button', async () => {

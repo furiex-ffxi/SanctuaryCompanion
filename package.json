@@ -21,6 +21,7 @@
     "analyze:tz": "node scripts/tz-reverse-engineer.mjs",
     "analyze:tz-static": "node scripts/tz-static-analyze.mjs",
     "preview": "vite preview",
+    "agent": "node scripts/desktop-agent/desktop-agent.mjs",
     "postinstall": "patch-package"
   },
   "dependencies": {

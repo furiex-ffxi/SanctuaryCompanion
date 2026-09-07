@@ -280,3 +280,40 @@ export function startDesktopAgent(options = {}) {
     server.on('error', reject)
   })
 }
+
+// Support direct invocation via "node server/desktopAgent.js"
+const isDirectCli = typeof process !== 'undefined' && process.argv?.[1] && (
+  process.argv[1].endsWith('desktopAgent.js') ||
+  process.argv[1].endsWith('desktopAgent.mjs')
+)
+
+if (isDirectCli) {
+  const args = process.argv.slice(2)
+  const options = {}
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+    if ((arg === '--sync-url' || arg === '--host') && args[i + 1]) {
+      options.syncUrl = args[++i]
+    } else if (arg === '--port' && args[i + 1]) {
+      options.port = Number(args[++i])
+    } else if (arg === '--saves-dir' && args[i + 1]) {
+      options.savesDir = args[++i]
+    } else if (arg === '--poll-interval' && args[i + 1]) {
+      options.pollInterval = Number(args[++i])
+    }
+  }
+
+  startDesktopAgent(options).then((agent) => {
+    const shutdown = async () => {
+      console.log('\n[Desktop Agent] Shutting down...')
+      await agent.stop()
+      process.exit(0)
+    }
+    process.on('SIGINT', shutdown)
+    process.on('SIGTERM', shutdown)
+  }).catch((err) => {
+    console.error(`[Desktop Agent] Failed to start: ${err.message}`)
+    process.exit(1)
+  })
+}
+

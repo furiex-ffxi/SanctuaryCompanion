@@ -678,6 +678,50 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
     )
   }
 
-  return null
+  return (
+    <>
+      <div className="sync-panel header-control" title="Desktop Save Synchronization">
+        <button
+          type="button"
+          className="btn-d2r btn-sync"
+          onClick={async () => {
+            try {
+              await handleAgentSync()
+            } catch (err) {
+              emitToast(`Desktop Agent not responding: ${err.message}. Opening sync diff...`, 'warning')
+              handleOpenAgentPreview()
+            }
+          }}
+          disabled={syncing || isGameRunning}
+          title="Synchronize saves between Desktop and Laptop"
+        >
+          {syncing ? 'Syncing…' : '🔄 Sync Now'}
+        </button>
+
+        <button
+          type="button"
+          className="btn-d2r btn-sync-diff"
+          onClick={handleOpenAgentPreview}
+          disabled={syncing || isGameRunning}
+          title="Review save differences, levels, and resolve conflicts"
+          style={{ padding: '4px 8px', fontSize: '0.8rem' }}
+        >
+          Diff
+        </button>
+      </div>
+
+      <SyncModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          if (!syncing) setIsModalOpen(false)
+        }}
+        previewData={previewData}
+        isLoading={previewLoading}
+        error={previewError}
+        isSyncing={syncing}
+        onConfirmSync={handleConfirmAgentSync}
+      />
+    </>
+  )
 }
 
