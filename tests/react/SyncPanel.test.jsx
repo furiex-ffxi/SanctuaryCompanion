@@ -181,4 +181,54 @@ describe('SyncPanel Component', () => {
     // Should NOT have triggered sync
     expect(syncNowSpy).not.toHaveBeenCalled()
   })
+
+  it('renders Desktop Agent UI and triggers sync when agent is active', async () => {
+    vi.spyOn(SyncAdapter, 'status').mockResolvedValue({
+      isClient: false,
+      isHost: true,
+      machineId: 'laptop-host',
+    })
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url === 'http://127.0.0.1:5174/status') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            role: 'desktop-agent',
+            machineId: 'DESKTOP-TEST',
+            d2rRunning: false,
+          }),
+        })
+      }
+      if (url === 'http://127.0.0.1:5174/sync') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            pulled: ['Sorceress.d2s'],
+            pushed: [],
+            conflicts: [],
+          }),
+        })
+      }
+      return Promise.reject(new Error('Unknown url: ' + url))
+    })
+
+    render(<SyncPanel />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Desktop Agent/i)).toBeInTheDocument()
+    })
+
+    const syncButton = screen.getByRole('button', { name: /Sync Now/i })
+    expect(syncButton).not.toBeDisabled()
+    fireEvent.click(syncButton)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith('http://127.0.0.1:5174/sync', expect.objectContaining({
+        method: 'POST',
+      }))
+    })
+  })
 })

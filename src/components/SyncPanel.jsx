@@ -11,6 +11,7 @@ import {
 import { emitToast } from '../hooks/useToasts'
 import { SyncModal } from './SyncModal'
 import { useUIStore } from '../stores/useUIStore'
+import { useDesktopAgent } from '../hooks/useDesktopAgent.js'
 
 export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   const [syncing, setSyncing] = useState(false)
@@ -22,6 +23,7 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
   const [browserDirHandle, setBrowserDirHandle] = useState(null)
   const [showFsaHelp, setShowFsaHelp] = useState(false)
   const queryClient = useQueryClient()
+  const { isAgentConnected, agentStatus, triggerAgentSync } = useDesktopAgent()
 
   useEffect(() => {
     getStoredDirectoryHandle().then((handle) => {
@@ -241,6 +243,39 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
     }
   }, [syncing, isGameRunning, browserDirHandle, queryClient, onSyncComplete])
 
+  const handleAgentSync = useCallback(async () => {
+    if (syncing || agentStatus?.d2rRunning || isGameRunning) return
+    setSyncing(true)
+    try {
+      const result = await triggerAgentSync()
+      setLastResult(result)
+
+      const parts = []
+      if (result.pulled?.length) parts.push(`↓ ${result.pulled.length} pulled`)
+      if (result.pushed?.length) parts.push(`↑ ${result.pushed.length} pushed`)
+      if (result.conflicts?.length) parts.push(`⚠ ${result.conflicts.length} conflicts`)
+      if (!parts.length) parts.push('Everything in sync')
+
+      const hasErrors = (result.errors?.length || 0) > 0
+      const hasConflicts = (result.conflicts?.length || 0) > 0
+      const toastType = hasErrors ? 'error' : hasConflicts ? 'warning' : 'success'
+      const toastMsg = hasErrors
+        ? `Agent sync finished with errors: ${result.errors.join('; ')}`
+        : `Agent sync complete: ${parts.join(', ')}`
+      emitToast(toastMsg, toastType)
+
+      queryClient.invalidateQueries({ queryKey: ['desktopAgentStatus'] })
+      if (result.pulled?.length) {
+        queryClient.invalidateQueries({ queryKey: ['sharedStash'] })
+        onSyncComplete?.()
+      }
+    } catch (err) {
+      emitToast(`Agent sync failed: ${err.message}`, 'error')
+    } finally {
+      setSyncing(false)
+    }
+  }, [syncing, agentStatus?.d2rRunning, isGameRunning, triggerAgentSync, queryClient, onSyncComplete])
+
   // Server-to-server client mode
   if (isClient) {
     return (
@@ -368,6 +403,51 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
           style={{ padding: '4px 8px', fontSize: '0.8rem', color: '#f08080' }}
         >
           ✕
+        </button>
+
+        {lastResult && (
+          <div className="sync-result-badge" title={new Date(lastResult.timestamp).toLocaleTimeString()}>
+            {lastResult.pulled?.length > 0 && <span className="sync-pulled">↓{lastResult.pulled.length}</span>}
+            {lastResult.pushed?.length > 0 && <span className="sync-pushed">↑{lastResult.pushed.length}</span>}
+            {lastResult.conflicts?.length > 0 && <span className="sync-conflicts">⚠{lastResult.conflicts.length}</span>}
+            {!lastResult.pulled?.length && !lastResult.pushed?.length && !lastResult.conflicts?.length && (
+              <span className="sync-ok">✓ In Sync</span>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Desktop Agent mode: connected to local desktop agent on port 5174
+  if (isAgentConnected) {
+    const isAgentD2RRunning = Boolean(agentStatus?.d2rRunning)
+    const isAgentSyncDisabled = syncing || isAgentD2RRunning || isGameRunning
+
+    return (
+      <div
+        className="sync-panel header-control"
+        title={`Desktop Agent active (${agentStatus?.machineId || 'desktop'}). Saves auto-sync when D2R closes.`}
+      >
+        <div className="sync-status">
+          <span className="sync-indicator connected" aria-label="Desktop Agent connected" />
+          <span className="sync-label">
+            🖥️ Desktop Agent
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="btn-d2r btn-sync"
+          onClick={handleAgentSync}
+          disabled={isAgentSyncDisabled}
+          title={
+            isAgentD2RRunning || isGameRunning
+              ? 'Cannot sync while Diablo II: Resurrected is running'
+              : 'Synchronize saves between Desktop and Laptop'
+          }
+        >
+          {syncing ? 'Syncing…' : '🔄 Sync Now'}
         </button>
 
         {lastResult && (

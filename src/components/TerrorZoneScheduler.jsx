@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { useDesktopAgent } from '../hooks/useDesktopAgent';
 
 export function TerrorZoneScheduler({ onClose, addToast }) {
   const [selectedZone, setSelectedZone] = useState('');
@@ -47,8 +48,14 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
     localStorage.setItem('mf_timer_dir', mfTimerDir);
   };
 
+  const { isAgentConnected, setAgentTime } = useDesktopAgent();
+
   const jumpMutation = useMutation({
     mutationFn: async (targetDatetime) => {
+      if (isAgentConnected) {
+        await setAgentTime({ datetime: targetDatetime });
+        return;
+      }
       const res = await fetch('/__d2r_set_time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,7 +68,8 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
       const targetTime = new Date(targetDatetime).getTime();
       setTzMaxTime(targetTime);
       localStorage.setItem('tz_max_time', targetTime.toString());
-      addToast(`System time changed! ${selectedZone} is now active.`, 'success');
+      const dest = isAgentConnected ? 'Desktop system time' : 'System time';
+      addToast(`${dest} changed! ${selectedZone} is now active.`, 'success');
     },
     onError: (err) => {
       addToast(`Failed to change time: ${err.message}`, 'error');
@@ -70,6 +78,10 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
 
   const restoreMutation = useMutation({
     mutationFn: async () => {
+      if (isAgentConnected) {
+        await setAgentTime({ restore: true });
+        return;
+      }
       const res = await fetch('/__d2r_set_time', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -81,7 +93,8 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
     onSuccess: () => {
       setTzMaxTime(0);
       localStorage.removeItem('tz_max_time');
-      addToast('Clock restored and synced to present time.', 'success');
+      const dest = isAgentConnected ? 'Desktop clock' : 'Clock';
+      addToast(`${dest} restored and synced to present time.`, 'success');
       setShowRestoreHelp(false);
     },
     onError: (err) => {
@@ -179,6 +192,23 @@ export function TerrorZoneScheduler({ onClose, addToast }) {
     <div className="modal-overlay">
       <div className="modal-content tz-modal">
         <h3>Pin Terror Zone (Offline)</h3>
+        {isAgentConnected && (
+          <div style={{
+            padding: '8px 12px',
+            background: '#1b3320',
+            border: '1px solid #2e7d32',
+            borderRadius: '4px',
+            color: '#a5d6a7',
+            fontSize: '0.85rem',
+            margin: '10px 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span>🖥️</span>
+            <span><strong>Desktop Agent Connected:</strong> Time changes apply directly to this Desktop.</span>
+          </div>
+        )}
         <p className="tz-desc">
           This will change your Windows system clock to activate the selected Terror Zone in Single Player.
           <br/><br/>
