@@ -502,40 +502,67 @@ export function SyncPanel({ isGameRunning = false, onSyncComplete = null }) {
           {syncing ? 'Syncing…' : '🔄 Sync Now'}
         </button>
 
-        <button
-          type="button"
-          className="btn-d2r btn-sync-diff"
-          onClick={handleOpenAgentPreview}
-          disabled={isAgentSyncDisabled}
-          title={
-            isAgentD2RRunning || isGameRunning
-              ? 'Cannot diff while Diablo II: Resurrected is running'
-              : 'Review save differences, levels, and resolve conflicts'
-          }
-          style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-        >
-          Diff
-        </button>
-
-        {lastResult && (
-          <div
-            className="sync-result-badge"
-            title={new Date(lastResult.timestamp).toLocaleTimeString()}
-            style={{ cursor: lastResult.conflicts?.length > 0 ? 'pointer' : 'default' }}
-            onClick={lastResult.conflicts?.length > 0 ? handleOpenAgentPreview : undefined}
+        {isAgentSyncDisabled ? null : (
+          <button
+            type="button"
+            className="btn-d2r btn-sync-diff"
+            onClick={handleOpenAgentPreview}
+            disabled={isAgentSyncDisabled}
+            title="Review save differences, levels, and resolve conflicts"
+            style={{ padding: '4px 8px', fontSize: '0.8rem' }}
           >
-            {lastResult.pulled?.length > 0 && <span className="sync-pulled">↓{lastResult.pulled.length}</span>}
-            {lastResult.pushed?.length > 0 && <span className="sync-pushed">↑{lastResult.pushed.length}</span>}
-            {lastResult.conflicts?.length > 0 && (
-              <span className="sync-conflicts" title="Click to view conflict details and resolve">
-                ⚠{lastResult.conflicts.length}
-              </span>
-            )}
-            {!lastResult.pulled?.length && !lastResult.pushed?.length && !lastResult.conflicts?.length && (
-              <span className="sync-ok">✓ In Sync</span>
-            )}
-          </div>
+            Diff
+          </button>
         )}
+
+        {(() => {
+          const displayResult = lastResult || agentStatus?.lastSync
+          if (!displayResult) return null
+
+          const hasConflicts = (displayResult.conflicts?.length || 0) > 0
+
+          return (
+            <>
+              {hasConflicts && (
+                <button
+                  type="button"
+                  className="btn-d2r btn-sync-conflict-resolve"
+                  onClick={handleOpenAgentPreview}
+                  title="Click to inspect conflicting files and choose whether to keep Client or Host save"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.8rem',
+                    background: '#8b0000',
+                    color: '#fff',
+                    borderColor: '#ff4444',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  ⚠ Resolve {displayResult.conflicts.length} Conflict{displayResult.conflicts.length > 1 ? 's' : ''}
+                </button>
+              )}
+
+              <div
+                className="sync-result-badge"
+                title={displayResult.timestamp ? new Date(displayResult.timestamp).toLocaleTimeString() : undefined}
+                style={{ cursor: hasConflicts ? 'pointer' : 'default' }}
+                onClick={hasConflicts ? handleOpenAgentPreview : undefined}
+              >
+                {displayResult.pulled?.length > 0 && <span className="sync-pulled">↓{displayResult.pulled.length}</span>}
+                {displayResult.pushed?.length > 0 && <span className="sync-pushed">↑{displayResult.pushed.length}</span>}
+                {hasConflicts && (
+                  <span className="sync-conflicts" title="Click to view conflict details and resolve">
+                    ⚠{displayResult.conflicts.length}
+                  </span>
+                )}
+                {!displayResult.pulled?.length && !displayResult.pushed?.length && !hasConflicts && (
+                  <span className="sync-ok">✓ In Sync</span>
+                )}
+              </div>
+            </>
+          )
+        })()}
       </div>
 
       <SyncModal
