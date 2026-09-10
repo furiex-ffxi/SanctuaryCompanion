@@ -2,21 +2,32 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getSearchableItemAttributes, projectVaultEntry } from '../vault/vaultProjection.js'
 import { itemMatchesFilters, normalizeItemSearchFilters } from '../../src/domain/search/itemSearchFilters.js'
+import { isItemIdentified } from '../../src/domain/entities/ItemDisplay.js'
 
 const tokens = value => String(value || '').toLowerCase().split(/[^a-z0-9%+]+/).filter(Boolean)
 export function getItemQueryMatch(item, query) {
   const p = projectVaultEntry({ itemData: item }), wanted = tokens(query)
   if (!wanted.length) return null
-  const candidates = [
-    { rank: 0, field: 'Name', text: p.displayName },
-    { rank: 1, field: 'Set', text: item.set_name },
-    { rank: 1, field: 'Unique name', text: item.unique_name },
-    { rank: 1, field: 'Runeword', text: item.given_runeword_name || item.runeword_name },
-    { rank: 2, field: 'Base type', text: [item.type_name, p.typeName].filter(Boolean).join(' ') },
-    ...getSearchableItemAttributes(item).map(value => ({ rank: 3, field: 'Stat', text: value })),
-    { rank: 4, field: 'Category', text: `${p.slot} ${p.category}` },
-    { rank: 5, field: 'Type code', text: item.type },
-  ].filter(candidate => candidate.text)
+  const isIdentified = isItemIdentified(item)
+  const candidates = isIdentified
+    ? [
+        { rank: 0, field: 'Name', text: p.displayName },
+        { rank: 1, field: 'Set', text: item.set_name },
+        { rank: 1, field: 'Unique name', text: item.unique_name },
+        { rank: 1, field: 'Runeword', text: item.given_runeword_name || item.runeword_name },
+        { rank: 2, field: 'Base type', text: [item.type_name, p.typeName].filter(Boolean).join(' ') },
+        ...getSearchableItemAttributes(item).map(value => ({ rank: 3, field: 'Stat', text: value })),
+        { rank: 4, field: 'Category', text: `${p.slot} ${p.category}` },
+        { rank: 5, field: 'Type code', text: item.type },
+      ].filter(candidate => candidate.text)
+    : [
+        { rank: 0, field: 'Name', text: p.displayName },
+        { rank: 1, field: 'Status', text: 'Unidentified unid' },
+        { rank: 2, field: 'Base type', text: [item.type_name, p.typeName].filter(Boolean).join(' ') },
+        { rank: 4, field: 'Category', text: `${p.slot} ${p.category}` },
+        { rank: 5, field: 'Type code', text: item.type },
+      ].filter(candidate => candidate.text)
+
   const contains = (candidate, part) => tokens(candidate.text).some(word => word.startsWith(part))
   const single = candidates.find(candidate => wanted.every(part => contains(candidate, part)))
   if (single) return { rank: single.rank, field: single.field, text: single.text }

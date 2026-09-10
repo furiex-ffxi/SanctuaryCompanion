@@ -1,13 +1,15 @@
 import React from 'react';
 import { getItemDisplayName, getItemSocketCount } from './ItemSprite';
-import { getItemTypeDisplayName, getItemDetails, formatStat, groupItemStats } from '../domain/entities/ItemDisplay.js';
+import { getItemTypeDisplayName, getFriendlyBaseName, getItemDetails, formatStat, groupItemStats, isItemIdentified } from '../domain/entities/ItemDisplay.js';
 import { getItemColorClass, getItemDimensions, getItemLevel, getItemLevelRequirement } from '../domain/entities/Item';
 import { compareItemDerivedStat, compareItemStat, getDerivedComparisonAttributes, getRollRange } from '../domain/entities/ItemRollComparison.js';
 
 export const ItemTooltip = ({ item, comparisonItems = [] }) => {
   if (!item) return null;
+  const isIdentified = isItemIdentified(item);
   const name = getItemDisplayName(item);
   const typeName = getItemTypeDisplayName(item);
+  const baseTypeName = typeName || getFriendlyBaseName(item) || 'Item';
   const colorClass = getItemColorClass(item);
   const [w, h] = getItemDimensions(item.type);
   const socketCount = getItemSocketCount(item);
@@ -34,8 +36,11 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
 
   return (
     <div className="tooltip-card">
-      <div className={`tooltip-header ${colorClass}`}>{name}</div>
-      {item.set_name && (
+      <div className={`tooltip-header ${colorClass}`}>{isIdentified ? name : baseTypeName}</div>
+      {!isIdentified && (
+        <div className="tooltip-unidentified quality-unidentified">Unidentified</div>
+      )}
+      {isIdentified && item.set_name && (
         <div className="tooltip-set-name quality-set">
           {item.set_name}
         </div>
@@ -44,9 +49,11 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
         {typeName || 'Item'} ({w} x {h})
       </div>
       <div className="tooltip-stats">
-        <div className="tooltip-stat-item tooltip-level-requirement">
-          {levelRequirement > 0 ? 'Required Level: ' + levelRequirement : 'Not equippable'}
-        </div>
+        {isIdentified && (
+          <div className="tooltip-stat-item tooltip-level-requirement">
+            {levelRequirement > 0 ? 'Required Level: ' + levelRequirement : 'Not equippable'}
+          </div>
+        )}
         {itemLevel != null && <div className="tooltip-stat-item">Item Level: {itemLevel}</div>}
         {itemDetails.map((detail) => (
           <div key={detail} className="tooltip-stat-item">{detail}</div>
@@ -56,7 +63,7 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
             [{socketCount} sockets]
           </div>
         )}
-        {derivedAttrs.map((a) => {
+        {isIdentified && derivedAttrs.map((a) => {
           const comparison = compareItemDerivedStat(a, item, comparisonItems);
           return (
             <div key={a.id} className="tooltip-stat-item">
@@ -71,7 +78,7 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
             </div>
           );
         })}
-        {attrs.map((a, i) => {
+        {isIdentified && attrs.map((a, i) => {
           const desc = formatStat(a);
           const range = getRollRange(a);
           const comparison = compareItemStat({ ...a, itemType: item.type }, comparisonItems);
@@ -93,7 +100,7 @@ export const ItemTooltip = ({ item, comparisonItems = [] }) => {
             </div>
           );
         })}
-        {setAttrs.length > 0 && (
+        {isIdentified && setAttrs.length > 0 && (
           <div className="tooltip-set-bonuses">
             <div className="tooltip-section-header quality-set">Set Bonuses:</div>
             {setAttrs.map((sa, idx) => {

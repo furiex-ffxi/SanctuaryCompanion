@@ -1,5 +1,5 @@
 export function getVaultCategory(item = {}, slot = '') {
-  if (item.set_name) return 'Set Items'
+  if (item.set_name || Number(item.quality) === 5) return 'Set Items'
   if (Number(item.quality) === 7) return 'Unique Items'
   if (['Ring', 'Amulet'].includes(slot)) return 'Rings & Amulets'
   if (['Rune', 'Gem'].includes(slot)) return 'Runes & Gems'

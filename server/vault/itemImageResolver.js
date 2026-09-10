@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isItemIdentified } from '../../src/domain/entities/ItemDisplay.js'
 
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url))
 const dataDirectory = path.resolve(moduleDirectory, '../../D2RStashWorker/Data')
@@ -37,6 +38,7 @@ export function canonicalizeUniqueName(value) {
 export function isSunderCharm(item = {}) {
   const type = typeof item.type === 'string' ? item.type.trim().toLowerCase() : ''
   if (type === 'cs2') return true
+  if (!isItemIdentified(item)) return false
   return (item.magic_attributes || []).some((attribute) => SUNDER_STAT_IDS.has(Number(attribute?.id)))
 }
 
@@ -66,13 +68,15 @@ export function resolveItemImageKey(item = {}) {
 
   const row = imageRows.get(type)
   if (!row) return null
-  if (Number(item.quality) === 7 && row.unique_inv_file) return row.unique_inv_file.toLowerCase()
-  if (Number(item.quality) === 5 && row.set_inv_file) return row.set_inv_file.toLowerCase()
+  const isIdentified = isItemIdentified(item)
+  if (isIdentified && Number(item.quality) === 7 && row.unique_inv_file) return row.unique_inv_file.toLowerCase()
+  if (isIdentified && Number(item.quality) === 5 && row.set_inv_file) return row.set_inv_file.toLowerCase()
   return row.inv_file ? row.inv_file.toLowerCase() : null
 }
 
 export function getItemTransformMetadata(item = {}) {
   if (!item || typeof item !== 'object') return {}
+  if (!isItemIdentified(item)) return {}
   if (item.transform_color || item.inv_transform || item.chr_transform) {
     return {
       inv_transform: item.inv_transform,
@@ -104,13 +108,19 @@ export function getItemTransformMetadata(item = {}) {
 
 export function normalizeVaultItem(item = {}) {
   if (!item || typeof item !== 'object') return item
-  const uniqueName = canonicalizeUniqueName(item.unique_name)
+  const isIdentified = isItemIdentified(item)
+  const uniqueName = isIdentified ? canonicalizeUniqueName(item.unique_name) : null
   const imageKey = resolveItemImageKey(item)
   const transform = getItemTransformMetadata(item)
   const normalized = imageKey
     ? { ...item, ...transform, image_key: imageKey, inv_file: imageKey }
     : { ...item, ...transform }
-  if (uniqueName && uniqueName !== item.unique_name) normalized.unique_name = uniqueName
+  if (isIdentified) {
+    if (uniqueName && uniqueName !== item.unique_name) normalized.unique_name = uniqueName
+  } else {
+    normalized.unique_name = null
+    normalized.set_name = null
+  }
   if (Array.isArray(item.socketed_items)) {
     normalized.socketed_items = item.socketed_items.map(normalizeVaultItem)
   }

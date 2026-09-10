@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { getItemSlotCategory } from '../domain/entities/VaultCatalog.js'
 import { getVaultCategory } from '../domain/entities/VaultProjection.js'
+import { isItemIdentified } from '../domain/entities/ItemDisplay.js'
 
 export const EMPTY_ITEM_FILTERS = Object.freeze({ q: '', category: 'All', slot: 'All', setName: 'All', quality: 'All', minLevel: '', maxLevel: '' })
 
@@ -11,7 +12,7 @@ export function getItemFilterFacets(items = []) {
     const category = getVaultCategory(item, slot)
     if (category) values.categories.add(category)
     if (slot) values.slots.add(slot)
-    if (item.set_name) values.sets.add(item.set_name)
+    if (isItemIdentified(item) && item.set_name) values.sets.add(item.set_name)
   }
   return Object.fromEntries(Object.entries(values).map(([key, set]) => [key, [...set].sort()]))
 }

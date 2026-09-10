@@ -1,5 +1,6 @@
 import { getItemSlotCategory, resolveVaultBaseType } from '../../src/domain/entities/VaultCatalog.js'
 import { getVaultCategory } from '../../src/domain/entities/VaultProjection.js'
+import { isItemIdentified } from '../../src/domain/entities/ItemDisplay.js'
 import { canonicalizeUniqueName } from './itemImageResolver.js'
 
 export { getVaultCategory } from '../../src/domain/entities/VaultProjection.js'
@@ -15,6 +16,7 @@ export function unicodeSortKey(value) {
 }
 
 export function getSearchableItemAttributes(item) {
+  if (!isItemIdentified(item)) return []
   // Combined/displayed attributes may contain bonuses contributed by socketed
   // children. Global search intentionally indexes only the owning item's stats.
   const attributes = [
@@ -43,20 +45,24 @@ export function getItemSocketCount(item = {}) {
 
 export function projectVaultEntry(entry) {
   const item = entry.itemData || {}
-  const uniqueName = canonicalizeUniqueName(item.unique_name)
+  const isIdentified = isItemIdentified(item)
+  const uniqueName = isIdentified ? canonicalizeUniqueName(item.unique_name) : null
   const slot = getVaultItemSlot(item)
   const typeName = resolveVaultBaseType(item)
-  const displayName = normalizeText(
-    item.given_runeword_name
-      || item.runeword_name
-      || uniqueName
-      || item.set_name
-      || [item.rare_name, item.rare_name2].filter(Boolean).join(' ')
-      || item.personalized_name
-      || typeName
-      || item.type
-      || 'Unknown Item',
-  )
+  const baseTypeName = typeName || item.type_name || item.type || 'Item'
+  const displayName = isIdentified
+    ? normalizeText(
+        item.given_runeword_name
+          || item.runeword_name
+          || uniqueName
+          || item.set_name
+          || [item.rare_name, item.rare_name2].filter(Boolean).join(' ')
+          || item.personalized_name
+          || typeName
+          || item.type
+          || 'Unknown Item',
+      )
+    : `Unidentified ${normalizeText(baseTypeName)}`
   const hasStoredType = Boolean(normalizeText(item.type) || normalizeText(item.type_name))
   const normalizedTypeName = hasStoredType ? normalizeText(typeName) || null : null
   const numericQuality = Number(item.quality)
@@ -64,26 +70,38 @@ export function projectVaultEntry(entry) {
     && Number.isInteger(numericQuality) && numericQuality > 0
     ? numericQuality
     : null
-  const searchText = [
-    displayName,
-    item.type,
-    item.type_name,
-    typeName,
-    slot,
-    getVaultCategory(item, slot),
-    item.set_name,
-    uniqueName,
-    item.rare_name,
-    item.rare_name2,
-    item.magic_prefix_name,
-    item.magic_suffix_name,
-    item.given_runeword_name,
-    item.runeword_name,
-    getSearchableItemAttributes(item).join(' '),
-  ].filter(Boolean).join(' ').toLowerCase()
+  const category = getVaultCategory(item, slot)
+  const searchText = isIdentified
+    ? [
+        displayName,
+        item.type,
+        item.type_name,
+        typeName,
+        slot,
+        category,
+        item.set_name,
+        uniqueName,
+        item.rare_name,
+        item.rare_name2,
+        item.magic_prefix_name,
+        item.magic_suffix_name,
+        item.given_runeword_name,
+        item.runeword_name,
+        getSearchableItemAttributes(item).join(' '),
+      ].filter(Boolean).join(' ').toLowerCase()
+    : [
+        displayName,
+        'unidentified',
+        'unid',
+        item.type,
+        item.type_name,
+        typeName,
+        slot,
+        category,
+      ].filter(Boolean).join(' ').toLowerCase()
 
   const itemLevel = item.level_req ?? item.level_requirement ?? item.level ?? item.item_level
-  const level = Number.isInteger(itemLevel) && itemLevel > 0 ? itemLevel : null
+  const level = isIdentified && Number.isInteger(itemLevel) && itemLevel > 0 ? itemLevel : null
 
   return {
     displayName,
@@ -93,11 +111,11 @@ export function projectVaultEntry(entry) {
     typeNameSort: unicodeSortKey(normalizedTypeName),
     sourceSaveSort: unicodeSortKey(entry.sourceSave),
     slot,
-    category: getVaultCategory(item, slot),
+    category,
     quality,
     level,
     socketCount: getItemSocketCount(item),
-    setName: normalizeText(item.set_name) || null,
+    setName: isIdentified ? (normalizeText(item.set_name) || null) : null,
     searchText,
   }
 }

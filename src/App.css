@@ -937,6 +937,16 @@ header {
   margin-bottom: 5px;
 }
 
+.tooltip-unidentified,
+.quality-unidentified {
+  color: #d94444;
+  font-family: 'Cinzel', serif;
+  font-weight: bold;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+
 .tooltip-type {
   font-size: 0.8rem;
   color: #8c8270;
