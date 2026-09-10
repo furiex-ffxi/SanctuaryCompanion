@@ -1,4 +1,5 @@
 import { getItemSlotCategory } from './VaultCatalog.js';
+import { isItemIdentified } from './ItemDisplay.js';
 
 const ATTRIBUTE_SOURCES = [
   'displayed_combined_magic_attributes',
@@ -45,6 +46,7 @@ export function getTotalDefense(item = {}) {
 }
 
 export function getDerivedComparisonAttributes(item = {}) {
+  if (!isItemIdentified(item)) return [];
   const totalDefense = getTotalDefense(item);
   return totalDefense == null ? [] : [{
     id: 'total_defense',
@@ -56,6 +58,7 @@ export function getDerivedComparisonAttributes(item = {}) {
 }
 
 function getComparisonAttributes(item = {}) {
+  if (!isItemIdentified(item)) return [];
   return [...getVisibleItemAttributes(item), ...getDerivedComparisonAttributes(item)];
 }
 
@@ -113,9 +116,9 @@ export function compareItemStat(attribute, peerItems = []) {
   if (!key || value == null) return null;
   if (isEnhancedDamageAttribute(attribute) && attribute.itemType && !isWeapon({ type: attribute.itemType })) return null;
   const derived = attribute.derived === true || key.startsWith('total_defense:');
-  const peers = derived
+  const peers = (derived
     ? peerItems.filter(item => item?.type === attribute.itemType && isArmor(item))
-    : peerItems;
+    : peerItems).filter(isItemIdentified);
   const values = peers.flatMap(item => getComparisonAttributes(item)
     .filter(peer => statKey(peer) === key).map(scalarValue).filter(peerValue => peerValue != null));
   if (values.length < 2) return null;
@@ -124,10 +127,13 @@ export function compareItemStat(attribute, peerItems = []) {
 }
 
 export function summarizeItemComparison(item, peerItems = []) {
+  if (!isItemIdentified(item)) {
+    return { comparableCount: 0, bestCount: 0 };
+  }
   const attributes = getComparisonAttributes(item)
     .filter(attribute => !isEnhancedDamageAttribute(attribute) || isWeapon(item))
     .map(attribute => ({ ...attribute, itemType: item?.type }));
-  const comparablePeers = peerItems.filter(peer => peer?.type === item?.type);
+  const comparablePeers = peerItems.filter(peer => peer?.type === item?.type && isItemIdentified(peer));
   const comparisons = attributes.map(attribute => compareItemStat(attribute, comparablePeers)).filter(Boolean);
   return { comparableCount: comparisons.length, bestCount: comparisons.filter(comparison => comparison.isBest).length };
 }

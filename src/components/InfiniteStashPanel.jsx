@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ItemSprite, { getItemDisplayName } from './ItemSprite';
 import { getItemColorClass } from '../domain/entities/Item';
+import { isItemIdentified } from '../domain/entities/ItemDisplay.js';
 import { getItemSlotCategory, resolveVaultBaseType } from '../domain/entities/VaultCatalog';
 import { InfiniteStashAdapter } from '../adapters/InfiniteStashAdapter';
 import { TooltipTrigger } from './TooltipTrigger';
 import { getVirtualRange } from '../domain/virtualList';
 import { EMPTY_ITEM_FILTERS, ItemFilterControls } from './ItemFilterControls';
-import { useUIStore } from '../stores/useUIStore';
 
 const VIRTUAL_ROW_HEIGHT = 86;
 const VIRTUAL_OVERSCAN = 8;
@@ -235,7 +235,7 @@ export function InfiniteStashPanel({
                   <div className="col-icon icon-cell"><ItemSprite item={item} showTooltip={false} /></div>
                   <div className="col-name name-cell"><span className={`item-name-text ${colorClass}`}>{getItemDisplayName(item)}</span></div>
                   <div className="col-type type-cell"><span className="badge-type">{resolveVaultBaseType(item)}</span><span className="badge-slot">{getItemSlotCategory(item)}</span></div>
-                  <div className="col-set set-cell">{item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
+                  <div className="col-set set-cell">{isItemIdentified(item) && item.set_name ? <span className="badge-set">{item.set_name}</span> : <span className="badge-rarity">{colorClass.replace('quality-', '')}</span>}</div>
                   <div className="col-source source-cell"><span className="source-name">{entry.sourceSave.replace('.d2s', '')}</span></div>
                   <div className="col-added source-cell"><span className="source-date">{new Date(entry.stashedAt).toLocaleDateString()}</span></div>
                   <div className="col-actions actions-cell" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -339,8 +339,11 @@ namespace D2RStashWorker
             if (type == "box") return "invbox";
             if (_itemImages.TryGetValue(type, out var image))
             {
-                if (item.Quality == ItemQuality.Unique && image.Unique.Length > 0) return image.Unique;
-                if (item.Quality == ItemQuality.Set && image.Set.Length > 0) return image.Set;
+                if (item.Flags.HasFlag(ItemFlags.Identified))
+                {
+                    if (item.Quality == ItemQuality.Unique && image.Unique.Length > 0) return image.Unique;
+                    if (item.Quality == ItemQuality.Set && image.Set.Length > 0) return image.Set;
+                }
                 return image.Normal;
             }
             return null;
@@ -781,13 +784,16 @@ namespace D2RStashWorker
             ItemTransform? transform = null;
             if (i.Quality == ItemQuality.Unique && i.QualityData is SetUniqueQualityData uniqData)
             {
-                uniqueName = D2Data.GetUniqueName(uniqData.SetUniqueFileIndex);
-                transform = D2Data.GetUniqueTransform(uniqueName);
+                if (i.Flags.HasFlag(ItemFlags.Identified))
+                {
+                    uniqueName = D2Data.GetUniqueName(uniqData.SetUniqueFileIndex);
+                    transform = D2Data.GetUniqueTransform(uniqueName);
+                }
             }
             else if (i.Quality == ItemQuality.Set && i.QualityData is SetUniqueQualityData setData)
             {
                 var setInfo = D2Data.GetSetItem(setData.SetUniqueFileIndex);
-                if (setInfo != null)
+                if (setInfo != null && i.Flags.HasFlag(ItemFlags.Identified))
                 {
                     uniqueName = setInfo.Value.ItemName;
                     setName = setInfo.Value.SetName;
@@ -850,6 +856,7 @@ namespace D2RStashWorker
                 durability = i.Durability,
                 quantity = i.Quantity,
                 ethereal = i.Flags.HasFlag(ItemFlags.Ethereal),
+                identified = i.Flags.HasFlag(ItemFlags.Identified) ? 1 : 0,
                 socketed = i.Flags.HasFlag(ItemFlags.Socketed) ? 1 : 0,
                 total_nr_of_sockets = i.Sockets.Count,
                 unique_name = uniqueName,
@@ -902,6 +909,7 @@ namespace D2RStashWorker
                 durability = serialized.durability,
                 quantity = serialized.quantity,
                 ethereal = serialized.ethereal,
+                identified = serialized.identified,
                 socketed = serialized.socketed,
                 total_nr_of_sockets = serialized.total_nr_of_sockets,
                 unique_name = serialized.unique_name,

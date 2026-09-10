@@ -60,11 +60,14 @@ export function getItemTypeDisplayName(item = {}) {
 
 export function getItemDisplayName(item) {
   if (!item) return '';
-  if (item.runeword_name) return item.runeword_name;
   const typeName = item.type_name && item.type_name.toLowerCase() !== (item.type || '').toLowerCase()
     ? getItemTypeDisplayName(item)
     : null;
   const baseType = typeName || getFriendlyBaseName(item) || 'Item';
+  if (!isItemIdentified(item)) {
+    return `Unidentified ${baseType}`;
+  }
+  if (item.runeword_name) return item.runeword_name;
   if (item.quality === 5 && item.unique_name) return item.unique_name;
   if (item.quality === 5 && item.set_name) return item.set_name;
   if (item.quality === 7 && item.unique_name) return item.unique_name;
@@ -238,6 +241,41 @@ function hasEtherealRawFlag(rawBytesHex) {
 
 export function isItemEthereal(item = {}) {
   return Boolean(item.ethereal || item.is_ethereal || hasEtherealRawFlag(item.rawBytesHex));
+}
+
+export function hasIdentifiedRawFlag(rawBytesHex) {
+  const hex = typeof rawBytesHex === 'string' ? rawBytesHex.trim() : '';
+  if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) return null;
+
+  const flagsHex = /^4a4d/i.test(hex) ? hex.slice(4, 12) : hex.slice(0, 8);
+  if (flagsHex.length !== 8) return null;
+  const flags = Number.parseInt(flagsHex.match(/../g).reverse().join(''), 16);
+  if (!Number.isFinite(flags)) return null;
+  return (flags & 0x00000010) !== 0;
+}
+
+export function isItemIdentified(item = {}) {
+  if (!item) return true;
+  if (item.identified !== undefined && item.identified !== null) {
+    if (item.identified === 0 || item.identified === '0' || item.identified === false || item.identified === 'false') return false;
+    return Boolean(item.identified);
+  }
+  if (item.is_identified !== undefined && item.is_identified !== null) {
+    if (item.is_identified === 0 || item.is_identified === '0' || item.is_identified === false || item.is_identified === 'false') return false;
+    return Boolean(item.is_identified);
+  }
+  if (item.flags !== undefined && item.flags !== null && Number.isFinite(Number(item.flags))) {
+    return (Number(item.flags) & 0x00000010) !== 0;
+  }
+  if (item.rawBytesHex) {
+    const rawFlag = hasIdentifiedRawFlag(item.rawBytesHex);
+    if (rawFlag !== null) return rawFlag;
+  }
+  return true;
+}
+
+export function isItemUnidentified(item = {}) {
+  return !isItemIdentified(item);
 }
 
 export function getItemDetails(item = {}) {

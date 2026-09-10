@@ -66,16 +66,17 @@ export const getBaseTypeName = (type) => getItemTypeDisplayName({ type, type_nam
 
 import { getDiabloColorFilter } from './itemColorTransforms.js';
 import WORLDSTONE_SHARD_DATA_URLS from './worldstoneShardAssets.js';
-import { getItemDisplayName, getItemTypeDisplayName, isItemEthereal } from '../domain/entities/ItemDisplay.js';
+import { getItemDisplayName, getItemTypeDisplayName, isItemEthereal, isItemIdentified } from '../domain/entities/ItemDisplay.js';
 
 export { getItemDisplayName } from '../domain/entities/ItemDisplay.js';
 
 export default function ItemSprite({ item }) {
   const [imgError, setImgError] = useState(false);
+  const isIdentified = isItemIdentified(item);
   const type = (item?.type || '').toLowerCase();
-  const isSunderCharm = type === 'cs2' || (item?.magic_attributes || []).some((attribute) => [187, 189, 190, 191, 192, 193].includes(Number(attribute?.id)));
+  const isSunderCharm = isIdentified && (type === 'cs2' || (item?.magic_attributes || []).some((attribute) => [187, 189, 190, 191, 192, 193].includes(Number(attribute?.id))));
   const invFile = isSunderCharm ? 'invch3' : (item?.image_key || item?.inv_file)?.toLowerCase();
-  const transformFilter = getDiabloColorFilter(item?.transform_color);
+  const transformFilter = isIdentified ? getDiabloColorFilter(item?.transform_color) : null;
   const socketCount = getItemSocketCount(item);
   const isEthereal = isItemEthereal(item);
 

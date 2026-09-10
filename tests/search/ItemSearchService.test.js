@@ -124,3 +124,98 @@ test('rejects invalid shared filter values', async t => {
   await assert.rejects(() => f.service.search({ q: 'needle', quality: 'legendary' }), /quality/)
   await assert.rejects(() => f.service.search({ q: 'needle', minLevel: 90, maxLevel: 10 }), /exceed/)
 })
+
+test('does not spoil unidentified items through global search or vault projection', () => {
+  const unidShako = {
+    type: 'uap',
+    type_name: 'Shako',
+    quality: 7,
+    unique_name: 'Harlequin Crest',
+    identified: 0,
+    magic_attributes: [{ description: '+2 to All Skills' }],
+  };
+
+  const projection = projectVaultEntry({ itemData: unidShako });
+  assert.equal(projection.displayName, 'Unidentified Shako');
+  assert.equal(projection.setName, null);
+  assert.equal(projection.level, null);
+
+  // Matches base type and unidentified / unid keywords
+  assert.equal(matchesItemQuery(unidShako, 'shako'), true);
+  assert.equal(matchesItemQuery(unidShako, 'unidentified'), true);
+  assert.equal(matchesItemQuery(unidShako, 'unid'), true);
+
+  // Does NOT match secret unique name or secret magic attributes
+  assert.equal(matchesItemQuery(unidShako, 'harlequin'), false);
+  assert.equal(matchesItemQuery(unidShako, 'crest'), false);
+  assert.equal(matchesItemQuery(unidShako, 'skills'), false);
+
+  // Status / name match detail
+  const statusMatch = getItemQueryMatch(unidShako, 'unid');
+  assert.equal(statusMatch.field, 'Name');
+  assert.equal(statusMatch.text, 'Unidentified Shako');
+
+  // Unidentified set piece
+  const unidSet = {
+    type: 'uar',
+    type_name: 'Lacquered Plate',
+    quality: 5,
+    unique_name: "Tal Rasha's Guardianship",
+    set_name: "Tal Rasha's Wrappings",
+    identified: false,
+    magic_attributes: [{ description: 'Fire Resist +40%' }],
+  };
+  assert.equal(matchesItemQuery(unidSet, 'lacquered'), true);
+  assert.equal(matchesItemQuery(unidSet, 'tal'), false);
+  assert.equal(matchesItemQuery(unidSet, 'wrappings'), false);
+  assert.equal(matchesItemQuery(unidSet, 'guardianship'), false);
+  assert.equal(matchesItemQuery(unidSet, 'resist'), false);
+
+  // Unidentified rare item
+  const unidRare = {
+    type: 'rin',
+    type_name: 'Ring',
+    quality: 6,
+    rare_name: 'Bitter',
+    rare_name2: 'Emblem',
+    identified: 0,
+    magic_attributes: [{ description: '+10% Faster Cast Rate' }],
+  };
+  assert.equal(matchesItemQuery(unidRare, 'ring'), true);
+  assert.equal(matchesItemQuery(unidRare, 'bitter'), false);
+  assert.equal(matchesItemQuery(unidRare, 'emblem'), false);
+  assert.equal(matchesItemQuery(unidRare, 'cast'), false);
+});
+
+test('e2e search correctly matches unidentified vault items without leaking secret properties', async t => {
+  const f = fixture(); t.after(() => { f.repository.close(); fs.rmSync(f.savesDir, { recursive: true, force: true }) });
+  await f.repository.add({
+    vaultId: 'unid-shako',
+    stashedAt: new Date().toISOString(),
+    sourceSave: 'Alpha.d2s',
+    itemData: {
+      type: 'uap',
+      type_name: 'Shako',
+      quality: 7,
+      unique_name: 'Harlequin Crest',
+      identified: 0,
+      magic_attributes: [{ description: '+2 to All Skills' }],
+    },
+  });
+
+  // Searching 'unid' or 'shako' finds the item
+  const unidSearch = await f.service.search({ q: 'unid' });
+  assert.equal(unidSearch.groups.infiniteStash.total, 1);
+  assert.equal(unidSearch.groups.infiniteStash.results[0].preview.displayName, 'Unidentified Shako');
+
+  const shakoSearch = await f.service.search({ q: 'shako' });
+  assert.equal(shakoSearch.groups.infiniteStash.total, 1);
+
+  // Searching secret unique name or secret stat must NOT find the item
+  const secretSearch = await f.service.search({ q: 'harlequin' });
+  assert.equal(secretSearch.groups.infiniteStash.total, 0);
+
+  const statSearch = await f.service.search({ q: 'skills' });
+  assert.equal(statSearch.groups.infiniteStash.total, 0);
+});
+
